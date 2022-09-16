@@ -1,3 +1,4 @@
+#![allow(non_camel_case_types)]
 use bitutils::bits;
 
 use super::{
@@ -92,7 +93,7 @@ impl Decodable for VOP {
                 Ok((
                     &data[length..],
                     Self::VOPC {
-                        OP: decode_opcode(bits!(instr, 24:17) as u8)?,
+                        OP: decode_opcode(bits!(instr, 24:17))?,
                         VSRC1: bits!(instr, 16:9) as u8,
                         SRC0: SRC0,
                         extra: extra,
@@ -113,7 +114,7 @@ impl Decodable for VOP {
                 Ok((
                     &data[length..],
                     Self::VOP1 {
-                        OP: decode_opcode(bits!(instr, 16:9) as u8)?,
+                        OP: decode_opcode(bits!(instr, 16:9))?,
                         VDST: bits!(instr, 24:17) as u8,
                         SRC0: SRC0,
                         extra: extra,
@@ -134,7 +135,7 @@ impl Decodable for VOP {
                 Ok((
                     &data[length..],
                     Self::VOP2 {
-                        OP: decode_opcode(bits!(instr, 30:25) as u8)?,
+                        OP: decode_opcode(bits!(instr, 30:25))?,
                         VSRC1: bits!(instr, 16:9) as u8,
                         VDST: bits!(instr, 24:17) as u8,
                         SRC0: SRC0,
@@ -186,6 +187,81 @@ pub enum VOP3 {
 }
 impl Decodable for VOP3 {
     fn decode_consuming(data: &[u8]) -> Result<(&[u8], Self), super::DecodeError> {
-        todo!()
+        // Always 64bits
+        let instr = extract_u32(data)?;
+        let instr_top = extract_u32(&data[4..])?;
+
+        match bits!(instr, 31:26) {
+            0b110101 => {
+                // VOP3A or VOP3B
+
+                let opcode = bits!(instr, 25:16);
+
+                // Try decoding as VOP3A, then if that doesn't work try VOP3B
+                if let Ok(OP) = decode_opcode::<VOP3A_Opcode>(opcode) {
+                    Ok((
+                        &data[8..],
+                        Self::VOP3A {
+                            OP,
+                            CLMP: bits!(instr, 15:15) != 0,
+                            OP_SEL: bits!(instr, 14:11) as u8,
+                            ABS: bits!(instr, 10:8) as u8,
+                            VDST: bits!(instr, 7:0) as u8,
+                            NEG: bits!(instr_top, 31:29) as u8,
+                            OMOD: bits!(instr_top, 28:27) as u8,
+                            SRC2: bits!(instr_top, 26:18) as u16,
+                            SRC1: bits!(instr_top, 17:9) as u16,
+                            SRC0: bits!(instr_top, 8:0) as u16,
+                        },
+                    ))
+                } else {
+                    let OP = decode_opcode(opcode)?;
+
+                    Ok((
+                        &data[8..],
+                        Self::VOP3B {
+                            OP,
+                            CLMP: bits!(instr, 15:15) != 0,
+                            SDST: bits!(instr, 14:8) as u8,
+                            VDST: bits!(instr, 7:0) as u8,
+                            NEG: bits!(instr_top, 31:29) as u8,
+                            OMOD: bits!(instr_top, 28:27) as u8,
+                            SRC2: bits!(instr_top, 26:18) as u16,
+                            SRC1: bits!(instr_top, 17:9) as u16,
+                            SRC0: bits!(instr_top, 8:0) as u16,
+                        },
+                    ))
+                }
+            }
+            0b110011 => {
+                // VOP3P
+
+                let opcode = bits!(instr, 22:16);
+
+                let OP_SEL_HI_1_0 = bits!(instr_top, 28:27) as u8;
+                let OP_SEL_HI_2 = bits!(instr_top, 14:14) as u8;
+                let OP_SEL_HI = (OP_SEL_HI_2 << 2) | OP_SEL_HI_1_0;
+
+                Ok((
+                    &data[8..],
+                    Self::VOP3P {
+                        OP: decode_opcode(opcode)?,
+                        CLMP: bits!(instr, 15:15) != 0,
+                        OP_SEL: bits!(instr, 13:11) as u8,
+                        NEG_HI: bits!(instr, 10:8) as u8,
+                        VDST: bits!(instr, 7:0) as u8,
+                        NEG: bits!(instr_top, 31:29) as u8,
+                        OP_SEL_HI,
+                        SRC2: bits!(instr_top, 26:18) as u16,
+                        SRC1: bits!(instr_top, 17:9) as u16,
+                        SRC0: bits!(instr_top, 8:0) as u16,
+                    },
+                ))
+            }
+            _ => Err(DecodeError::BadValue(
+                "VOP instruction major opcode",
+                instr.into(),
+            )),
+        }
     }
 }

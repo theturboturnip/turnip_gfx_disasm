@@ -53,7 +53,7 @@ impl Decodable for ScalarALUInstr {
             Ok((
                 &data[4..],
                 Self::SOPP {
-                    OP: decode_opcode(bits!(instr, 22:16) as u8)?,
+                    OP: decode_opcode(bits!(instr, 22:16))?,
                     SIMM: bits!(instr, 15:0) as u16,
                 },
             ))
@@ -67,7 +67,7 @@ impl Decodable for ScalarALUInstr {
             Ok((
                 &data[length..],
                 Self::SOPC {
-                    OP: decode_opcode(bits!(instr, 22:16) as u8)?,
+                    OP: decode_opcode(bits!(instr, 22:16))?,
                     SSRC1: bits!(instr, 15:8) as u8,
                     SSRC0,
                     extra_literal,
@@ -83,7 +83,7 @@ impl Decodable for ScalarALUInstr {
             Ok((
                 &data[length..],
                 Self::SOP1 {
-                    OP: decode_opcode(bits!(instr, 15:8) as u8)?,
+                    OP: decode_opcode(bits!(instr, 15:8))?,
                     SDST: bits!(instr, 22:16) as u8,
                     SSRC0,
                     extra_literal,
@@ -93,7 +93,7 @@ impl Decodable for ScalarALUInstr {
             Ok((
                 &data[4..],
                 Self::SOPK {
-                    OP: decode_opcode(bits!(instr, 27:23) as u8)?,
+                    OP: decode_opcode(bits!(instr, 27:23))?,
                     SDST: bits!(instr, 22:16) as u8,
                     SIMM16: bits!(instr, 15:0) as u16,
                 },
@@ -108,7 +108,7 @@ impl Decodable for ScalarALUInstr {
             Ok((
                 &data[length..],
                 Self::SOP2 {
-                    OP: decode_opcode(bits!(instr, 29:23) as u8)?,
+                    OP: decode_opcode(bits!(instr, 29:23))?,
                     SDST: bits!(instr, 22:16) as u8,
                     SSRC1: bits!(instr, 15:8) as u8,
                     SSRC0,
@@ -149,7 +149,7 @@ impl Decodable for SMEM {
             Ok((
                 &data[8..],
                 Self {
-                    OP: decode_opcode(bits!(instr, 25:18) as u8)?,
+                    OP: decode_opcode(bits!(instr, 25:18))?,
                     SBASE: bits!(instr, 5:0) as u8,
                     SDATA: bits!(instr, 12:6) as u8,
                     DLC: bits!(instr, 14:14) != 0,

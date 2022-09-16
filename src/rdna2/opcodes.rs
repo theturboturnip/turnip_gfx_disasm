@@ -4,8 +4,8 @@ use num_traits::FromPrimitive;
 use super::DecodeError;
 
 /// Function for decoding u8s into an opcode type, using [num_traits::FromPrimitive], and converting that into a useful [DecodeError]
-pub fn decode_opcode<T: FromPrimitive>(opcode: u8) -> Result<T, DecodeError> {
-    T::from_u8(opcode)
+pub fn decode_opcode<T: FromPrimitive>(opcode: u32) -> Result<T, DecodeError> {
+    T::from_u32(opcode)
         .ok_or_else(|| DecodeError::BadValue(std::any::type_name::<T>(), opcode.into()))
 }
 
