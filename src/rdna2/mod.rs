@@ -13,9 +13,8 @@ mod scalar;
 use scalar::ScalarALUInstr;
 
 enum DecodeError {
-    NotApplicable,
     NotEnoughData,
-    BadOpcode(u8),
+    BadValue(&'static str, u64),
 }
 
 trait Decodable: Sized {
@@ -107,7 +106,7 @@ impl Decodable for Instruction {
                 "got value 0b{:b} which is larger than 6 bits from a (8-bit >> 2) shift",
                 opcode
             ),
-            _ => Err(DecodeError::BadOpcode(opcode)),
+            _ => Err(DecodeError::BadValue("major opcode", opcode.into())),
         }
     }
 }

@@ -122,7 +122,10 @@ impl Decodable for ScalarALUInstr {
                 },
             ))
         } else {
-            Err(DecodeError::NotApplicable)
+            Err(DecodeError::BadValue(
+                "scalar ALU major opcode",
+                instr.into(),
+            ))
         }
     }
 }
