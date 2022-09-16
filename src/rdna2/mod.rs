@@ -12,9 +12,10 @@ use crate::Action;
 mod opcodes;
 
 mod scalar;
-use scalar::ScalarALUInstr;
+use scalar::{ScalarALUInstr, SMEM};
 
-use self::scalar::SMEM;
+mod vector;
+use vector::{VOP, VOP3};
 
 pub enum DecodeError {
     NotEnoughData,
@@ -34,9 +35,8 @@ trait Decodable: Sized {
 enum Instruction {
     ScalarALU(ScalarALUInstr),
     ScalarMemory(SMEM),
-    VectorALU(),
-    /// 64-bit version of VectorALU
-    VectorALU_Long(),
+    VectorALU(VOP),
+    VectorALU_Long(VOP3),
     VectorParamInterp(),
     DataSharing(),
     VectorMemoryBuffer(),
@@ -67,13 +67,12 @@ impl Decodable for Instruction {
                 Ok((remaining, Instruction::ScalarMemory(instr)))
             }
             0b0_00000..=0b0_11111 => {
-                todo!("VOP2 | VOP1 | VOPC - may be followed by SDWA, SDWAB, DPP16, DPP8")
+                let (remaining, instr) = VOP::decode_consuming(data)?;
+                Ok((remaining, Instruction::VectorALU(instr)))
             }
             0b110001 | 0b110101 => {
-                if data.len() < 8 {
-                    return Err(DecodeError::NotEnoughData);
-                }
-                Ok((&data[8..], Instruction::VectorALU_Long()))
+                let (remaining, instr) = VOP3::decode_consuming(data)?;
+                Ok((remaining, Instruction::VectorALU_Long(instr)))
             }
             0b110010 => Ok((&data[4..], Instruction::VectorParamInterp())),
             0b110110 => {
