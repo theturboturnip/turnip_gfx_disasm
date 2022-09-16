@@ -1,6 +1,12 @@
+use bitutils::bits;
+
 use super::{
-    opcodes::{VOP1_Opcode, VOP2_Opcode, VOP3A_Opcode, VOP3B_Opcode, VOP3P_Opcode, VOPC_Opcode},
-    Decodable,
+    opcodes::{
+        decode_opcode, VOP1_Opcode, VOP2_Opcode, VOP3A_Opcode, VOP3B_Opcode, VOP3P_Opcode,
+        VOPC_Opcode,
+    },
+    utils::extract_u32,
+    Decodable, DecodeError,
 };
 
 /// TODO
@@ -60,8 +66,83 @@ pub enum VOP {
     },
 }
 impl Decodable for VOP {
-    fn decode_consuming(data: &[u8]) -> Result<(&[u8], Self), super::DecodeError> {
-        todo!()
+    fn decode_consuming(data: &[u8]) -> Result<(&[u8], Self), DecodeError> {
+        // Read first 4 bytes, decide if we have an extra 32-bit literal constant
+        let instr = extract_u32(data)?;
+
+        if bits!(instr, 31:31) != 0 {
+            Err(DecodeError::BadValue(
+                "vector ALU major opcode",
+                instr.into(),
+            ))
+        } else {
+            let SRC0 = bits!(instr, 8:0) as u16;
+            if bits!(instr, 31:25) == 0b0111110 {
+                // VOPC
+                let (length, extra) = match SRC0 {
+                    // 233 = DPP8, 234 = DPP8FI?
+                    233 | 234 => (8, Some(VOPC_Extra::DPP8(DPP8(extract_u32(&data[4..])?)))),
+                    // 250 = DPP16
+                    250 => (8, Some(VOPC_Extra::DPP16(DPP16(extract_u32(&data[4..])?)))),
+                    // 249 = SDWA
+                    249 => (8, Some(VOPC_Extra::SDWAB(SDWAB(extract_u32(&data[4..])?)))),
+                    // All others = normal
+                    _ => (4, None),
+                };
+                Ok((
+                    &data[length..],
+                    Self::VOPC {
+                        OP: decode_opcode(bits!(instr, 24:17) as u8)?,
+                        VSRC1: bits!(instr, 16:9) as u8,
+                        SRC0: SRC0,
+                        extra: extra,
+                    },
+                ))
+            } else if bits!(instr, 31:25) == 0b0111111 {
+                // VOP1
+                let (length, extra) = match SRC0 {
+                    // 233 = DPP8, 234 = DPP8FI?
+                    233 | 234 => (8, Some(VOP1_Extra::DPP8(DPP8(extract_u32(&data[4..])?)))),
+                    // 250 = DPP16
+                    250 => (8, Some(VOP1_Extra::DPP16(DPP16(extract_u32(&data[4..])?)))),
+                    // 249 = SDWA
+                    249 => (8, Some(VOP1_Extra::SDWA(SDWA(extract_u32(&data[4..])?)))),
+                    // All others = normal
+                    _ => (4, None),
+                };
+                Ok((
+                    &data[length..],
+                    Self::VOP1 {
+                        OP: decode_opcode(bits!(instr, 16:9) as u8)?,
+                        VDST: bits!(instr, 24:17) as u8,
+                        SRC0: SRC0,
+                        extra: extra,
+                    },
+                ))
+            } else {
+                // VOP2
+                let (length, extra) = match SRC0 {
+                    // 233 = DPP8, 234 = DPP8FI?
+                    233 | 234 => (8, Some(VOP2_Extra::DPP8(DPP8(extract_u32(&data[4..])?)))),
+                    // 250 = DPP16
+                    250 => (8, Some(VOP2_Extra::DPP16(DPP16(extract_u32(&data[4..])?)))),
+                    // 249 = SDWA
+                    249 => (8, Some(VOP2_Extra::SDWA(SDWA(extract_u32(&data[4..])?)))),
+                    // All others = normal
+                    _ => (4, None),
+                };
+                Ok((
+                    &data[length..],
+                    Self::VOP2 {
+                        OP: decode_opcode(bits!(instr, 30:25) as u8)?,
+                        VSRC1: bits!(instr, 16:9) as u8,
+                        VDST: bits!(instr, 24:17) as u8,
+                        SRC0: SRC0,
+                        extra: extra,
+                    },
+                ))
+            }
+        }
     }
 }
 
