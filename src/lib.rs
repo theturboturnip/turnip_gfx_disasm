@@ -7,6 +7,9 @@
 //!
 //! This architecture is based on RDNA2, but is intended to function on other backends too.
 
+#[macro_use]
+extern crate num_derive;
+
 use std::ops::Deref;
 
 /// TODO more values here - special registers? function arguments?
