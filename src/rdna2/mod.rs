@@ -17,6 +17,8 @@ use scalar::{ScalarALUInstr, SMEM};
 mod vector;
 use vector::{VOP, VOP3};
 
+mod utils;
+
 pub enum DecodeError {
     NotEnoughData,
     BadValue(&'static str, u64),
