@@ -9,10 +9,12 @@ use std::marker::PhantomData;
 
 use crate::Action;
 
+mod opcodes;
+
 mod scalar;
 use scalar::ScalarALUInstr;
 
-enum DecodeError {
+pub enum DecodeError {
     NotEnoughData,
     BadValue(&'static str, u64),
 }
