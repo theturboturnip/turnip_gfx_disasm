@@ -14,6 +14,8 @@ mod opcodes;
 mod scalar;
 use scalar::ScalarALUInstr;
 
+use self::scalar::SMEM;
+
 pub enum DecodeError {
     NotEnoughData,
     BadValue(&'static str, u64),
@@ -31,7 +33,7 @@ trait Decodable: Sized {
 #[derive(Debug, Clone, Copy)]
 enum Instruction {
     ScalarALU(ScalarALUInstr),
-    ScalarMemory(),
+    ScalarMemory(SMEM),
     VectorALU(),
     /// 64-bit version of VectorALU
     VectorALU_Long(),
@@ -61,10 +63,8 @@ impl Decodable for Instruction {
             }
             // 0b111101 = SMEM
             0b111101 => {
-                if data.len() < 8 {
-                    return Err(DecodeError::NotEnoughData);
-                }
-                Ok((&data[8..], Instruction::ScalarMemory()))
+                let (remaining, instr) = SMEM::decode_consuming(data)?;
+                Ok((remaining, Instruction::ScalarMemory(instr)))
             }
             0b0_00000..=0b0_11111 => {
                 todo!("VOP2 | VOP1 | VOPC - may be followed by SDWA, SDWAB, DPP16, DPP8")

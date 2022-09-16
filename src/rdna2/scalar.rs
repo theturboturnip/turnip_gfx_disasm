@@ -2,7 +2,7 @@
 use bitutils::bits;
 
 use super::opcodes::{
-    decode_opcode, SOP1_Opcode, SOP2_Opcode, SOPC_Opcode, SOPK_Opcode, SOPP_Opcode,
+    decode_opcode, SMEM_Opcode, SOP1_Opcode, SOP2_Opcode, SOPC_Opcode, SOPK_Opcode, SOPP_Opcode,
 };
 use super::{Decodable, DecodeError};
 use crate::Action;
@@ -134,6 +134,51 @@ impl Decodable for ScalarALUInstr {
     }
 }
 impl Action for ScalarALUInstr {
+    fn dependencies(&self) -> Vec<crate::Dependency> {
+        todo!()
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct SMEM {
+    OP: SMEM_Opcode,
+    GLC: bool,
+    DLC: bool,
+    SDATA: u8,
+    SBASE: u8,
+    SOFFSET: u8,
+    OFFSET: u32,
+}
+impl Decodable for SMEM {
+    fn decode_consuming(data: &[u8]) -> Result<(&[u8], Self), DecodeError> {
+        // Read first 4 bytes, decide if we have an extra 32-bit literal constant
+        let instr = extract_u32(data)?;
+        let instr_top = extract_u32(&data[4..])?;
+
+        if bits!(instr, 31:26) == 0b111101 {
+            Ok((
+                &data[8..],
+                Self {
+                    OP: decode_opcode(bits!(instr, 25:18) as u8)?,
+                    SBASE: bits!(instr, 5:0) as u8,
+                    SDATA: bits!(instr, 12:6) as u8,
+                    DLC: bits!(instr, 14:14) != 0,
+                    GLC: bits!(instr, 16:16) != 0,
+                    // 52:32 => 20:0 for instr_top
+                    OFFSET: bits!(instr_top, 20:0) as u32,
+                    // 63:57 => 31:25 for instr_top
+                    SOFFSET: bits!(instr_top, 31:25) as u8,
+                },
+            ))
+        } else {
+            Err(DecodeError::BadValue(
+                "scalar ALU major opcode",
+                instr.into(),
+            ))
+        }
+    }
+}
+impl Action for SMEM {
     fn dependencies(&self) -> Vec<crate::Dependency> {
         todo!()
     }
