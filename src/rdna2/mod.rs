@@ -7,7 +7,7 @@
 
 use std::marker::PhantomData;
 
-use crate::Action;
+use crate::{rdna2::opcodes::SOPP_Opcode, Action};
 
 mod opcodes;
 
@@ -19,13 +19,14 @@ use vector::{VOP, VOP3};
 
 mod utils;
 
-pub enum DecodeError {
+#[derive(Debug, Copy, Clone)]
+pub enum RDNA2DecodeError {
     NotEnoughData,
     BadValue(&'static str, u64),
 }
 
 trait Decodable: Sized {
-    fn decode_consuming(data: &[u8]) -> Result<(&[u8], Self), DecodeError>;
+    fn decode_consuming(data: &[u8]) -> Result<(&[u8], Self), RDNA2DecodeError>;
 }
 
 /// A decoded instruction. Top-level enum has archetypes, each archetype contains
@@ -47,11 +48,11 @@ enum Instruction {
     FlatMemoryAccess(),
 }
 impl Decodable for Instruction {
-    fn decode_consuming(data: &[u8]) -> Result<(&[u8], Self), DecodeError> {
-        // instruction decode "tag" bits are bits from [32:25], even for 64-bit instructions
+    fn decode_consuming(data: &[u8]) -> Result<(&[u8], Self), RDNA2DecodeError> {
+        // instruction decode "tag" bits are bits from [25:32], even for 64-bit instructions
         // read four bytes, take those 6 bits and use those to decide what instruction format this is
         if data.len() < 4 {
-            return Err(DecodeError::NotEnoughData);
+            return Err(RDNA2DecodeError::NotEnoughData);
         }
 
         // Binaries are little-endian
@@ -79,13 +80,13 @@ impl Decodable for Instruction {
             0b110010 => Ok((&data[4..], Instruction::VectorParamInterp())),
             0b110110 => {
                 if data.len() < 8 {
-                    return Err(DecodeError::NotEnoughData);
+                    return Err(RDNA2DecodeError::NotEnoughData);
                 }
                 Ok((&data[8..], Instruction::DataSharing()))
             }
             0b1110_00 | 0b1110_10 => {
                 if data.len() < 8 {
-                    return Err(DecodeError::NotEnoughData);
+                    return Err(RDNA2DecodeError::NotEnoughData);
                 }
                 Ok((&data[8..], Instruction::DataSharing()))
             }
@@ -94,13 +95,13 @@ impl Decodable for Instruction {
             }
             0b110111 => {
                 if data.len() < 8 {
-                    return Err(DecodeError::NotEnoughData);
+                    return Err(RDNA2DecodeError::NotEnoughData);
                 }
                 Ok((&data[8..], Instruction::FlatMemoryAccess()))
             }
             0b111110 => {
                 if data.len() < 8 {
-                    return Err(DecodeError::NotEnoughData);
+                    return Err(RDNA2DecodeError::NotEnoughData);
                 }
                 Ok((&data[8..], Instruction::Export()))
             }
@@ -109,7 +110,7 @@ impl Decodable for Instruction {
                 "got value 0b{:b} which is larger than 6 bits from a (8-bit >> 2) shift",
                 opcode
             ),
-            _ => Err(DecodeError::BadValue("major opcode", opcode.into())),
+            _ => Err(RDNA2DecodeError::BadValue("major opcode", opcode.into())),
         }
     }
 }
@@ -122,19 +123,37 @@ impl Action for Instruction {
     }
 }
 
-struct Decoder<'a> {
+pub struct RDNA2Decoder<'a> {
     _lifetime: PhantomData<&'a ()>, // NOTE: there's no generic type here!
 }
-impl<'a> super::Decoder for Decoder<'a> {
+impl<'a> RDNA2Decoder<'a> {
+    pub fn new() -> RDNA2Decoder<'a> {
+        RDNA2Decoder {
+            _lifetime: PhantomData::default(),
+        }
+    }
+}
+impl<'a> super::Decoder for RDNA2Decoder<'a> {
     type Input = &'a [u8];
     type BaseAction = Box<dyn Action>;
-    type Err = DecodeError;
+    type Err = RDNA2DecodeError;
 
-    fn decode(&self, mut data: Self::Input) -> Result<Vec<Self::BaseAction>, DecodeError> {
+    fn decode(&self, mut data: Self::Input) -> Result<Vec<Self::BaseAction>, RDNA2DecodeError> {
+        let mut instrs: Vec<Self::BaseAction> = vec![];
         loop {
             let (consumed_data, instr) = Instruction::decode_consuming(data)?;
             println!("{:?}", instr);
+
             data = consumed_data;
+            instrs.push(Box::new(instr));
+
+            match instr {
+                Instruction::ScalarALU(ScalarALUInstr::SOPP {
+                    OP: SOPP_Opcode::S_ENDPGM,
+                    ..
+                }) => return Ok(instrs),
+                _ => {}
+            }
         }
     }
 }

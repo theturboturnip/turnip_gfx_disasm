@@ -7,7 +7,7 @@ use super::{
         VOPC_Opcode,
     },
     utils::extract_u32,
-    Decodable, DecodeError,
+    Decodable, RDNA2DecodeError,
 };
 
 /// TODO
@@ -67,18 +67,18 @@ pub enum VOP {
     },
 }
 impl Decodable for VOP {
-    fn decode_consuming(data: &[u8]) -> Result<(&[u8], Self), DecodeError> {
+    fn decode_consuming(data: &[u8]) -> Result<(&[u8], Self), RDNA2DecodeError> {
         // Read first 4 bytes, decide if we have an extra 32-bit literal constant
         let instr = extract_u32(data)?;
 
         if bits!(instr, 31:31) != 0 {
-            Err(DecodeError::BadValue(
+            Err(RDNA2DecodeError::BadValue(
                 "vector ALU major opcode",
                 instr.into(),
             ))
         } else {
-            let SRC0 = bits!(instr, 8:0) as u16;
-            if bits!(instr, 31:25) == 0b0111110 {
+            let SRC0 = bits!(instr, 0:8) as u16;
+            if bits!(instr, 25:31) == 0b0111110 {
                 // VOPC
                 let (length, extra) = match SRC0 {
                     // 233 = DPP8, 234 = DPP8FI?
@@ -93,13 +93,13 @@ impl Decodable for VOP {
                 Ok((
                     &data[length..],
                     Self::VOPC {
-                        OP: decode_opcode(bits!(instr, 24:17))?,
-                        VSRC1: bits!(instr, 16:9) as u8,
+                        OP: decode_opcode(bits!(instr, 17:24))?,
+                        VSRC1: bits!(instr, 9:16) as u8,
                         SRC0: SRC0,
                         extra: extra,
                     },
                 ))
-            } else if bits!(instr, 31:25) == 0b0111111 {
+            } else if bits!(instr, 25:31) == 0b0111111 {
                 // VOP1
                 let (length, extra) = match SRC0 {
                     // 233 = DPP8, 234 = DPP8FI?
@@ -114,8 +114,8 @@ impl Decodable for VOP {
                 Ok((
                     &data[length..],
                     Self::VOP1 {
-                        OP: decode_opcode(bits!(instr, 16:9))?,
-                        VDST: bits!(instr, 24:17) as u8,
+                        OP: decode_opcode(bits!(instr, 9:16))?,
+                        VDST: bits!(instr, 17:24) as u8,
                         SRC0: SRC0,
                         extra: extra,
                     },
@@ -135,9 +135,9 @@ impl Decodable for VOP {
                 Ok((
                     &data[length..],
                     Self::VOP2 {
-                        OP: decode_opcode(bits!(instr, 30:25))?,
-                        VSRC1: bits!(instr, 16:9) as u8,
-                        VDST: bits!(instr, 24:17) as u8,
+                        OP: decode_opcode(bits!(instr, 25:30))?,
+                        VSRC1: bits!(instr, 9:16) as u8,
+                        VDST: bits!(instr, 17:24) as u8,
                         SRC0: SRC0,
                         extra: extra,
                     },
@@ -186,16 +186,16 @@ pub enum VOP3 {
     },
 }
 impl Decodable for VOP3 {
-    fn decode_consuming(data: &[u8]) -> Result<(&[u8], Self), super::DecodeError> {
+    fn decode_consuming(data: &[u8]) -> Result<(&[u8], Self), super::RDNA2DecodeError> {
         // Always 64bits
         let instr = extract_u32(data)?;
         let instr_top = extract_u32(&data[4..])?;
 
-        match bits!(instr, 31:26) {
+        match bits!(instr, 26:31) {
             0b110101 => {
                 // VOP3A or VOP3B
 
-                let opcode = bits!(instr, 25:16);
+                let opcode = bits!(instr, 16:25);
 
                 // Try decoding as VOP3A, then if that doesn't work try VOP3B
                 if let Ok(OP) = decode_opcode::<VOP3A_Opcode>(opcode) {
@@ -204,14 +204,14 @@ impl Decodable for VOP3 {
                         Self::VOP3A {
                             OP,
                             CLMP: bits!(instr, 15:15) != 0,
-                            OP_SEL: bits!(instr, 14:11) as u8,
-                            ABS: bits!(instr, 10:8) as u8,
-                            VDST: bits!(instr, 7:0) as u8,
-                            NEG: bits!(instr_top, 31:29) as u8,
-                            OMOD: bits!(instr_top, 28:27) as u8,
-                            SRC2: bits!(instr_top, 26:18) as u16,
-                            SRC1: bits!(instr_top, 17:9) as u16,
-                            SRC0: bits!(instr_top, 8:0) as u16,
+                            OP_SEL: bits!(instr, 11:14) as u8,
+                            ABS: bits!(instr, 8:10) as u8,
+                            VDST: bits!(instr, 0:7) as u8,
+                            NEG: bits!(instr_top, 29:31) as u8,
+                            OMOD: bits!(instr_top, 27:28) as u8,
+                            SRC2: bits!(instr_top, 18:26) as u16,
+                            SRC1: bits!(instr_top, 9:17) as u16,
+                            SRC0: bits!(instr_top, 0:8) as u16,
                         },
                     ))
                 } else {
@@ -222,13 +222,13 @@ impl Decodable for VOP3 {
                         Self::VOP3B {
                             OP,
                             CLMP: bits!(instr, 15:15) != 0,
-                            SDST: bits!(instr, 14:8) as u8,
-                            VDST: bits!(instr, 7:0) as u8,
-                            NEG: bits!(instr_top, 31:29) as u8,
-                            OMOD: bits!(instr_top, 28:27) as u8,
-                            SRC2: bits!(instr_top, 26:18) as u16,
-                            SRC1: bits!(instr_top, 17:9) as u16,
-                            SRC0: bits!(instr_top, 8:0) as u16,
+                            SDST: bits!(instr, 8:14) as u8,
+                            VDST: bits!(instr, 0:7) as u8,
+                            NEG: bits!(instr_top, 29:31) as u8,
+                            OMOD: bits!(instr_top, 27:28) as u8,
+                            SRC2: bits!(instr_top, 18:26) as u16,
+                            SRC1: bits!(instr_top, 9:17) as u16,
+                            SRC0: bits!(instr_top, 0:8) as u16,
                         },
                     ))
                 }
@@ -236,9 +236,9 @@ impl Decodable for VOP3 {
             0b110011 => {
                 // VOP3P
 
-                let opcode = bits!(instr, 22:16);
+                let opcode = bits!(instr, 16:22);
 
-                let OP_SEL_HI_1_0 = bits!(instr_top, 28:27) as u8;
+                let OP_SEL_HI_1_0 = bits!(instr_top, 27:28) as u8;
                 let OP_SEL_HI_2 = bits!(instr_top, 14:14) as u8;
                 let OP_SEL_HI = (OP_SEL_HI_2 << 2) | OP_SEL_HI_1_0;
 
@@ -247,18 +247,18 @@ impl Decodable for VOP3 {
                     Self::VOP3P {
                         OP: decode_opcode(opcode)?,
                         CLMP: bits!(instr, 15:15) != 0,
-                        OP_SEL: bits!(instr, 13:11) as u8,
-                        NEG_HI: bits!(instr, 10:8) as u8,
-                        VDST: bits!(instr, 7:0) as u8,
-                        NEG: bits!(instr_top, 31:29) as u8,
+                        OP_SEL: bits!(instr, 11:13) as u8,
+                        NEG_HI: bits!(instr, 8:10) as u8,
+                        VDST: bits!(instr, 0:7) as u8,
+                        NEG: bits!(instr_top, 29:31) as u8,
                         OP_SEL_HI,
-                        SRC2: bits!(instr_top, 26:18) as u16,
-                        SRC1: bits!(instr_top, 17:9) as u16,
-                        SRC0: bits!(instr_top, 8:0) as u16,
+                        SRC2: bits!(instr_top, 18:26) as u16,
+                        SRC1: bits!(instr_top, 9:17) as u16,
+                        SRC0: bits!(instr_top, 0:8) as u16,
                     },
                 ))
             }
-            _ => Err(DecodeError::BadValue(
+            _ => Err(RDNA2DecodeError::BadValue(
                 "VOP instruction major opcode",
                 instr.into(),
             )),

@@ -15,7 +15,7 @@ use std::ops::Deref;
 /// TODO more values here - special registers? function arguments?
 ///
 /// TODO type information?
-enum ValueRef {
+pub enum ValueRef {
     /// 64-bit scalar register
     GeneralPurposeRegister(u64),
     /// Location in memory that is calculated from a set of [ValueRef]s
@@ -33,16 +33,16 @@ enum ValueRef {
     },
 }
 
-trait Action {
+pub trait Action {
     fn dependencies(&self) -> Vec<Dependency>;
 }
 
-struct Dependency {
+pub struct Dependency {
     parents: Vec<ValueRef>,
     child: ValueRef,
 }
 
-trait Decoder {
+pub trait Decoder {
     type Input;
     type BaseAction: Deref<Target = dyn Action>;
     type Err;

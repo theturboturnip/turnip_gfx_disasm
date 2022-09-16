@@ -1,11 +1,20 @@
 [package]
-name = "amd_gfx_disasm"
+name = "turnip_gfx_disasm"
 version = "0.1.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[[bin]]
+name = "rdna2_disasm"
+path = "src/bin/rdna2_disasm.rs"
+required-features = ["build-binary"]
+
+[features]
+build-binary = ["clap"]
+
 [dependencies]
 bitutils = "3.0.1"
 num-traits = "0.2"
 num-derive = "0.3"
+clap = { version = "3.2.21", features = ["derive"], optional = true }

@@ -1,12 +1,12 @@
 #![allow(non_camel_case_types)]
 use num_traits::FromPrimitive;
 
-use super::DecodeError;
+use super::RDNA2DecodeError;
 
-/// Function for decoding u8s into an opcode type, using [num_traits::FromPrimitive], and converting that into a useful [DecodeError]
-pub fn decode_opcode<T: FromPrimitive>(opcode: u32) -> Result<T, DecodeError> {
+/// Function for decoding u8s into an opcode type, using [num_traits::FromPrimitive], and converting that into a useful [RDNA2DecodeError]
+pub fn decode_opcode<T: FromPrimitive>(opcode: u32) -> Result<T, RDNA2DecodeError> {
     T::from_u32(opcode)
-        .ok_or_else(|| DecodeError::BadValue(std::any::type_name::<T>(), opcode.into()))
+        .ok_or_else(|| RDNA2DecodeError::BadValue(std::any::type_name::<T>(), opcode.into()))
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, FromPrimitive)]

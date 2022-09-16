@@ -5,7 +5,7 @@ use super::opcodes::{
     decode_opcode, SMEM_Opcode, SOP1_Opcode, SOP2_Opcode, SOPC_Opcode, SOPK_Opcode, SOPP_Opcode,
 };
 use super::utils::extract_u32;
-use super::{Decodable, DecodeError};
+use super::{Decodable, RDNA2DecodeError};
 use crate::Action;
 
 #[derive(Debug, Clone, Copy)]
@@ -45,20 +45,20 @@ pub enum ScalarALUInstr {
     },
 }
 impl Decodable for ScalarALUInstr {
-    fn decode_consuming(data: &[u8]) -> Result<(&[u8], Self), DecodeError> {
+    fn decode_consuming(data: &[u8]) -> Result<(&[u8], Self), RDNA2DecodeError> {
         // Read first 4 bytes, decide if we have an extra 32-bit literal constant
         let instr = extract_u32(data)?;
 
-        if bits!(instr, 31:23) == 0b10_1111111 {
+        if bits!(instr, 23:31) == 0b10_1111111 {
             Ok((
                 &data[4..],
                 Self::SOPP {
-                    OP: decode_opcode(bits!(instr, 22:16))?,
-                    SIMM: bits!(instr, 15:0) as u16,
+                    OP: decode_opcode(bits!(instr, 16:22))?,
+                    SIMM: bits!(instr, 0:15) as u16,
                 },
             ))
-        } else if bits!(instr, 31:23) == 0b10_1111110 {
-            let SSRC0 = bits!(instr, 7:0) as u8;
+        } else if bits!(instr, 23:31) == 0b10_1111110 {
+            let SSRC0 = bits!(instr, 0:7) as u8;
             let (length, extra_literal) = if SSRC0 == 255 {
                 (8, Some(extract_u32(&data[4..])?))
             } else {
@@ -67,14 +67,14 @@ impl Decodable for ScalarALUInstr {
             Ok((
                 &data[length..],
                 Self::SOPC {
-                    OP: decode_opcode(bits!(instr, 22:16))?,
-                    SSRC1: bits!(instr, 15:8) as u8,
+                    OP: decode_opcode(bits!(instr, 16:22))?,
+                    SSRC1: bits!(instr, 8:15) as u8,
                     SSRC0,
                     extra_literal,
                 },
             ))
-        } else if bits!(instr, 31:23) == 0b10_111101 {
-            let SSRC0 = bits!(instr, 7:0) as u8;
+        } else if bits!(instr, 23:31) == 0b10_111101 {
+            let SSRC0 = bits!(instr, 0:7) as u8;
             let (length, extra_literal) = if SSRC0 == 255 {
                 (8, Some(extract_u32(&data[4..])?))
             } else {
@@ -83,23 +83,23 @@ impl Decodable for ScalarALUInstr {
             Ok((
                 &data[length..],
                 Self::SOP1 {
-                    OP: decode_opcode(bits!(instr, 15:8))?,
-                    SDST: bits!(instr, 22:16) as u8,
+                    OP: decode_opcode(bits!(instr, 8:15))?,
+                    SDST: bits!(instr, 16:22) as u8,
                     SSRC0,
                     extra_literal,
                 },
             ))
-        } else if bits!(instr, 31:28) == 0b1011 {
+        } else if bits!(instr, 28:31) == 0b1011 {
             Ok((
                 &data[4..],
                 Self::SOPK {
-                    OP: decode_opcode(bits!(instr, 27:23))?,
-                    SDST: bits!(instr, 22:16) as u8,
-                    SIMM16: bits!(instr, 15:0) as u16,
+                    OP: decode_opcode(bits!(instr, 23:27))?,
+                    SDST: bits!(instr, 16:22) as u8,
+                    SIMM16: bits!(instr, 0:15) as u16,
                 },
             ))
-        } else if bits!(instr, 31:30) == 0b10 {
-            let SSRC0 = bits!(instr, 7:0) as u8;
+        } else if bits!(instr, 30:31) == 0b10 {
+            let SSRC0 = bits!(instr, 0:7) as u8;
             let (length, extra_literal) = if SSRC0 == 255 {
                 (8, Some(extract_u32(&data[4..])?))
             } else {
@@ -108,15 +108,15 @@ impl Decodable for ScalarALUInstr {
             Ok((
                 &data[length..],
                 Self::SOP2 {
-                    OP: decode_opcode(bits!(instr, 29:23))?,
-                    SDST: bits!(instr, 22:16) as u8,
-                    SSRC1: bits!(instr, 15:8) as u8,
+                    OP: decode_opcode(bits!(instr, 23:29))?,
+                    SDST: bits!(instr, 16:22) as u8,
+                    SSRC1: bits!(instr, 8:15) as u8,
                     SSRC0,
                     extra_literal,
                 },
             ))
         } else {
-            Err(DecodeError::BadValue(
+            Err(RDNA2DecodeError::BadValue(
                 "scalar ALU major opcode",
                 instr.into(),
             ))
@@ -140,28 +140,28 @@ pub struct SMEM {
     OFFSET: u32,
 }
 impl Decodable for SMEM {
-    fn decode_consuming(data: &[u8]) -> Result<(&[u8], Self), DecodeError> {
+    fn decode_consuming(data: &[u8]) -> Result<(&[u8], Self), RDNA2DecodeError> {
         // Read first 4 bytes, decide if we have an extra 32-bit literal constant
         let instr = extract_u32(data)?;
         let instr_top = extract_u32(&data[4..])?;
 
-        if bits!(instr, 31:26) == 0b111101 {
+        if bits!(instr, 26:31) == 0b111101 {
             Ok((
                 &data[8..],
                 Self {
-                    OP: decode_opcode(bits!(instr, 25:18))?,
-                    SBASE: bits!(instr, 5:0) as u8,
-                    SDATA: bits!(instr, 12:6) as u8,
+                    OP: decode_opcode(bits!(instr, 18:25))?,
+                    SBASE: bits!(instr, 0:5) as u8,
+                    SDATA: bits!(instr, 6:12) as u8,
                     DLC: bits!(instr, 14:14) != 0,
                     GLC: bits!(instr, 16:16) != 0,
-                    // 52:32 => 20:0 for instr_top
-                    OFFSET: bits!(instr_top, 20:0) as u32,
-                    // 63:57 => 31:25 for instr_top
-                    SOFFSET: bits!(instr_top, 31:25) as u8,
+                    // 32:52 => 0:20 for instr_top
+                    OFFSET: bits!(instr_top, 0:20) as u32,
+                    // 57:63 => 25:31 for instr_top
+                    SOFFSET: bits!(instr_top, 25:31) as u8,
                 },
             ))
         } else {
-            Err(DecodeError::BadValue(
+            Err(RDNA2DecodeError::BadValue(
                 "scalar ALU major opcode",
                 instr.into(),
             ))
