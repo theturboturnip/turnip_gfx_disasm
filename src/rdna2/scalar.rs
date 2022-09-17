@@ -149,7 +149,6 @@ pub struct SMEM {
 }
 impl Decodable for SMEM {
     fn decode_consuming(data: &[u8]) -> Result<(&[u8], Self), RDNA2DecodeError> {
-        // Read first 4 bytes, decide if we have an extra 32-bit literal constant
         let instr = extract_u32(data)?;
         let instr_top = extract_u32(&data[4..])?;
 

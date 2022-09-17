@@ -17,6 +17,9 @@ use scalar::{ScalarALUInstr, SMEM};
 mod vector;
 use vector::{VOP, VOP3};
 
+mod export;
+use export::EXPORT;
+
 mod utils;
 
 #[derive(Debug, Copy, Clone)]
@@ -44,7 +47,7 @@ enum Instruction {
     DataSharing(),
     VectorMemoryBuffer(),
     VectorMemoryImage(),
-    Export(),
+    Export(EXPORT),
     FlatMemoryAccess(),
 }
 impl Decodable for Instruction {
@@ -100,10 +103,8 @@ impl Decodable for Instruction {
                 Ok((&data[8..], Instruction::FlatMemoryAccess()))
             }
             0b111110 => {
-                if data.len() < 8 {
-                    return Err(RDNA2DecodeError::NotEnoughData);
-                }
-                Ok((&data[8..], Instruction::Export()))
+                let (remaining, instr) = EXPORT::decode_consuming(data)?;
+                Ok((remaining, Instruction::Export(instr)))
             }
             // anything beyond 6-bits is wrong
             0b1_000000 => panic!(
