@@ -3,8 +3,11 @@ use std::convert::TryFrom;
 
 use bitutils::bits;
 
+use crate::{Action, Dependency, Output, ValueRef};
+
 use super::{utils::extract_u32, Decodable, RDNA2DecodeError};
 
+/// Chapter 11, p98
 #[derive(Debug, Clone, Copy)]
 pub struct EXPORT {
     EN: u8,
@@ -23,12 +26,27 @@ impl Decodable for EXPORT {
         let instr_top = extract_u32(&data[4..])?;
 
         if bits!(instr, 26:31) == 0b111110 {
+            let EN = bits!(instr, 0:3) as u8;
+            let COMPR = bits!(instr, 10:10) != 0;
+
+            if COMPR {
+                match EN {
+                    0x0 | 0x3 | 0xC | 0xF => {}
+                    _ => {
+                        return Err(RDNA2DecodeError::BadValue(
+                            "COMPRessed EXPORT has bad EN: must be 0x0,3,C,F",
+                            EN as u64,
+                        ))
+                    }
+                }
+            }
+
             Ok((
                 &data[8..],
                 Self {
-                    EN: bits!(instr, 0:3) as u8,
+                    EN,
                     TARGET: (bits!(instr, 4:9) as u8).try_into()?,
-                    COMPR: bits!(instr, 10:10) != 0,
+                    COMPR,
                     DONE: bits!(instr, 11:11) != 0,
                     VM: bits!(instr, 12:12) != 0,
                     VSRC0: bits!(instr_top, 0:7) as u8,
@@ -43,6 +61,57 @@ impl Decodable for EXPORT {
                 instr.into(),
             ))
         }
+    }
+}
+impl Action for EXPORT {
+    fn dependencies(&self) -> Vec<crate::Dependency> {
+        let mut deps = vec![];
+        let possible_exports = if self.COMPR {
+            [self.VSRC0, self.VSRC0, self.VSRC1, self.VSRC1]
+        } else {
+            [self.VSRC0, self.VSRC1, self.VSRC2, self.VSRC3]
+        };
+        for i in 0..4 {
+            // If bit i is not set, continue
+            if self.EN & (1 << i) == 0 {
+                continue;
+            }
+
+            // bit i is set => output #i is enabled
+
+            let output_ref = match self.TARGET {
+                TARGET::Position(idx) => Output::VertPosition {
+                    idx: idx as u64,
+                    vector_comp: i,
+                },
+                TARGET::Parameter(idx) => Output::VertParameter {
+                    idx: idx as u64,
+                    vector_comp: i,
+                },
+                TARGET::RenderTarget(rt) => Output::FragColor {
+                    idx: rt as u64,
+                    vector_comp: i,
+                },
+                TARGET::Z => Output::Other {
+                    name: "Z",
+                    idx: 0,
+                    vector_comp: i,
+                },
+                TARGET::PrimitiveData => Output::Other {
+                    name: "PrimitiveData",
+                    idx: 0,
+                    vector_comp: i,
+                },
+                TARGET::Null => continue,
+            };
+
+            deps.push(Dependency::new(
+                vec![ValueRef::GeneralPurposeRegister(possible_exports[i] as u64)],
+                ValueRef::Output(output_ref),
+            ));
+        }
+
+        deps
     }
 }
 

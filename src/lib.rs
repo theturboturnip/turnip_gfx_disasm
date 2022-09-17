@@ -12,6 +12,27 @@ extern crate num_derive;
 
 use std::ops::Deref;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Output {
+    VertPosition {
+        idx: u64,
+        vector_comp: usize,
+    },
+    VertParameter {
+        idx: u64,
+        vector_comp: usize,
+    },
+    FragColor {
+        idx: u64,
+        vector_comp: usize,
+    },
+    Other {
+        name: &'static str,
+        idx: u64,
+        vector_comp: usize,
+    },
+}
+
 /// TODO more values here - special registers? function arguments?
 ///
 /// TODO type information?
@@ -31,16 +52,22 @@ pub enum ValueRef {
     ///
     /// Fragment shaders are a special case because they usually write to vectors
     /// e.g. output color, so we have a component index here.
-    FragOutput { target: u64, vector_idx: u64 },
+    Output(Output),
 }
 
 pub trait Action {
     fn dependencies(&self) -> Vec<Dependency>;
 }
 
+#[derive(Debug)]
 pub struct Dependency {
     parents: Vec<ValueRef>,
     child: ValueRef,
+}
+impl Dependency {
+    fn new(parents: Vec<ValueRef>, child: ValueRef) -> Dependency {
+        Dependency { parents, child }
+    }
 }
 
 pub trait Decoder {

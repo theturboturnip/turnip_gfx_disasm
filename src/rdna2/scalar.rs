@@ -133,7 +133,13 @@ impl Decodable for ScalarALUInstr {
 }
 impl Action for ScalarALUInstr {
     fn dependencies(&self) -> Vec<crate::Dependency> {
-        todo!()
+        match self {
+            Self::SOPP { OP, .. } => match OP {
+                SOPP_Opcode::S_INST_PREFETCH | SOPP_Opcode::S_NOP | SOPP_Opcode::S_ENDPGM => vec![],
+                _ => todo!(),
+            },
+            _ => todo!(),
+        }
     }
 }
 

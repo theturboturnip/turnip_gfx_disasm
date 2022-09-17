@@ -1,6 +1,8 @@
 #![allow(non_camel_case_types)]
 use bitutils::bits;
 
+use crate::{Action, Dependency, ValueRef};
+
 use super::{
     opcodes::{
         decode_opcode, VOP1_Opcode, VOP2_Opcode, VOP3A_Opcode, VOP3B_Opcode, VOP3P_Opcode,
@@ -10,43 +12,6 @@ use super::{
     Decodable, RDNA2DecodeError,
 };
 
-/// TODO
-#[derive(Debug, Clone, Copy)]
-pub struct SDWA(u32);
-/// TODO
-#[derive(Debug, Clone, Copy)]
-pub struct SDWAB(u32);
-/// TODO
-#[derive(Debug, Clone, Copy)]
-pub struct DPP16(u32);
-/// TODO
-#[derive(Debug, Clone, Copy)]
-pub struct DPP8(u32);
-
-#[derive(Debug, Clone, Copy)]
-pub enum VOP2_Extra {
-    SDWA(SDWA),
-    DPP8(DPP8),
-    DPP16(DPP16),
-    Literal(u32),
-}
-
-#[derive(Debug, Clone, Copy)]
-pub enum VOP1_Extra {
-    SDWA(SDWA),
-    DPP8(DPP8),
-    DPP16(DPP16),
-    Literal(u32),
-}
-
-#[derive(Debug, Clone, Copy)]
-pub enum VOPC_Extra {
-    SDWAB(SDWAB),
-    DPP8(DPP8),
-    DPP16(DPP16),
-    Literal(u32),
-}
-
 #[derive(Debug, Clone, Copy)]
 pub enum VOP {
     VOP2 {
@@ -54,20 +19,41 @@ pub enum VOP {
         VDST: u8,
         VSRC1: u8,
         SRC0: VectorInputOperand,
-        extra: Option<VOP2_Extra>,
+        extra: Option<u32>,
     },
     VOP1 {
         OP: VOP1_Opcode,
         VDST: u8,
         SRC0: VectorInputOperand,
-        extra: Option<VOP1_Extra>,
+        extra: Option<u32>,
     },
     VOPC {
         OP: VOPC_Opcode,
         VSRC1: u8,
         SRC0: VectorInputOperand,
-        extra: Option<VOPC_Extra>,
+        extra: Option<u32>,
     },
+}
+impl VOP {
+    fn operand_to_valueref(SRC0: VectorInputOperand, extra: Option<u32>) -> ValueRef {
+        match SRC0 {
+            VectorInputOperand::Base(ScalarInputOperand::ValueRef(v)) => v,
+            VectorInputOperand::Base(ScalarInputOperand::Extra32BitConstant) => {
+                ValueRef::Literal(extra.unwrap() as u64)
+            }
+            VectorInputOperand::DPP8
+            | VectorInputOperand::DPP16
+            | VectorInputOperand::DPP8FI
+            | VectorInputOperand::SDWA => {
+                // TODO this is some form of parallelism between workers for DPP - mention that?
+                ValueRef::GeneralPurposeRegister(bits!(extra.unwrap(), 0:7) as u64)
+            }
+            VectorInputOperand::LDSDirect => ValueRef::SpecialReg {
+                name: "LDS (Local Data Shader) Direct Access",
+                idx: 0,
+            },
+        }
+    }
 }
 impl Decodable for VOP {
     fn decode_consuming(data: &[u8]) -> Result<(&[u8], Self), RDNA2DecodeError> {
@@ -85,16 +71,12 @@ impl Decodable for VOP {
                 // VOPC
                 let (length, extra) = match SRC0 {
                     VectorInputOperand::DPP8 | VectorInputOperand::DPP8FI => {
-                        (8, Some(VOPC_Extra::DPP8(DPP8(extract_u32(&data[4..])?))))
+                        (8, Some(extract_u32(&data[4..])?))
                     }
-                    VectorInputOperand::DPP16 => {
-                        (8, Some(VOPC_Extra::DPP16(DPP16(extract_u32(&data[4..])?))))
-                    }
-                    VectorInputOperand::SDWA => {
-                        (8, Some(VOPC_Extra::SDWAB(SDWAB(extract_u32(&data[4..])?))))
-                    }
+                    VectorInputOperand::DPP16 => (8, Some(extract_u32(&data[4..])?)),
+                    VectorInputOperand::SDWA => (8, Some(extract_u32(&data[4..])?)),
                     VectorInputOperand::Base(ScalarInputOperand::Extra32BitConstant) => {
-                        (8, Some(VOPC_Extra::Literal(extract_u32(&data[4..])?)))
+                        (8, Some(extract_u32(&data[4..])?))
                     }
                     // All others = normal
                     _ => (4, None),
@@ -112,16 +94,12 @@ impl Decodable for VOP {
                 // VOP1
                 let (length, extra) = match SRC0 {
                     VectorInputOperand::DPP8 | VectorInputOperand::DPP8FI => {
-                        (8, Some(VOP1_Extra::DPP8(DPP8(extract_u32(&data[4..])?))))
+                        (8, Some(extract_u32(&data[4..])?))
                     }
-                    VectorInputOperand::DPP16 => {
-                        (8, Some(VOP1_Extra::DPP16(DPP16(extract_u32(&data[4..])?))))
-                    }
-                    VectorInputOperand::SDWA => {
-                        (8, Some(VOP1_Extra::SDWA(SDWA(extract_u32(&data[4..])?))))
-                    }
+                    VectorInputOperand::DPP16 => (8, Some(extract_u32(&data[4..])?)),
+                    VectorInputOperand::SDWA => (8, Some(extract_u32(&data[4..])?)),
                     VectorInputOperand::Base(ScalarInputOperand::Extra32BitConstant) => {
-                        (8, Some(VOP1_Extra::Literal(extract_u32(&data[4..])?)))
+                        (8, Some(extract_u32(&data[4..])?))
                     }
                     // All others = normal
                     _ => (4, None),
@@ -139,16 +117,12 @@ impl Decodable for VOP {
                 // VOP2
                 let (length, extra) = match SRC0 {
                     VectorInputOperand::DPP8 | VectorInputOperand::DPP8FI => {
-                        (8, Some(VOP2_Extra::DPP8(DPP8(extract_u32(&data[4..])?))))
+                        (8, Some(extract_u32(&data[4..])?))
                     }
-                    VectorInputOperand::DPP16 => {
-                        (8, Some(VOP2_Extra::DPP16(DPP16(extract_u32(&data[4..])?))))
-                    }
-                    VectorInputOperand::SDWA => {
-                        (8, Some(VOP2_Extra::SDWA(SDWA(extract_u32(&data[4..])?))))
-                    }
+                    VectorInputOperand::DPP16 => (8, Some(extract_u32(&data[4..])?)),
+                    VectorInputOperand::SDWA => (8, Some(extract_u32(&data[4..])?)),
                     VectorInputOperand::Base(ScalarInputOperand::Extra32BitConstant) => {
-                        (8, Some(VOP2_Extra::Literal(extract_u32(&data[4..])?)))
+                        (8, Some(extract_u32(&data[4..])?))
                     }
                     // All others = normal
                     _ => (4, None),
@@ -164,6 +138,35 @@ impl Decodable for VOP {
                     },
                 ))
             }
+        }
+    }
+}
+impl Action for VOP {
+    fn dependencies(&self) -> Vec<crate::Dependency> {
+        match self {
+            Self::VOP1 {
+                OP,
+                VDST,
+                SRC0,
+                extra,
+            } => vec![Dependency::new(
+                vec![VOP::operand_to_valueref(*SRC0, *extra)],
+                ValueRef::GeneralPurposeRegister(*VDST as u64),
+            )],
+            Self::VOP2 {
+                OP,
+                VDST,
+                VSRC1,
+                SRC0,
+                extra,
+            } => vec![Dependency::new(
+                vec![
+                    VOP::operand_to_valueref(*SRC0, *extra),
+                    ValueRef::GeneralPurposeRegister(*VSRC1 as u64),
+                ],
+                ValueRef::GeneralPurposeRegister(*VDST as u64),
+            )],
+            _ => todo!(),
         }
     }
 }
@@ -316,5 +319,10 @@ impl Decodable for VOP3 {
                 instr.into(),
             )),
         }
+    }
+}
+impl Action for VOP3 {
+    fn dependencies(&self) -> Vec<crate::Dependency> {
+        todo!()
     }
 }

@@ -119,6 +119,10 @@ impl Action for Instruction {
     fn dependencies(&self) -> Vec<crate::Dependency> {
         match self {
             Self::ScalarALU(instr) => instr.dependencies(),
+            Self::ScalarMemory(instr) => instr.dependencies(),
+            Self::VectorALU(instr) => instr.dependencies(),
+            Self::VectorALU_Long(instr) => instr.dependencies(),
+            Self::Export(instr) => instr.dependencies(),
             _ => panic!("Action not implemented for {:?} yet", self),
         }
     }
@@ -144,6 +148,9 @@ impl<'a> super::Decoder for RDNA2Decoder<'a> {
         loop {
             let (consumed_data, instr) = Instruction::decode_consuming(data)?;
             println!("{:?}", instr);
+            for dep in instr.dependencies() {
+                println!("\t{:?} -> {:?}", dep.parents, dep.child);
+            }
 
             data = consumed_data;
             instrs.push(Box::new(instr));
