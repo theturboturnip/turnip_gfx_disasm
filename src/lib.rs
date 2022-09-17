@@ -15,22 +15,23 @@ use std::ops::Deref;
 /// TODO more values here - special registers? function arguments?
 ///
 /// TODO type information?
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ValueRef {
-    /// 64-bit scalar register
+    /// 64-bit scalar per-executor-group register
+    GeneralPurposeGlobalRegister(u64),
+    /// 64-bit scalar per-executor register
     GeneralPurposeRegister(u64),
-    /// Location in memory that is calculated from a set of [ValueRef]s
-    Memory(Vec<ValueRef>),
+    /// Location in memory (TODO: Add refs to actual included values and make copyable?)
+    Memory(),
     /// 64-bit literal value
     Literal(u64),
-    NamedSpecialReg(&'static str),
+    /// Register with special meaning
+    SpecialReg { name: &'static str, idx: u64 },
     /// Refers to a specific component of a fragment shader's vector output.
     ///
     /// Fragment shaders are a special case because they usually write to vectors
     /// e.g. output color, so we have a component index here.
-    FragOutput {
-        target: u64,
-        vector_idx: u64,
-    },
+    FragOutput { target: u64, vector_idx: u64 },
 }
 
 pub trait Action {

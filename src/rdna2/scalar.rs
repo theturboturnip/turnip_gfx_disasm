@@ -4,7 +4,7 @@ use bitutils::bits;
 use super::opcodes::{
     decode_opcode, SMEM_Opcode, SOP1_Opcode, SOP2_Opcode, SOPC_Opcode, SOPK_Opcode, SOPP_Opcode,
 };
-use super::utils::extract_u32;
+use super::utils::{decode_scalar_src, extract_u32, ScalarInputOperand};
 use super::{Decodable, RDNA2DecodeError};
 use crate::Action;
 
@@ -14,8 +14,8 @@ pub enum ScalarALUInstr {
     SOP2 {
         OP: SOP2_Opcode,
         SDST: u8,
-        SSRC1: u8,
-        SSRC0: u8,
+        SSRC1: ScalarInputOperand,
+        SSRC0: ScalarInputOperand,
         extra_literal: Option<u32>,
     },
     /// p240
@@ -28,14 +28,14 @@ pub enum ScalarALUInstr {
     SOP1 {
         OP: SOP1_Opcode,
         SDST: u8,
-        SSRC0: u8,
+        SSRC0: ScalarInputOperand,
         extra_literal: Option<u32>,
     },
     // p244
     SOPC {
         OP: SOPC_Opcode,
-        SSRC1: u8,
-        SSRC0: u8,
+        SSRC1: ScalarInputOperand,
+        SSRC0: ScalarInputOperand,
         extra_literal: Option<u32>,
     },
     // p245
@@ -58,8 +58,12 @@ impl Decodable for ScalarALUInstr {
                 },
             ))
         } else if bits!(instr, 23:31) == 0b10_1111110 {
-            let SSRC0 = bits!(instr, 0:7) as u8;
-            let (length, extra_literal) = if SSRC0 == 255 {
+            let SSRC0 = decode_scalar_src(bits!(instr, 0:7) as u8)?;
+            let SSRC1 = decode_scalar_src(bits!(instr, 8:15) as u8)?;
+            // TODO - is it valid for SSRC1 to be an extra 32-bit constant?
+            let (length, extra_literal) = if SSRC0 == ScalarInputOperand::Extra32BitConstant
+                || SSRC1 == ScalarInputOperand::Extra32BitConstant
+            {
                 (8, Some(extract_u32(&data[4..])?))
             } else {
                 (4, None)
@@ -68,14 +72,14 @@ impl Decodable for ScalarALUInstr {
                 &data[length..],
                 Self::SOPC {
                     OP: decode_opcode(bits!(instr, 16:22))?,
-                    SSRC1: bits!(instr, 8:15) as u8,
+                    SSRC1,
                     SSRC0,
                     extra_literal,
                 },
             ))
         } else if bits!(instr, 23:31) == 0b10_111101 {
-            let SSRC0 = bits!(instr, 0:7) as u8;
-            let (length, extra_literal) = if SSRC0 == 255 {
+            let SSRC0 = decode_scalar_src(bits!(instr, 0:7) as u8)?;
+            let (length, extra_literal) = if SSRC0 == ScalarInputOperand::Extra32BitConstant {
                 (8, Some(extract_u32(&data[4..])?))
             } else {
                 (4, None)
@@ -99,8 +103,12 @@ impl Decodable for ScalarALUInstr {
                 },
             ))
         } else if bits!(instr, 30:31) == 0b10 {
-            let SSRC0 = bits!(instr, 0:7) as u8;
-            let (length, extra_literal) = if SSRC0 == 255 {
+            let SSRC0 = decode_scalar_src(bits!(instr, 0:7) as u8)?;
+            let SSRC1 = decode_scalar_src(bits!(instr, 8:15) as u8)?;
+            // TODO - is it valid for SSRC1 to be an extra 32-bit constant?
+            let (length, extra_literal) = if SSRC0 == ScalarInputOperand::Extra32BitConstant
+                || SSRC1 == ScalarInputOperand::Extra32BitConstant
+            {
                 (8, Some(extract_u32(&data[4..])?))
             } else {
                 (4, None)
@@ -110,7 +118,7 @@ impl Decodable for ScalarALUInstr {
                 Self::SOP2 {
                     OP: decode_opcode(bits!(instr, 23:29))?,
                     SDST: bits!(instr, 16:22) as u8,
-                    SSRC1: bits!(instr, 8:15) as u8,
+                    SSRC1,
                     SSRC0,
                     extra_literal,
                 },
