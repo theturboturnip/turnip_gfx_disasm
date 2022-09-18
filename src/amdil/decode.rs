@@ -1,17 +1,22 @@
-pub enum AMDILDecodeError {
-    BadValue(&'static str, u64),
-    NotEnoughData,
-    MajorVersionMismatch { expected: u64, actual: u64 },
-}
-
 use std::convert::TryInto;
 
 use num_traits::FromPrimitive;
+
+use self::instructions::Instruction;
 
 use super::tokens::{
     IL_Dst, IL_Dst_Mod, IL_Lang, IL_Opcode, IL_Rel_Addr, IL_Src, IL_Src_Mod, IL_Version,
     RelativeAddressing,
 };
+
+mod instructions;
+
+#[derive(Debug)]
+pub enum AMDILDecodeError {
+    BadValue(&'static str, u64),
+    NotEnoughData,
+    MajorVersionMismatch { expected: u64, actual: u64 },
+}
 
 pub fn decode_enum<T: FromPrimitive>(bits: u32) -> Result<T, AMDILDecodeError> {
     T::from_u32(bits)
@@ -42,10 +47,10 @@ trait AMDILDecodable: Sized {
     fn from_stream(data: &[u8]) -> Result<(&[u8], Self), AMDILDecodeError>;
 }
 
-struct AMDILProgram {
+pub struct AMDILProgram {
     lang: IL_Lang,
     version: IL_Version,
-    ops: Vec<AMDILOperation>,
+    ops: Vec<Instruction>,
 }
 impl AMDILDecodable for AMDILProgram {
     fn from_stream(data: &[u8]) -> Result<(&[u8], Self), AMDILDecodeError> {
@@ -58,7 +63,8 @@ impl AMDILDecodable for AMDILProgram {
             if data.len() == 0 {
                 break;
             }
-            let (new_data, op) = AMDILOperation::from_stream(data)?;
+            let (new_data, op) = Instruction::from_stream(data)?;
+            dbg!(&op);
             data = new_data;
             ops.push(op);
         }
@@ -67,16 +73,19 @@ impl AMDILDecodable for AMDILProgram {
     }
 }
 
-struct AMDILOperation {
-    opcode: IL_Opcode,
-    dest: Option<AMDILDest>,
-    srcs: Vec<AMDILSource>,
+pub fn decode_amdil_program(data: &[u8]) -> Result<AMDILProgram, AMDILDecodeError> {
+    let (_, program) = AMDILProgram::from_stream(data)?;
+    Ok(program)
 }
-impl AMDILDecodable for AMDILOperation {
-    fn from_stream(data: &[u8]) -> Result<(&[u8], Self), AMDILDecodeError> {
-        todo!()
-    }
-}
+
+// struct AMDILOperation {
+//     opcode: IL_Opcode,
+//     dest: Option<AMDILDest>,
+//     srcs: Vec<AMDILSource>,
+//     /// If this is set, self.opcode.code == IL_Prefix_OpCode, and `self.opcode.control` influences operation precision of prefixed_operation
+//     prefixed_operation: Option<Box<AMDILOperation>>,
+//     extra_tokens: Vec<u32>,
+// }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct AMDILDest {

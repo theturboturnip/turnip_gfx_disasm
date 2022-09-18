@@ -1,3 +1,3 @@
-mod decode;
+pub mod decode;
 mod enums;
 mod tokens;
