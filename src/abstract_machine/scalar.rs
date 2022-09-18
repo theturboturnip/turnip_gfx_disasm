@@ -44,14 +44,7 @@ pub enum ScalarDataRef {
     /// e.g. output color, so we have a component index here.
     Output(ScalarOutput),
 }
-impl DataRef for ScalarDataRef {
-    fn as_bits(&self) -> Option<u64> {
-        match self {
-            Self::Literal(x) => Some(*x),
-            _ => None,
-        }
-    }
-}
+impl DataRef for ScalarDataRef {}
 
 pub struct BasicScalarDataRefFilter {}
 impl BasicScalarDataRefFilter {
@@ -60,7 +53,7 @@ impl BasicScalarDataRefFilter {
     }
 }
 impl DataRefFilter<ScalarDataRef> for BasicScalarDataRefFilter {
-    fn is_pure_input(&self, v: ScalarDataRef) -> bool {
+    fn is_pure_input(&self, v: &ScalarDataRef) -> bool {
         match v {
             ScalarDataRef::Literal(..) => true,
             _ => false,

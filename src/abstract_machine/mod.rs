@@ -7,9 +7,7 @@ use std::{
 pub mod scalar;
 pub mod vector;
 
-pub trait DataRef: Clone + Copy + PartialEq + Eq + Hash + std::fmt::Debug {
-    fn as_bits(&self) -> Option<u64>;
-}
+pub trait DataRef: Clone + PartialEq + Eq + Hash + std::fmt::Debug {}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum DataKind {
@@ -27,7 +25,7 @@ pub enum DataWidth {
     E64,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ValueRef<TData: DataRef> {
     pub data: TData,
     pub kind: DataKind,
@@ -59,7 +57,7 @@ pub trait Decoder<TData: DataRef> {
 
 pub trait DataRefFilter<TData: DataRef> {
     /// Returns true if the data is a pure input and should not be expanded into dependencies when passed as a parent.
-    fn is_pure_input(&self, v: TData) -> bool;
+    fn is_pure_input(&self, v: &TData) -> bool;
 }
 
 pub struct WorldState<TData: DataRef, T: DataRefFilter<TData>> {
@@ -80,7 +78,7 @@ impl<TData: DataRef, T: DataRefFilter<TData>> WorldState<TData, T> {
     /// set `self.dependents[Output(o)]` to the contents of `self.dependents[GeneralPurposeRegister(1)]`
     pub fn accum_action(&mut self, action: &dyn Action<TData>) {
         for dep in action.dependencies() {
-            if self.valueref_filter.is_pure_input(dep.child.data) {
+            if self.valueref_filter.is_pure_input(&dep.child.data) {
                 println!(
                     "Weird! Someone is writing to a pure input. Ignoring dependency {:?} -> {:?}",
                     dep.parents, dep.child
@@ -92,15 +90,15 @@ impl<TData: DataRef, T: DataRefFilter<TData>> WorldState<TData, T> {
 
             let mut resolved_inputs = HashSet::new();
             for input in dep.parents.iter() {
-                if self.valueref_filter.is_pure_input(input.data) {
+                if self.valueref_filter.is_pure_input(&input.data) {
                     // Pure inputs are not resolved into their dependencies
-                    resolved_inputs.insert(*input);
+                    resolved_inputs.insert(input.clone());
                 } else {
                     if let Some(input_dependents) = self.dependents.get(&input.data) {
-                        resolved_inputs.extend(input_dependents);
+                        resolved_inputs.extend(input_dependents.iter().cloned());
                     } else {
                         println!("Weird! Someone is using a non-initialized non-pure input {:?}. Treating as pure", input);
-                        resolved_inputs.insert(*input);
+                        resolved_inputs.insert(input.clone());
                     }
                 }
             }
