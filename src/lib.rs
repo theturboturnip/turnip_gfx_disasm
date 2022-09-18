@@ -140,7 +140,6 @@ impl<T: ValueRefFilter> WorldState<T> {
                     }
                 }
             }
-            dbg!(dep.child, &resolved_inputs);
             self.dependents.insert(dep.child, resolved_inputs);
         }
     }
