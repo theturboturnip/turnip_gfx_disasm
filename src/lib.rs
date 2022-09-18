@@ -10,9 +10,13 @@
 #[macro_use]
 extern crate num_derive;
 
-use std::ops::Deref;
+use std::{
+    collections::{HashMap, HashSet},
+    hash::Hash,
+    ops::Deref,
+};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Output {
     VertPosition {
         idx: u64,
@@ -36,13 +40,13 @@ pub enum Output {
 /// TODO more values here - special registers? function arguments?
 ///
 /// TODO type information?
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ValueRef {
     /// 64-bit scalar per-executor-group register
     GeneralPurposeGlobalRegister(u64),
     /// 64-bit scalar per-executor register
     GeneralPurposeRegister(u64),
-    /// Location in memory (TODO: Add refs to actual included values and make copyable?)
+    /// Value from memory (TODO: Add refs to actual included values and make copyable?)
     Memory(),
     /// 64-bit literal value
     Literal(u64),
@@ -76,6 +80,74 @@ pub trait Decoder {
     type Err;
 
     fn decode(&self, data: Self::Input) -> Result<Vec<Self::BaseAction>, Self::Err>;
+}
+
+pub trait ValueRefFilter {
+    /// Returns true if the value is a pure input and should not be expanded into dependencies when passed as a parent.
+    fn is_pure_input(&self, v: ValueRef) -> bool;
+}
+pub struct BasicValueRefFilter {}
+impl BasicValueRefFilter {
+    pub fn new() -> Self {
+        Self {}
+    }
+}
+impl ValueRefFilter for BasicValueRefFilter {
+    fn is_pure_input(&self, v: ValueRef) -> bool {
+        match v {
+            ValueRef::Literal(..) => true,
+            _ => false,
+        }
+    }
+}
+
+pub struct WorldState<T: ValueRefFilter> {
+    valueref_filter: T,
+    dependents: HashMap<ValueRef, HashSet<ValueRef>>,
+}
+impl<T: ValueRefFilter> WorldState<T> {
+    pub fn new(valueref_filter: T) -> Self {
+        Self {
+            valueref_filter,
+            dependents: HashMap::new(),
+        }
+    }
+
+    /// Accumulate the dependencies from the given Action onto the existing world state.
+    ///
+    /// e.g. if the action introduces a dependency of GeneralPurposeRegister(1) onto Output(o), set `self.dependents[Output(o)]` to the contents of `self.dependents[GeneralPurposeRegister(1)]`
+    pub fn accum_action(&mut self, action: &dyn Action) {
+        for dep in action.dependencies() {
+            if self.valueref_filter.is_pure_input(dep.child) {
+                println!(
+                    "Weird! Someone is writing to a pure input. Ignoring dependency {:?} -> {:?}",
+                    dep.parents, dep.child
+                );
+                continue;
+            }
+
+            let mut resolved_inputs = HashSet::new();
+            for input in dep.parents.iter() {
+                if self.valueref_filter.is_pure_input(*input) {
+                    // Pure inputs are not resolved into their dependencies
+                    resolved_inputs.insert(*input);
+                } else {
+                    if let Some(input_dependents) = self.dependents.get(input) {
+                        resolved_inputs.extend(input_dependents);
+                    } else {
+                        println!("Weird! Someone is using a non-initialized non-pure input {:?}. Treating as pure", input);
+                        resolved_inputs.insert(*input);
+                    }
+                }
+            }
+            dbg!(dep.child, &resolved_inputs);
+            self.dependents.insert(dep.child, resolved_inputs);
+        }
+    }
+
+    pub fn dependents(&self) -> &HashMap<ValueRef, HashSet<ValueRef>> {
+        &self.dependents
+    }
 }
 
 pub mod rdna2;
