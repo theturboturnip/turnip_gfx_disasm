@@ -4,7 +4,10 @@ use std::convert::TryFrom;
 use bitutils::bits;
 
 use crate::{
-    abstract_machine::scalar::{ScalarDependency, ScalarOutput, ScalarValueRef},
+    abstract_machine::{
+        scalar::{ScalarDataRef, ScalarDependency, ScalarOutput},
+        DataKind, DataWidth, ValueRef,
+    },
     Action, Dependency,
 };
 
@@ -66,7 +69,7 @@ impl Decodable for EXPORT {
         }
     }
 }
-impl Action<ScalarValueRef> for EXPORT {
+impl Action<ScalarDataRef> for EXPORT {
     fn dependencies(&self) -> Vec<ScalarDependency> {
         let mut deps = vec![];
         let possible_exports = if self.COMPR {
@@ -108,11 +111,23 @@ impl Action<ScalarValueRef> for EXPORT {
                 TARGET::Null => continue,
             };
 
+            let width = if self.COMPR {
+                DataWidth::E16
+            } else {
+                DataWidth::E32
+            };
+
             deps.push(Dependency::new(
-                vec![ScalarValueRef::GeneralPurposeRegister(
-                    possible_exports[i] as u64,
-                )],
-                ScalarValueRef::Output(output_ref),
+                vec![ValueRef {
+                    data: ScalarDataRef::GeneralPurposeRegister(possible_exports[i] as u64),
+                    kind: DataKind::Any,
+                    width,
+                }],
+                ValueRef {
+                    data: ScalarDataRef::Output(output_ref),
+                    kind: DataKind::Any,
+                    width,
+                },
             ));
         }
 

@@ -7,41 +7,66 @@ use std::{
 pub mod scalar;
 pub mod vector;
 
-pub trait ValueRef: Clone + Copy + PartialEq + Eq + Hash + std::fmt::Debug {}
+pub trait DataRef: Clone + Copy + PartialEq + Eq + Hash + std::fmt::Debug {
+    fn as_bits(&self) -> Option<u64>;
+}
 
-pub trait Action<TVal: ValueRef> {
-    fn dependencies(&self) -> Vec<Dependency<TVal>>;
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum DataKind {
+    Float,
+    SignedInt,
+    UnsignedInt,
+    Any,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum DataWidth {
+    E8,
+    E16,
+    E32,
+    E64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct ValueRef<TData: DataRef> {
+    pub data: TData,
+    pub kind: DataKind,
+    pub width: DataWidth,
+}
+
+pub trait Action<TData: DataRef> {
+    fn dependencies(&self) -> Vec<Dependency<TData>>;
 }
 
 #[derive(Debug)]
-pub struct Dependency<TVal: ValueRef> {
-    pub parents: Vec<TVal>,
-    pub child: TVal,
+pub struct Dependency<TData: DataRef> {
+    pub parents: Vec<ValueRef<TData>>,
+    pub child: ValueRef<TData>,
 }
-impl<TVal: ValueRef> Dependency<TVal> {
-    pub fn new(parents: Vec<TVal>, child: TVal) -> Self {
+impl<TData: DataRef> Dependency<TData> {
+    pub fn new(parents: Vec<ValueRef<TData>>, child: ValueRef<TData>) -> Self {
         Dependency { parents, child }
     }
 }
 
-pub trait Decoder<TVal: ValueRef> {
+pub trait Decoder<TData: DataRef> {
     type Input;
-    type BaseAction: Deref<Target = dyn Action<TVal>>;
+    type BaseAction: Deref<Target = dyn Action<TData>>;
     type Err;
 
     fn decode(&self, data: Self::Input) -> Result<Vec<Self::BaseAction>, Self::Err>;
 }
 
-pub trait ValueRefFilter<TVal: ValueRef> {
-    /// Returns true if the value is a pure input and should not be expanded into dependencies when passed as a parent.
-    fn is_pure_input(&self, v: TVal) -> bool;
+pub trait DataRefFilter<TData: DataRef> {
+    /// Returns true if the data is a pure input and should not be expanded into dependencies when passed as a parent.
+    fn is_pure_input(&self, v: TData) -> bool;
 }
 
-pub struct WorldState<TVal: ValueRef, T: ValueRefFilter<TVal>> {
+pub struct WorldState<TData: DataRef, T: DataRefFilter<TData>> {
     valueref_filter: T,
-    dependents: HashMap<TVal, HashSet<TVal>>,
+    dependents: HashMap<TData, HashSet<ValueRef<TData>>>,
 }
-impl<TVal: ValueRef, T: ValueRefFilter<TVal>> WorldState<TVal, T> {
+impl<TData: DataRef, T: DataRefFilter<TData>> WorldState<TData, T> {
     pub fn new(valueref_filter: T) -> Self {
         Self {
             valueref_filter,
@@ -53,9 +78,9 @@ impl<TVal: ValueRef, T: ValueRefFilter<TVal>> WorldState<TVal, T> {
     ///
     /// e.g. if the action introduces a dependency of GeneralPurposeRegister(1) onto Output(o),
     /// set `self.dependents[Output(o)]` to the contents of `self.dependents[GeneralPurposeRegister(1)]`
-    pub fn accum_action(&mut self, action: &dyn Action<TVal>) {
+    pub fn accum_action(&mut self, action: &dyn Action<TData>) {
         for dep in action.dependencies() {
-            if self.valueref_filter.is_pure_input(dep.child) {
+            if self.valueref_filter.is_pure_input(dep.child.data) {
                 println!(
                     "Weird! Someone is writing to a pure input. Ignoring dependency {:?} -> {:?}",
                     dep.parents, dep.child
@@ -63,13 +88,15 @@ impl<TVal: ValueRef, T: ValueRefFilter<TVal>> WorldState<TVal, T> {
                 continue;
             }
 
+            // TODO introduce logic for kind/width coercion, store keys as ValueRef
+
             let mut resolved_inputs = HashSet::new();
             for input in dep.parents.iter() {
-                if self.valueref_filter.is_pure_input(*input) {
+                if self.valueref_filter.is_pure_input(input.data) {
                     // Pure inputs are not resolved into their dependencies
                     resolved_inputs.insert(*input);
                 } else {
-                    if let Some(input_dependents) = self.dependents.get(input) {
+                    if let Some(input_dependents) = self.dependents.get(&input.data) {
                         resolved_inputs.extend(input_dependents);
                     } else {
                         println!("Weird! Someone is using a non-initialized non-pure input {:?}. Treating as pure", input);
@@ -77,11 +104,11 @@ impl<TVal: ValueRef, T: ValueRefFilter<TVal>> WorldState<TVal, T> {
                     }
                 }
             }
-            self.dependents.insert(dep.child, resolved_inputs);
+            self.dependents.insert(dep.child.data, resolved_inputs);
         }
     }
 
-    pub fn dependents(&self) -> &HashMap<TVal, HashSet<TVal>> {
+    pub fn dependents(&self) -> &HashMap<TData, HashSet<ValueRef<TData>>> {
         &self.dependents
     }
 }

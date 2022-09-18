@@ -2,7 +2,10 @@
 use bitutils::bits;
 
 use crate::{
-    abstract_machine::scalar::{ScalarDependency, ScalarValueRef},
+    abstract_machine::{
+        scalar::{ScalarDataRef, ScalarDependency},
+        DataKind, DataWidth, ValueRef,
+    },
     Action,
 };
 
@@ -38,20 +41,20 @@ pub enum VOP {
     },
 }
 impl VOP {
-    fn operand_to_valueref(SRC0: VectorInputOperand, extra: Option<u32>) -> ScalarValueRef {
+    fn operand_to_dataref(SRC0: VectorInputOperand, extra: Option<u32>) -> ScalarDataRef {
         match SRC0 {
             VectorInputOperand::Base(ScalarInputOperand::ScalarValueRef(v)) => v,
             VectorInputOperand::Base(ScalarInputOperand::Extra32BitConstant) => {
-                ScalarValueRef::Literal(extra.unwrap() as u64)
+                ScalarDataRef::Literal(extra.unwrap() as u64)
             }
             VectorInputOperand::DPP8
             | VectorInputOperand::DPP16
             | VectorInputOperand::DPP8FI
             | VectorInputOperand::SDWA => {
                 // TODO this is some form of parallelism between workers for DPP - mention that?
-                ScalarValueRef::GeneralPurposeRegister(bits!(extra.unwrap(), 0:7) as u64)
+                ScalarDataRef::GeneralPurposeRegister(bits!(extra.unwrap(), 0:7) as u64)
             }
-            VectorInputOperand::LDSDirect => ScalarValueRef::SpecialReg {
+            VectorInputOperand::LDSDirect => ScalarDataRef::SpecialReg {
                 name: "LDS (Local Data Shader) Direct Access",
                 idx: 0,
             },
@@ -144,7 +147,7 @@ impl Decodable for VOP {
         }
     }
 }
-impl Action<ScalarValueRef> for VOP {
+impl Action<ScalarDataRef> for VOP {
     fn dependencies(&self) -> Vec<ScalarDependency> {
         match self {
             Self::VOP1 {
@@ -152,23 +155,53 @@ impl Action<ScalarValueRef> for VOP {
                 VDST,
                 SRC0,
                 extra,
-            } => vec![ScalarDependency::new(
-                vec![VOP::operand_to_valueref(*SRC0, *extra)],
-                ScalarValueRef::GeneralPurposeRegister(*VDST as u64),
-            )],
+            } => {
+                // TODO data kind and width
+                let kind = DataKind::Any;
+                let width = DataWidth::E64;
+                vec![ScalarDependency::new(
+                    vec![ValueRef {
+                        data: VOP::operand_to_dataref(*SRC0, *extra),
+                        kind,
+                        width,
+                    }],
+                    ValueRef {
+                        data: ScalarDataRef::GeneralPurposeRegister(*VDST as u64),
+                        kind,
+                        width,
+                    },
+                )]
+            }
             Self::VOP2 {
                 OP,
                 VDST,
                 VSRC1,
                 SRC0,
                 extra,
-            } => vec![ScalarDependency::new(
-                vec![
-                    VOP::operand_to_valueref(*SRC0, *extra),
-                    ScalarValueRef::GeneralPurposeRegister(*VSRC1 as u64),
-                ],
-                ScalarValueRef::GeneralPurposeRegister(*VDST as u64),
-            )],
+            } => {
+                // TODO data kind and width
+                let kind = DataKind::Any;
+                let width = DataWidth::E64;
+                vec![ScalarDependency::new(
+                    vec![
+                        ValueRef {
+                            data: VOP::operand_to_dataref(*SRC0, *extra),
+                            kind,
+                            width,
+                        },
+                        ValueRef {
+                            data: ScalarDataRef::GeneralPurposeRegister(*VSRC1 as u64),
+                            kind,
+                            width,
+                        },
+                    ],
+                    ValueRef {
+                        data: ScalarDataRef::GeneralPurposeRegister(*VDST as u64),
+                        kind,
+                        width,
+                    },
+                )]
+            }
             _ => todo!(),
         }
     }
@@ -324,7 +357,7 @@ impl Decodable for VOP3 {
         }
     }
 }
-impl Action<ScalarValueRef> for VOP3 {
+impl Action<ScalarDataRef> for VOP3 {
     fn dependencies(&self) -> Vec<ScalarDependency> {
         todo!()
     }

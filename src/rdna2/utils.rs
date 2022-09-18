@@ -1,6 +1,6 @@
 use std::convert::TryInto;
 
-use crate::abstract_machine::scalar::ScalarValueRef;
+use crate::abstract_machine::scalar::ScalarDataRef;
 
 use super::RDNA2DecodeError;
 
@@ -17,7 +17,7 @@ pub fn extract_u32(data: &[u8]) -> Result<u32, RDNA2DecodeError> {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ScalarInputOperand {
-    ScalarValueRef(ScalarValueRef),
+    ScalarValueRef(ScalarDataRef),
     Extra32BitConstant,
 }
 
@@ -34,7 +34,7 @@ pub enum VectorInputOperand {
 pub fn decode_vector_src(src: u16, is_src_0: bool) -> Result<VectorInputOperand, RDNA2DecodeError> {
     Ok(match src {
         256..=511 => VectorInputOperand::Base(ScalarInputOperand::ScalarValueRef(
-            ScalarValueRef::GeneralPurposeRegister(src as u64 - 256),
+            ScalarDataRef::GeneralPurposeRegister(src as u64 - 256),
         )),
         233 => {
             if is_src_0 {
@@ -85,7 +85,7 @@ pub fn decode_vector_src(src: u16, is_src_0: bool) -> Result<VectorInputOperand,
 
 /// Based on Table 10/page 32
 pub fn decode_scalar_src(src: u8) -> Result<ScalarInputOperand, RDNA2DecodeError> {
-    use ScalarValueRef::*;
+    use ScalarDataRef::*;
     Ok(ScalarInputOperand::ScalarValueRef(match src {
         0..=105 => GeneralPurposeGlobalRegister(src as u64 - 0),
         106 => SpecialReg {

@@ -1,6 +1,6 @@
 use crate::Dependency;
 
-use super::{ValueRef, ValueRefFilter};
+use super::{DataRef, DataRefFilter};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ScalarOutput {
@@ -27,7 +27,7 @@ pub enum ScalarOutput {
 ///
 /// TODO type information?
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum ScalarValueRef {
+pub enum ScalarDataRef {
     /// 64-bit scalar per-executor-group register
     GeneralPurposeGlobalRegister(u64),
     /// 64-bit scalar per-executor register
@@ -44,21 +44,28 @@ pub enum ScalarValueRef {
     /// e.g. output color, so we have a component index here.
     Output(ScalarOutput),
 }
-impl ValueRef for ScalarValueRef {}
+impl DataRef for ScalarDataRef {
+    fn as_bits(&self) -> Option<u64> {
+        match self {
+            Self::Literal(x) => Some(*x),
+            _ => None,
+        }
+    }
+}
 
-pub struct BasicScalarValueRefFilter {}
-impl BasicScalarValueRefFilter {
+pub struct BasicScalarDataRefFilter {}
+impl BasicScalarDataRefFilter {
     pub fn new() -> Self {
         Self {}
     }
 }
-impl ValueRefFilter<ScalarValueRef> for BasicScalarValueRefFilter {
-    fn is_pure_input(&self, v: ScalarValueRef) -> bool {
+impl DataRefFilter<ScalarDataRef> for BasicScalarDataRefFilter {
+    fn is_pure_input(&self, v: ScalarDataRef) -> bool {
         match v {
-            ScalarValueRef::Literal(..) => true,
+            ScalarDataRef::Literal(..) => true,
             _ => false,
         }
     }
 }
 
-pub type ScalarDependency = Dependency<ScalarValueRef>;
+pub type ScalarDependency = Dependency<ScalarDataRef>;
