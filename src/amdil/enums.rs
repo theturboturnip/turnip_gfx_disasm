@@ -7,8 +7,8 @@
 // \todo remove this define once sc is promoted to dxx and dx=>il has been updated.
 // #define IL_OP_I_BIT_INSERT IL_OP_U_BIT_INSERT
 
-pub const IL_MINOR_VERSION: usize = 0;
-pub const IL_MAJOR_VERSION: usize = 2;
+pub const IL_MINOR_VERSION: u64 = 0;
+pub const IL_MAJOR_VERSION: u64 = 2;
 
 // comments in this enum will be added to the il spec
 #[derive(Debug, Clone, Copy, PartialEq, Eq, FromPrimitive)]
