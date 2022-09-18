@@ -3,7 +3,10 @@ use std::convert::TryFrom;
 
 use bitutils::bits;
 
-use crate::{Action, Dependency, Output, ValueRef};
+use crate::{
+    abstract_machine::scalar::{ScalarDependency, ScalarOutput, ScalarValueRef},
+    Action, Dependency,
+};
 
 use super::{utils::extract_u32, Decodable, RDNA2DecodeError};
 
@@ -63,8 +66,8 @@ impl Decodable for EXPORT {
         }
     }
 }
-impl Action for EXPORT {
-    fn dependencies(&self) -> Vec<crate::Dependency> {
+impl Action<ScalarValueRef> for EXPORT {
+    fn dependencies(&self) -> Vec<ScalarDependency> {
         let mut deps = vec![];
         let possible_exports = if self.COMPR {
             [self.VSRC0, self.VSRC0, self.VSRC1, self.VSRC1]
@@ -80,24 +83,24 @@ impl Action for EXPORT {
             // bit i is set => output #i is enabled
 
             let output_ref = match self.TARGET {
-                TARGET::Position(idx) => Output::VertPosition {
+                TARGET::Position(idx) => ScalarOutput::VertPosition {
                     idx: idx as u64,
                     vector_comp: i,
                 },
-                TARGET::Parameter(idx) => Output::VertParameter {
+                TARGET::Parameter(idx) => ScalarOutput::VertParameter {
                     idx: idx as u64,
                     vector_comp: i,
                 },
-                TARGET::RenderTarget(rt) => Output::FragColor {
+                TARGET::RenderTarget(rt) => ScalarOutput::FragColor {
                     idx: rt as u64,
                     vector_comp: i,
                 },
-                TARGET::Z => Output::Other {
+                TARGET::Z => ScalarOutput::Other {
                     name: "Z",
                     idx: 0,
                     vector_comp: i,
                 },
-                TARGET::PrimitiveData => Output::Other {
+                TARGET::PrimitiveData => ScalarOutput::Other {
                     name: "PrimitiveData",
                     idx: 0,
                     vector_comp: i,
@@ -106,8 +109,10 @@ impl Action for EXPORT {
             };
 
             deps.push(Dependency::new(
-                vec![ValueRef::GeneralPurposeRegister(possible_exports[i] as u64)],
-                ValueRef::Output(output_ref),
+                vec![ScalarValueRef::GeneralPurposeRegister(
+                    possible_exports[i] as u64,
+                )],
+                ScalarValueRef::Output(output_ref),
             ));
         }
 

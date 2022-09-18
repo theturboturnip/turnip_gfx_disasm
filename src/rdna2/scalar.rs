@@ -6,6 +6,7 @@ use super::opcodes::{
 };
 use super::utils::{decode_scalar_src, extract_u32, ScalarInputOperand};
 use super::{Decodable, RDNA2DecodeError};
+use crate::abstract_machine::scalar::{ScalarDependency, ScalarValueRef};
 use crate::Action;
 
 #[derive(Debug, Clone, Copy)]
@@ -77,7 +78,7 @@ impl Decodable for ScalarALUInstr {
                     extra_literal,
                 },
             ))
-        } else if bits!(instr, 23:31) == 0b10_111101 {
+        } else if bits!(instr, 23:31) == 0b10_1111101 {
             let SSRC0 = decode_scalar_src(bits!(instr, 0:7) as u8)?;
             let (length, extra_literal) = if SSRC0 == ScalarInputOperand::Extra32BitConstant {
                 (8, Some(extract_u32(&data[4..])?))
@@ -131,8 +132,8 @@ impl Decodable for ScalarALUInstr {
         }
     }
 }
-impl Action for ScalarALUInstr {
-    fn dependencies(&self) -> Vec<crate::Dependency> {
+impl Action<ScalarValueRef> for ScalarALUInstr {
+    fn dependencies(&self) -> Vec<ScalarDependency> {
         match self {
             Self::SOPP { OP, .. } => match OP {
                 SOPP_Opcode::S_INST_PREFETCH | SOPP_Opcode::S_NOP | SOPP_Opcode::S_ENDPGM => vec![],
@@ -181,8 +182,8 @@ impl Decodable for SMEM {
         }
     }
 }
-impl Action for SMEM {
-    fn dependencies(&self) -> Vec<crate::Dependency> {
+impl Action<ScalarValueRef> for SMEM {
+    fn dependencies(&self) -> Vec<ScalarDependency> {
         todo!()
     }
 }

@@ -1,7 +1,10 @@
 #![allow(non_camel_case_types)]
 use bitutils::bits;
 
-use crate::{Action, Dependency, ValueRef};
+use crate::{
+    abstract_machine::scalar::{ScalarDependency, ScalarValueRef},
+    Action,
+};
 
 use super::{
     opcodes::{
@@ -35,20 +38,20 @@ pub enum VOP {
     },
 }
 impl VOP {
-    fn operand_to_valueref(SRC0: VectorInputOperand, extra: Option<u32>) -> ValueRef {
+    fn operand_to_valueref(SRC0: VectorInputOperand, extra: Option<u32>) -> ScalarValueRef {
         match SRC0 {
-            VectorInputOperand::Base(ScalarInputOperand::ValueRef(v)) => v,
+            VectorInputOperand::Base(ScalarInputOperand::ScalarValueRef(v)) => v,
             VectorInputOperand::Base(ScalarInputOperand::Extra32BitConstant) => {
-                ValueRef::Literal(extra.unwrap() as u64)
+                ScalarValueRef::Literal(extra.unwrap() as u64)
             }
             VectorInputOperand::DPP8
             | VectorInputOperand::DPP16
             | VectorInputOperand::DPP8FI
             | VectorInputOperand::SDWA => {
                 // TODO this is some form of parallelism between workers for DPP - mention that?
-                ValueRef::GeneralPurposeRegister(bits!(extra.unwrap(), 0:7) as u64)
+                ScalarValueRef::GeneralPurposeRegister(bits!(extra.unwrap(), 0:7) as u64)
             }
-            VectorInputOperand::LDSDirect => ValueRef::SpecialReg {
+            VectorInputOperand::LDSDirect => ScalarValueRef::SpecialReg {
                 name: "LDS (Local Data Shader) Direct Access",
                 idx: 0,
             },
@@ -141,17 +144,17 @@ impl Decodable for VOP {
         }
     }
 }
-impl Action for VOP {
-    fn dependencies(&self) -> Vec<crate::Dependency> {
+impl Action<ScalarValueRef> for VOP {
+    fn dependencies(&self) -> Vec<ScalarDependency> {
         match self {
             Self::VOP1 {
                 OP,
                 VDST,
                 SRC0,
                 extra,
-            } => vec![Dependency::new(
+            } => vec![ScalarDependency::new(
                 vec![VOP::operand_to_valueref(*SRC0, *extra)],
-                ValueRef::GeneralPurposeRegister(*VDST as u64),
+                ScalarValueRef::GeneralPurposeRegister(*VDST as u64),
             )],
             Self::VOP2 {
                 OP,
@@ -159,12 +162,12 @@ impl Action for VOP {
                 VSRC1,
                 SRC0,
                 extra,
-            } => vec![Dependency::new(
+            } => vec![ScalarDependency::new(
                 vec![
                     VOP::operand_to_valueref(*SRC0, *extra),
-                    ValueRef::GeneralPurposeRegister(*VSRC1 as u64),
+                    ScalarValueRef::GeneralPurposeRegister(*VSRC1 as u64),
                 ],
-                ValueRef::GeneralPurposeRegister(*VDST as u64),
+                ScalarValueRef::GeneralPurposeRegister(*VDST as u64),
             )],
             _ => todo!(),
         }
@@ -321,8 +324,8 @@ impl Decodable for VOP3 {
         }
     }
 }
-impl Action for VOP3 {
-    fn dependencies(&self) -> Vec<crate::Dependency> {
+impl Action<ScalarValueRef> for VOP3 {
+    fn dependencies(&self) -> Vec<ScalarDependency> {
         todo!()
     }
 }

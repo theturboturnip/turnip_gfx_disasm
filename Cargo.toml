@@ -8,13 +8,9 @@ edition = "2021"
 [[bin]]
 name = "rdna2_disasm"
 path = "src/bin/rdna2_disasm.rs"
-required-features = ["build-binary"]
-
-[features]
-build-binary = ["clap"]
 
 [dependencies]
 bitutils = "3.0.1"
 num-traits = "0.2"
 num-derive = "0.3"
-clap = { version = "3.2.21", features = ["derive"], optional = true }
+clap = { version = "3.2.21", features = ["derive"] }
