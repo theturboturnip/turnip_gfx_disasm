@@ -128,6 +128,8 @@ impl Action for Instruction {
     }
 }
 
+pub type RDNA2Program = Vec<Box<dyn Action>>;
+
 pub struct RDNA2Decoder<'a> {
     _lifetime: PhantomData<&'a ()>, // NOTE: there's no generic type here!
 }
@@ -143,7 +145,7 @@ impl<'a> super::Decoder for RDNA2Decoder<'a> {
     type BaseAction = Box<dyn Action>;
     type Err = RDNA2DecodeError;
 
-    fn decode(&self, mut data: Self::Input) -> Result<Vec<Self::BaseAction>, RDNA2DecodeError> {
+    fn decode(&self, mut data: Self::Input) -> Result<RDNA2Program, RDNA2DecodeError> {
         let mut instrs: Vec<Self::BaseAction> = vec![];
         loop {
             let (consumed_data, instr) = Instruction::decode_consuming(data)?;
