@@ -16,7 +16,7 @@ pub enum DataKind {
     Float,
     SignedInt,
     UnsignedInt,
-    Any,
+    Untyped,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

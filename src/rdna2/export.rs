@@ -120,12 +120,12 @@ impl Action<ScalarDataRef> for EXPORT {
             deps.push(Dependency::new(
                 vec![ValueRef {
                     data: ScalarDataRef::GeneralPurposeRegister(possible_exports[i] as u64),
-                    kind: DataKind::Any,
+                    kind: DataKind::Untyped,
                     width,
                 }],
                 ValueRef {
                     data: ScalarDataRef::Output(output_ref),
-                    kind: DataKind::Any,
+                    kind: DataKind::Untyped,
                     width,
                 },
             ));

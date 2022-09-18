@@ -157,7 +157,7 @@ impl Action<ScalarDataRef> for VOP {
                 extra,
             } => {
                 // TODO data kind and width
-                let kind = DataKind::Any;
+                let kind = DataKind::Untyped;
                 let width = DataWidth::E64;
                 vec![ScalarDependency::new(
                     vec![ValueRef {
@@ -180,7 +180,7 @@ impl Action<ScalarDataRef> for VOP {
                 extra,
             } => {
                 // TODO data kind and width
-                let kind = DataKind::Any;
+                let kind = DataKind::Untyped;
                 let width = DataWidth::E64;
                 vec![ScalarDependency::new(
                     vec![
