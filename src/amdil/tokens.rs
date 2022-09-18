@@ -10,8 +10,9 @@ use super::{
     },
 };
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct IL_Lang {
-    client_type: IL_Language_Type,
+    pub client_type: IL_Language_Type,
 }
 impl TryFrom<u32> for IL_Lang {
     type Error = AMDILDecodeError;
@@ -23,12 +24,13 @@ impl TryFrom<u32> for IL_Lang {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct IL_Version {
-    minor_version: u8,
-    major_version: u8,
-    shader_type: IL_Shader_Type,
-    multipass: bool,
-    realtime: bool,
+    pub minor_version: u8,
+    pub major_version: u8,
+    pub shader_type: IL_Shader_Type,
+    pub multipass: bool,
+    pub realtime: bool,
 }
 impl TryFrom<u32> for IL_Version {
     type Error = AMDILDecodeError;
@@ -52,11 +54,12 @@ impl TryFrom<u32> for IL_Version {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct IL_Opcode {
-    code: ILOpCode,
-    control: u16,
-    sec_modifier_present: bool,
-    pri_modifier_present: bool,
+    pub code: ILOpCode,
+    pub control: u16,
+    pub sec_modifier_present: bool,
+    pub pri_modifier_present: bool,
 }
 impl TryFrom<u32> for IL_Opcode {
     type Error = AMDILDecodeError;
@@ -77,14 +80,15 @@ pub enum RelativeAddressing {
     Relative = 1,
     RegisterRelative = 2,
 }
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct IL_Dst {
-    register_num: u16,
-    register_type: ILRegType,
-    modifier_present: bool,
-    relative_address: RelativeAddressing,
-    dimension: bool,
-    immediate_present: bool,
-    extended: bool,
+    pub register_num: u16,
+    pub register_type: ILRegType,
+    pub modifier_present: bool,
+    pub relative_address: RelativeAddressing,
+    pub dimension: bool,
+    pub immediate_present: bool,
+    pub extended: bool,
 }
 impl TryFrom<u32> for IL_Dst {
     type Error = AMDILDecodeError;
@@ -102,13 +106,14 @@ impl TryFrom<u32> for IL_Dst {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct IL_Dst_Mod {
-    component_x_r: ILModDstComponent,
-    component_y_g: ILModDstComponent,
-    component_z_b: ILModDstComponent,
-    component_w_a: ILModDstComponent,
-    clamp: bool,
-    shift_scale: ILShiftScale,
+    pub component_x_r: ILModDstComponent,
+    pub component_y_g: ILModDstComponent,
+    pub component_z_b: ILModDstComponent,
+    pub component_w_a: ILModDstComponent,
+    pub clamp: bool,
+    pub shift_scale: ILShiftScale,
 }
 impl TryFrom<u32> for IL_Dst_Mod {
     type Error = AMDILDecodeError;
@@ -125,14 +130,15 @@ impl TryFrom<u32> for IL_Dst_Mod {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct IL_Src {
-    register_num: u16,
-    register_type: ILRegType,
-    modifier_present: bool,
-    relative_address: RelativeAddressing,
-    dimension: bool,
-    immediate_present: bool,
-    extended: bool,
+    pub register_num: u16,
+    pub register_type: ILRegType,
+    pub modifier_present: bool,
+    pub relative_address: RelativeAddressing,
+    pub dimension: bool,
+    pub immediate_present: bool,
+    pub extended: bool,
 }
 impl TryFrom<u32> for IL_Src {
     type Error = AMDILDecodeError;
@@ -151,27 +157,28 @@ impl TryFrom<u32> for IL_Src {
 }
 
 /// See Section 2.2.1 (p27) for precedence of operations
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct IL_Src_Mod {
-    swizzle_x_r: ILComponentSelect,
-    negate_x_r: bool,
-    swizzle_y_g: ILComponentSelect,
-    negate_y_g: bool,
-    swizzle_z_b: ILComponentSelect,
-    negate_z_b: bool,
-    swizzle_w_a: ILComponentSelect,
-    negate_w_a: bool,
+    pub swizzle_x_r: ILComponentSelect,
+    pub negate_x_r: bool,
+    pub swizzle_y_g: ILComponentSelect,
+    pub negate_y_g: bool,
+    pub swizzle_z_b: ILComponentSelect,
+    pub negate_z_b: bool,
+    pub swizzle_w_a: ILComponentSelect,
+    pub negate_w_a: bool,
     /// s = 1.0 - s
-    invert: bool,
+    pub invert: bool,
     /// s = s - 0.5
-    bias: bool,
+    pub bias: bool,
     /// s = 2.0 * s
-    x2: bool,
+    pub x2: bool,
     /// (s = (s < 0) ? –1 : ((s == 0) ? 0 : 1))
-    sign: bool,
+    pub sign: bool,
     /// (s = (s < 0) ? –s : s)
-    abs: bool,
-    divComp: ILDivComp,
-    clamp: bool,
+    pub abs: bool,
+    pub divComp: ILDivComp,
+    pub clamp: bool,
 }
 impl TryFrom<u32> for IL_Src_Mod {
     type Error = AMDILDecodeError;
@@ -193,6 +200,27 @@ impl TryFrom<u32> for IL_Src_Mod {
             abs: bits!(tok, 20:20) == 1,
             divComp: decode_enum(bits!(tok, 21:23))?,
             clamp: bits!(tok, 24:24) == 1,
+        })
+    }
+}
+
+/// Based on [a Mesa patch](https://cgit.freedesktop.org/mesa/mesa/commit/?id=a75c6163e605f35b14f26930dd9227e4f337ec9e), because AMD don't specify this token anywhere!!
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct IL_Rel_Addr {
+    pub address_register: u16,
+    /// ??? don't know what this means
+    pub loop_relative: bool,
+    /// Can another IL_Rel_Addr packet follow this one?? what does this mean
+    pub component: RelativeAddressing,
+}
+impl TryFrom<u32> for IL_Rel_Addr {
+    type Error = AMDILDecodeError;
+
+    fn try_from(tok: u32) -> Result<Self, Self::Error> {
+        Ok(Self {
+            address_register: decode_enum(bits!(tok, 0:15))?,
+            loop_relative: bits!(tok, 16:16) == 1,
+            component: decode_enum(bits!(tok, 17:19))?,
         })
     }
 }
