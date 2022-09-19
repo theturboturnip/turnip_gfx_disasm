@@ -17,6 +17,9 @@ pub enum VectorComponent {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct MaskedSwizzle([Option<VectorComponent>; 4]);
 impl MaskedSwizzle {
+    pub fn new(x: [Option<VectorComponent>; 4]) -> Self {
+        MaskedSwizzle(x)
+    }
     pub fn identity(num: usize) -> Self {
         use VectorComponent::*;
         match num {
@@ -37,14 +40,45 @@ impl MaskedSwizzle {
             if w { Some(W) } else { None },
         ])
     }
+    /// If the MaskedSwizzle is a simple mask of contiguous elements beginning in x
+    ///
+    /// i.e. x___, xy__, xyz_, or xyzw
+    ///
+    /// returns the length of that contiguous run. Else returns None
+    pub fn as_nonzero_length(&self) -> Option<u8> {
+        use VectorComponent::*;
+        match self {
+            Self([Some(X), None, None, None]) => Some(1),
+            Self([Some(X), Some(Y), None, None]) => Some(2),
+            Self([Some(X), Some(Y), Some(Z), None]) => Some(3),
+            Self([Some(X), Some(Y), Some(Z), Some(W)]) => Some(4),
+            _ => None,
+        }
+    }
+
+    /// Return a copy of self where each element is set to `None` if the corresponding element of `mask` is `None`
+    ///
+    /// e.g. `xyww.masked_out(xxx_) = xyw_`
+    pub fn masked_out(&self, mask: Self) -> Self {
+        Self([
+            mask.0[0].and(self.0[0]),
+            mask.0[1].and(self.0[1]),
+            mask.0[2].and(self.0[2]),
+            mask.0[3].and(self.0[3]),
+        ])
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum VectorDataRef {
     Register(u64, MaskedSwizzle),
     Literal([u64; 4]),
-    NamedLiteral(String),
-    NamedBuffer { name: String, idx: u64 },
+    NamedLiteral(String, MaskedSwizzle),
+    NamedBuffer {
+        name: String,
+        idx: u64,
+        swizzle: MaskedSwizzle,
+    },
     NamedInputRegister(String, MaskedSwizzle),
     NamedOutputRegister(String, MaskedSwizzle),
 }
@@ -59,12 +93,14 @@ pub enum VectorDeclaration {
     },
     NamedInputRegister {
         name: String,
-        register_mask: MaskedSwizzle,
+        // TODO maybe this should be a mask instead of a length
+        len: u8,
         reg_type: String,
     },
     NamedOutputRegister {
         name: String,
-        register_mask: MaskedSwizzle,
+        // TODO maybe this should be a mask instead of a length
+        len: u8,
         reg_type: String,
     },
 }

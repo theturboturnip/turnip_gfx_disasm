@@ -1,9 +1,14 @@
-use self::grammar::AMDILTextError;
+pub mod decode;
+pub use decode::Instruction;
+mod grammar;
 
-pub mod grammar;
-pub use grammar::Instruction;
+// TODO error handling here
+pub fn decode_amdil_text_program(data: &str) -> Vec<Instruction> {
+    let (_, instrs) = grammar::parse_lines(data).expect("couldn't parse");
 
-pub fn decode_amdil_text_program(data: &str) -> Result<Vec<Instruction>, AMDILTextError<&str>> {
-    let (_, instrs) = grammar::parse_lines(data).expect("couldn't decode");
-    Ok(instrs)
+    instrs
+        .into_iter()
+        .map(decode::decode_instruction)
+        .collect::<Result<Vec<Instruction>, _>>()
+        .expect("couldn't decode parsed")
 }

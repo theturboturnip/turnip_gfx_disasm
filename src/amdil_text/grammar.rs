@@ -15,8 +15,8 @@ use crate::abstract_machine::vector::{MaskedSwizzle, VectorComponent};
 
 #[derive(Debug, Clone)]
 pub struct Instruction {
-    instr: String,
-    args: Vec<Arg>,
+    pub instr: String,
+    pub args: Vec<Arg>,
 }
 
 #[derive(Debug, Clone)]
@@ -142,9 +142,12 @@ fn parse_swizzle_mod(data: &str) -> IResult<&str, ArgMod, AMDILTextError<&str>> 
     let (data, comps) = many_m_n(1, 4, swizzle_parser)(data)?;
 
     let comps = match comps.len() {
-        1 => [comps[0], None, None, None],
+        // "r0.x" is equivalent to "r0.xxxx"
+        1 => [comps[0], comps[0], comps[0], comps[0]],
+        // TODO should these have similar overrides
         2 => [comps[0], comps[1], None, None],
         3 => [comps[0], comps[1], comps[2], None],
+        // When they're all specified it's easy
         4 => [comps[0], comps[1], comps[2], comps[3]],
         other => panic!(
             "impossible length returned by nom parser for swizzle: {}",
