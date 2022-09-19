@@ -9,7 +9,7 @@ use super::tokens::{
     RelativeAddressing,
 };
 
-mod instructions;
+pub mod instructions;
 
 #[derive(Debug)]
 pub enum AMDILDecodeError {
@@ -88,7 +88,7 @@ pub fn decode_amdil_program(data: &[u8]) -> Result<AMDILProgram, AMDILDecodeErro
 // }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-struct AMDILDest {
+pub struct AMDILDest {
     base: IL_Dst,
     modifier: Option<IL_Dst_Mod>,
     rel_addr: Option<IL_Rel_Addr>,
@@ -170,7 +170,7 @@ impl AMDILDecodable for AMDILDest {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-struct AMDILSource {
+pub struct AMDILSource {
     base: IL_Src,
     modifier: Option<IL_Src_Mod>,
     rel_addr: Option<IL_Rel_Addr>,
