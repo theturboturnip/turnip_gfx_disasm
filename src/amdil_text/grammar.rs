@@ -21,7 +21,6 @@ pub struct Instruction {
 
 #[derive(Debug, Clone)]
 pub enum Arg {
-    // TODO name enums for specific register types?
     /// a name = ([a-zA-Z]+[0-9]*)
     Named(String, Vec<ArgMod>),
     /// a hex literal = 0x[0-9A-Fa-f]+
