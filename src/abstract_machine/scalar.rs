@@ -1,12 +1,13 @@
 use crate::Outcome;
 
-use super::{AbstractVM, DataRef};
+use super::{AbstractVM, DataRef, ScalarBasedAbstractVM};
 
 #[derive(Debug)]
 pub enum ScalarAbstractVM {}
 impl AbstractVM for ScalarAbstractVM {
-    type TScalarRef = ScalarDataRef;
+    type TDataRef = ScalarDataRef;
 }
+impl ScalarBasedAbstractVM for ScalarAbstractVM {}
 pub type ScalarOutcome = Outcome<ScalarAbstractVM>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

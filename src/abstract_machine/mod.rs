@@ -36,8 +36,10 @@ pub struct TypedRef<TData: DataRef> {
 }
 
 pub trait AbstractVM: std::fmt::Debug {
-    type TScalarRef: DataRef;
+    type TDataRef: DataRef;
 }
+// Marker trait for VMs that use a TDataRef that refers to a single Scalar.
+pub trait ScalarBasedAbstractVM: AbstractVM {}
 
 pub trait Action<TVM: AbstractVM> {
     fn outcomes(&self) -> Vec<Outcome<TVM>>;
@@ -47,13 +49,13 @@ pub trait Action<TVM: AbstractVM> {
 pub enum Outcome<TVM: AbstractVM> {
     // Declare that some named scalar exists, and optionally has a known value.
     Declaration {
-        name: TVM::TScalarRef,
-        value: Option<TypedRef<TVM::TScalarRef>>,
+        name: TVM::TDataRef,
+        value: Option<TypedRef<TVM::TDataRef>>,
     },
     // Declare that an output scalar has a new value, based on many input scalars.
     Dependency {
-        output: TypedRef<TVM::TScalarRef>,
-        inputs: Vec<TypedRef<TVM::TScalarRef>>,
+        output: TypedRef<TVM::TDataRef>,
+        inputs: Vec<TypedRef<TVM::TDataRef>>,
     },
 }
 
@@ -65,10 +67,11 @@ pub trait Decoder<TVM: AbstractVM> {
     fn decode(&self, data: Self::Input) -> Result<Vec<Self::BaseAction>, Self::Err>;
 }
 
-pub struct ScalarDependencies<TVM: AbstractVM> {
-    dependents: HashMap<TVM::TScalarRef, HashSet<TypedRef<TVM::TScalarRef>>>,
+/// Dependency solver for scalar-based abstract VMs
+pub struct ScalarDependencies<TVM: ScalarBasedAbstractVM> {
+    dependents: HashMap<TVM::TDataRef, HashSet<TypedRef<TVM::TDataRef>>>,
 }
-impl<TVM: AbstractVM> ScalarDependencies<TVM> {
+impl<TVM: ScalarBasedAbstractVM> ScalarDependencies<TVM> {
     pub fn new() -> Self {
         Self {
             dependents: HashMap::new(),
@@ -114,7 +117,7 @@ impl<TVM: AbstractVM> ScalarDependencies<TVM> {
         }
     }
 
-    pub fn dependents(&self) -> &HashMap<TVM::TScalarRef, HashSet<TypedRef<TVM::TScalarRef>>> {
+    pub fn dependents(&self) -> &HashMap<TVM::TDataRef, HashSet<TypedRef<TVM::TDataRef>>> {
         &self.dependents
     }
 }
