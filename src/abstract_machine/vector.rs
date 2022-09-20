@@ -7,7 +7,9 @@
 
 use std::ops::Index;
 
-use super::{AbstractVM, DataRef, ScalarBasedAbstractVM};
+use crate::{Action, Outcome};
+
+use super::{AbstractVM, DataRef, ScalarBasedAbstractVM, TypedRef};
 
 #[derive(Debug)]
 pub enum Vector2ScalarAbstractVM {}
@@ -23,6 +25,13 @@ pub enum VectorComponent {
     Z,
     W,
 }
+const VECTOR_COMPONENTS: [VectorComponent; 4] = [
+    VectorComponent::X,
+    VectorComponent::Y,
+    VectorComponent::Z,
+    VectorComponent::W,
+];
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct MaskedSwizzle(pub [Option<VectorComponent>; 4]);
 impl MaskedSwizzle {
@@ -197,4 +206,45 @@ pub enum VectorDeclaration {
         len: u8,
         reg_type: String,
     },
+}
+impl Action<Vector2ScalarAbstractVM> for VectorDeclaration {
+    fn outcomes(&self) -> Vec<crate::Outcome<Vector2ScalarAbstractVM>> {
+        match self {
+            VectorDeclaration::NamedLiteral(name, value) => VECTOR_COMPONENTS
+                .iter()
+                .map(|comp| Outcome::Declaration {
+                    name: (VectorNameRef::NamedLiteral(name.clone()), *comp),
+                    value: Some(TypedRef {
+                        data: (VectorNameRef::Literal(*value), *comp),
+                        kind: super::DataKind::Untyped,
+                        width: super::DataWidth::E32,
+                    }),
+                })
+                .collect(),
+            VectorDeclaration::NamedBuffer { name, len } => {
+                // TODO Declare all of the values in the array?
+                vec![]
+            }
+            // VECTOR_COMPONENTS.iter().map(|comp| Outcome::Declaration { name: VectorNameRef::NamedBuffer { name: (), idx: () }, value: () })
+            VectorDeclaration::NamedInputRegister {
+                name,
+                len,
+                reg_type,
+            }
+            | VectorDeclaration::NamedOutputRegister {
+                name,
+                len,
+                reg_type,
+            } => VECTOR_COMPONENTS
+                .iter()
+                .take(*len as usize)
+                .map(|comp| Outcome::Declaration {
+                    name: (VectorNameRef::NamedInputRegister(name.clone()), *comp),
+                    value: None,
+                })
+                .collect(),
+
+            _ => todo!(),
+        }
+    }
 }

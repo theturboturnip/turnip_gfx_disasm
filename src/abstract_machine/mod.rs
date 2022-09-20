@@ -85,7 +85,12 @@ impl<TVM: ScalarBasedAbstractVM> ScalarDependencies<TVM> {
     pub fn accum_action(&mut self, action: &dyn Action<TVM>) {
         for dep in action.outcomes() {
             match dep {
-                Outcome::Declaration { name, value } => todo!(),
+                Outcome::Declaration {
+                    name,
+                    value: Some(value),
+                } => {
+                    self.dependents.insert(name, [value].into());
+                }
                 Outcome::Dependency { output, inputs } => {
                     if output.data.is_pure_input() {
                         println!(
@@ -96,6 +101,7 @@ impl<TVM: ScalarBasedAbstractVM> ScalarDependencies<TVM> {
                     }
 
                     // TODO introduce logic for kind/width coercion, store keys as ValueRef
+                    // TODO Resolve NamedLiteral to Literal for vectors?
 
                     let mut resolved_inputs = HashSet::new();
                     for input in inputs {
@@ -113,6 +119,7 @@ impl<TVM: ScalarBasedAbstractVM> ScalarDependencies<TVM> {
                     }
                     self.dependents.insert(output.data, resolved_inputs);
                 }
+                _ => {}
             }
         }
     }

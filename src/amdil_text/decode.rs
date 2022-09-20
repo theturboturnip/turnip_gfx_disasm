@@ -1,4 +1,7 @@
-use crate::abstract_machine::vector::{MaskedSwizzle, VectorDeclaration};
+use crate::{
+    abstract_machine::vector::{MaskedSwizzle, Vector2ScalarAbstractVM, VectorDeclaration},
+    Action,
+};
 
 use super::grammar;
 
@@ -16,8 +19,26 @@ pub enum Instruction {
     Unknown(grammar::Instruction),
     DontCare(grammar::Instruction),
     Decl(VectorDeclaration),
-    Version(String),
     Alu(ALUInstruction),
+}
+impl Action<Vector2ScalarAbstractVM> for Instruction {
+    fn outcomes(&self) -> Vec<crate::Outcome<Vector2ScalarAbstractVM>> {
+        match self {
+            Instruction::DontCare(..) => {
+                vec![]
+            }
+            Instruction::Unknown(g_instr) => {
+                if g_instr.args.len() >= 2 {
+                    todo!("Best-effort outcomes for Unknown instructions with an identifiable src and dst")
+                } else {
+                    // Assume the unknown instruction doesn't do anything necessary
+                    vec![]
+                }
+            }
+            Instruction::Decl(decl) => decl.outcomes(),
+            Instruction::Alu(alu) => alu.outcomes(),
+        }
+    }
 }
 
 /// Adaptation of [grammar::Arg] that's more suitable for match-cases

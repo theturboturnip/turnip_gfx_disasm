@@ -1,6 +1,6 @@
 use crate::{
     abstract_machine::{
-        vector::{MaskedSwizzle, Vector2ScalarAbstractVM, VectorDataRef},
+        vector::{Vector2ScalarAbstractVM, VectorDataRef},
         DataKind, DataWidth, TypedRef,
     },
     amdil_text::grammar,
