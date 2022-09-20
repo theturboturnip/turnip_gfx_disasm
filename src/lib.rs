@@ -1,4 +1,4 @@
-//! This crate translates compiled shader bytecode to a list of [Action]s that operate on a global state.
+//! This crate translates shaders to a list of [Action]s that operate on a global state.
 //! [Action]s result in [Dependency]s: for example, a = b + c results in a [Dependency] from (b, c) to a.
 
 #[macro_use]
