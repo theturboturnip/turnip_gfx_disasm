@@ -1,8 +1,8 @@
 use std::path::PathBuf;
 
 use clap::Parser;
+use turnip_gfx_disasm::abstract_machine::analysis::dependency::ScalarDependencies;
 use turnip_gfx_disasm::abstract_machine::scalar::ScalarDataRef;
-use turnip_gfx_disasm::abstract_machine::ScalarDependencies;
 use turnip_gfx_disasm::rdna2::RDNA2Decoder;
 use turnip_gfx_disasm::Decoder;
 

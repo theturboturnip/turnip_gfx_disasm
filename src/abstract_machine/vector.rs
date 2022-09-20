@@ -18,6 +18,12 @@ impl AbstractVM for Vector2ScalarAbstractVM {
 }
 impl ScalarBasedAbstractVM for Vector2ScalarAbstractVM {}
 
+#[derive(Debug)]
+pub enum VectorAbstractVM {}
+impl AbstractVM for VectorAbstractVM {
+    type TDataRef = VectorDataRef;
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum VectorComponent {
     X,
@@ -179,6 +185,11 @@ impl DataRef for VectorNameRef {
             Self::NamedBuffer { .. } => true,
             _ => false,
         }
+    }
+}
+impl DataRef for VectorDataRef {
+    fn is_pure_input(&self) -> bool {
+        self.name.is_pure_input()
     }
 }
 impl DataRef for (VectorNameRef, VectorComponent) {
