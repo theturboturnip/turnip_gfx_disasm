@@ -35,10 +35,10 @@ fn swizzled_name_to_named_vector_data_ref(
     swizzle: MaskedSwizzle,
 ) -> Result<VectorDataRef, AMDILTextDecodeError> {
     let vdr = match name.chars().nth(0) {
-        Some('l') => VectorDataRef::NamedLiteral(name.clone(), swizzle),
-        Some('v') => VectorDataRef::NamedInputRegister(name.clone(), swizzle),
-        Some('o') => VectorDataRef::NamedOutputRegister(name.clone(), swizzle),
-        Some('r') => VectorDataRef::NamedRegister(name.clone(), swizzle),
+        Some('l') => VectorDataRef::named_literal(name.clone(), swizzle),
+        Some('v') => VectorDataRef::named_input_register(name.clone(), swizzle),
+        Some('o') => VectorDataRef::named_output_register(name.clone(), swizzle),
+        Some('r') => VectorDataRef::named_register(name.clone(), swizzle),
         _ => {
             return Err(AMDILTextDecodeError::Generic(format!(
                 "unexpected argument name '{}'",
@@ -55,11 +55,7 @@ fn indexed_swizzled_name_to_named_vector_data_ref(
     swizzle: MaskedSwizzle,
 ) -> Result<VectorDataRef, AMDILTextDecodeError> {
     if name.starts_with("cb") {
-        Ok(VectorDataRef::NamedBuffer {
-            name: name.clone(),
-            idx,
-            swizzle,
-        })
+        Ok(VectorDataRef::named_buffer(name.clone(), idx, swizzle))
     } else {
         Err(AMDILTextDecodeError::Generic(format!(
             "unexpected indexable argument name '{}'",

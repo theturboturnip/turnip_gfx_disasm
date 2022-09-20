@@ -86,22 +86,72 @@ impl MaskedSwizzle {
             self.0[3].is_some(),
         )
     }
+
+    pub fn truncated(&self, len: u8) -> Self {
+        Self([
+            if len >= 1 { self.0[0] } else { None },
+            if len >= 2 { self.0[1] } else { None },
+            if len >= 3 { self.0[2] } else { None },
+            if len >= 4 { self.0[3] } else { None },
+        ])
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum VectorDataRef {
-    NamedRegister(String, MaskedSwizzle),
+pub enum VectorNameRef {
+    NamedRegister(String),
     Literal([u64; 4]),
-    NamedLiteral(String, MaskedSwizzle),
-    NamedBuffer {
-        name: String,
-        idx: u64,
-        swizzle: MaskedSwizzle,
-    },
-    NamedInputRegister(String, MaskedSwizzle),
-    NamedOutputRegister(String, MaskedSwizzle),
+    NamedLiteral(String),
+    NamedBuffer { name: String, idx: u64 },
+    NamedInputRegister(String),
+    NamedOutputRegister(String),
 }
-impl DataRef for VectorDataRef {
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct VectorDataRef {
+    pub name: VectorNameRef,
+    pub swizzle: MaskedSwizzle,
+}
+impl VectorDataRef {
+    pub fn named_register(name: String, swizzle: MaskedSwizzle) -> Self {
+        Self {
+            name: VectorNameRef::NamedRegister(name),
+            swizzle,
+        }
+    }
+    pub fn literal(data: [u64; 4], swizzle: MaskedSwizzle) -> Self {
+        Self {
+            name: VectorNameRef::Literal(data),
+            swizzle,
+        }
+    }
+    pub fn named_literal(name: String, swizzle: MaskedSwizzle) -> Self {
+        Self {
+            name: VectorNameRef::NamedLiteral(name),
+            swizzle,
+        }
+    }
+    pub fn named_buffer(name: String, idx: u64, swizzle: MaskedSwizzle) -> Self {
+        Self {
+            name: VectorNameRef::NamedBuffer { name, idx },
+            swizzle,
+        }
+    }
+    pub fn named_input_register(name: String, swizzle: MaskedSwizzle) -> Self {
+        Self {
+            name: VectorNameRef::NamedInputRegister(name),
+            swizzle,
+        }
+    }
+    pub fn named_output_register(name: String, swizzle: MaskedSwizzle) -> Self {
+        Self {
+            name: VectorNameRef::NamedOutputRegister(name),
+            swizzle,
+        }
+    }
+}
+
+impl DataRef for VectorNameRef {
     fn is_pure_input(&self) -> bool {
         match self {
             Self::Literal(..) => true,
@@ -111,6 +161,11 @@ impl DataRef for VectorDataRef {
             Self::NamedBuffer { .. } => true,
             _ => false,
         }
+    }
+}
+impl DataRef for VectorDataRef {
+    fn is_pure_input(&self) -> bool {
+        self.name.is_pure_input()
     }
 }
 impl DataRef for (VectorDataRef, VectorComponent) {
