@@ -5,10 +5,10 @@ use bitutils::bits;
 
 use crate::{
     abstract_machine::{
-        scalar::{ScalarAbstractVM, ScalarDataRef, ScalarDependency, ScalarOutput},
-        DataKind, DataWidth, ValueRef,
+        scalar::{ScalarAbstractVM, ScalarDataRef, ScalarOutcome, ScalarOutput},
+        DataKind, DataWidth, TypedRef,
     },
-    Action, Dependency,
+    Action, Outcome,
 };
 
 use super::{utils::extract_u32, Decodable, RDNA2DecodeError};
@@ -70,7 +70,7 @@ impl Decodable for EXPORT {
     }
 }
 impl Action<ScalarAbstractVM> for EXPORT {
-    fn dependencies(&self) -> Vec<ScalarDependency> {
+    fn outcomes(&self) -> Vec<ScalarOutcome> {
         let mut deps = vec![];
         let possible_exports = if self.COMPR {
             [self.VSRC0, self.VSRC0, self.VSRC1, self.VSRC1]
@@ -117,18 +117,18 @@ impl Action<ScalarAbstractVM> for EXPORT {
                 DataWidth::E32
             };
 
-            deps.push(Dependency::new(
-                vec![ValueRef {
+            deps.push(Outcome::Dependency {
+                inputs: vec![TypedRef {
                     data: ScalarDataRef::GeneralPurposeRegister(possible_exports[i] as u64),
                     kind: DataKind::Untyped,
                     width,
                 }],
-                ValueRef {
+                output: TypedRef {
                     data: ScalarDataRef::Output(output_ref),
                     kind: DataKind::Untyped,
                     width,
                 },
-            ));
+            });
         }
 
         deps

@@ -6,7 +6,7 @@ use super::opcodes::{
 };
 use super::utils::{decode_scalar_src, extract_u32, ScalarInputOperand};
 use super::{Decodable, RDNA2DecodeError};
-use crate::abstract_machine::scalar::{ScalarAbstractVM, ScalarDataRef, ScalarDependency};
+use crate::abstract_machine::scalar::{ScalarAbstractVM, ScalarDataRef, ScalarOutcome};
 use crate::Action;
 
 #[derive(Debug, Clone, Copy)]
@@ -133,7 +133,7 @@ impl Decodable for ScalarALUInstr {
     }
 }
 impl Action<ScalarAbstractVM> for ScalarALUInstr {
-    fn dependencies(&self) -> Vec<ScalarDependency> {
+    fn outcomes(&self) -> Vec<ScalarOutcome> {
         match self {
             Self::SOPP { OP, .. } => match OP {
                 SOPP_Opcode::S_INST_PREFETCH | SOPP_Opcode::S_NOP | SOPP_Opcode::S_ENDPGM => vec![],
@@ -183,7 +183,7 @@ impl Decodable for SMEM {
     }
 }
 impl Action<ScalarAbstractVM> for SMEM {
-    fn dependencies(&self) -> Vec<ScalarDependency> {
+    fn outcomes(&self) -> Vec<ScalarOutcome> {
         todo!()
     }
 }

@@ -5,16 +5,17 @@
 //! All data is represented as 4-component vectors.
 //! Inputs to instructions can be swizzled i.e. can have their components reordered or reused (v0.xyxx, v3.wzwx etc. are valid)
 
-use crate::{Action, Dependency};
+use crate::{Action, Outcome};
 
 use super::{AbstractVM, DataRef};
 
+#[derive(Debug)]
 pub enum VectorAbstractVM {}
 impl AbstractVM for VectorAbstractVM {
     type TScalarRef = (VectorDataRef, VectorComponent);
 }
 pub type VectorAction = dyn Action<VectorAbstractVM>;
-pub type VectorDependency = Dependency<VectorAbstractVM>;
+pub type VectorOutcome = Outcome<VectorAbstractVM>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum VectorComponent {

@@ -8,7 +8,7 @@
 use std::marker::PhantomData;
 
 use crate::{
-    abstract_machine::scalar::{ScalarAbstractVM, ScalarDataRef, ScalarDependency},
+    abstract_machine::scalar::{ScalarAbstractVM, ScalarDataRef, ScalarOutcome},
     rdna2::opcodes::SOPP_Opcode,
     Action,
 };
@@ -120,13 +120,13 @@ impl Decodable for Instruction {
     }
 }
 impl Action<ScalarAbstractVM> for Instruction {
-    fn dependencies(&self) -> Vec<ScalarDependency> {
+    fn outcomes(&self) -> Vec<ScalarOutcome> {
         match self {
-            Self::ScalarALU(instr) => instr.dependencies(),
-            Self::ScalarMemory(instr) => instr.dependencies(),
-            Self::VectorALU(instr) => instr.dependencies(),
-            Self::VectorALU_Long(instr) => instr.dependencies(),
-            Self::Export(instr) => instr.dependencies(),
+            Self::ScalarALU(instr) => instr.outcomes(),
+            Self::ScalarMemory(instr) => instr.outcomes(),
+            Self::VectorALU(instr) => instr.outcomes(),
+            Self::VectorALU_Long(instr) => instr.outcomes(),
+            Self::Export(instr) => instr.outcomes(),
             _ => panic!("Action not implemented for {:?} yet", self),
         }
     }
@@ -154,8 +154,13 @@ impl<'a> super::Decoder<ScalarAbstractVM> for RDNA2Decoder<'a> {
         loop {
             let (consumed_data, instr) = Instruction::decode_consuming(data)?;
             println!("{:?}", instr);
-            for dep in instr.dependencies() {
-                println!("\t{:?} -> {:?}", dep.parents, dep.child);
+            for dep in instr.outcomes() {
+                match dep {
+                    crate::Outcome::Dependency { output, inputs } => {
+                        println!("\t{:?} -> {:?}", inputs, output)
+                    }
+                    _ => println!("\t{:?}", dep),
+                }
             }
 
             data = consumed_data;

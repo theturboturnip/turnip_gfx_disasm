@@ -3,10 +3,10 @@ use bitutils::bits;
 
 use crate::{
     abstract_machine::{
-        scalar::{ScalarAbstractVM, ScalarDataRef, ScalarDependency},
-        DataKind, DataWidth, ValueRef,
+        scalar::{ScalarAbstractVM, ScalarDataRef, ScalarOutcome},
+        DataKind, DataWidth, TypedRef,
     },
-    Action,
+    Action, Outcome,
 };
 
 use super::{
@@ -148,7 +148,7 @@ impl Decodable for VOP {
     }
 }
 impl Action<ScalarAbstractVM> for VOP {
-    fn dependencies(&self) -> Vec<ScalarDependency> {
+    fn outcomes(&self) -> Vec<ScalarOutcome> {
         match self {
             Self::VOP1 {
                 OP,
@@ -159,18 +159,18 @@ impl Action<ScalarAbstractVM> for VOP {
                 // TODO data kind and width
                 let kind = DataKind::Untyped;
                 let width = DataWidth::E64;
-                vec![ScalarDependency::new(
-                    vec![ValueRef {
+                vec![Outcome::Dependency {
+                    inputs: vec![TypedRef {
                         data: VOP::operand_to_dataref(*SRC0, *extra),
                         kind,
                         width,
                     }],
-                    ValueRef {
+                    output: TypedRef {
                         data: ScalarDataRef::GeneralPurposeRegister(*VDST as u64),
                         kind,
                         width,
                     },
-                )]
+                }]
             }
             Self::VOP2 {
                 OP,
@@ -182,25 +182,25 @@ impl Action<ScalarAbstractVM> for VOP {
                 // TODO data kind and width
                 let kind = DataKind::Untyped;
                 let width = DataWidth::E64;
-                vec![ScalarDependency::new(
-                    vec![
-                        ValueRef {
+                vec![Outcome::Dependency {
+                    inputs: vec![
+                        TypedRef {
                             data: VOP::operand_to_dataref(*SRC0, *extra),
                             kind,
                             width,
                         },
-                        ValueRef {
+                        TypedRef {
                             data: ScalarDataRef::GeneralPurposeRegister(*VSRC1 as u64),
                             kind,
                             width,
                         },
                     ],
-                    ValueRef {
+                    output: TypedRef {
                         data: ScalarDataRef::GeneralPurposeRegister(*VDST as u64),
                         kind,
                         width,
                     },
-                )]
+                }]
             }
             _ => todo!(),
         }
@@ -358,7 +358,7 @@ impl Decodable for VOP3 {
     }
 }
 impl Action<ScalarAbstractVM> for VOP3 {
-    fn dependencies(&self) -> Vec<ScalarDependency> {
+    fn outcomes(&self) -> Vec<ScalarOutcome> {
         todo!()
     }
 }
