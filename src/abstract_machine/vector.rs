@@ -67,11 +67,23 @@ impl MaskedSwizzle {
             mask.0[3].and(self.0[3]),
         ])
     }
+
+    /// Returns a copy of self equivalent to `identity(4).masked_out(self)`
+    ///
+    /// e.g. transfers the mask to the copy while keeping correct component order
+    pub fn copy_mask(&self) -> Self {
+        Self::masked_identity(
+            self.0[0].is_some(),
+            self.0[1].is_some(),
+            self.0[2].is_some(),
+            self.0[3].is_some(),
+        )
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum VectorDataRef {
-    Register(u64, MaskedSwizzle),
+    NamedRegister(String, MaskedSwizzle),
     Literal([u64; 4]),
     NamedLiteral(String, MaskedSwizzle),
     NamedBuffer {

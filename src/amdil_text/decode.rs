@@ -2,9 +2,14 @@ use crate::abstract_machine::vector::{MaskedSwizzle, VectorDeclaration};
 
 use super::grammar;
 
+pub mod alu;
+use alu::{decode_alu, ALUInstruction};
+pub mod registers;
+
 #[derive(Debug, Clone)]
 pub enum AMDILTextDecodeError {
     BadValue(&'static str, grammar::Instruction),
+    Generic(String),
 }
 #[derive(Debug, Clone)]
 pub enum Instruction {
@@ -12,6 +17,7 @@ pub enum Instruction {
     DontCare(grammar::Instruction),
     Decl(VectorDeclaration),
     Version(String),
+    Alu(ALUInstruction),
 }
 
 /// Adaptation of [grammar::Arg] that's more suitable for match-cases
@@ -47,17 +53,31 @@ pub fn decode_instruction(
     g_instr: grammar::Instruction,
 ) -> Result<Instruction, AMDILTextDecodeError> {
     let instr = match g_instr.instr.as_str() {
-        instr if instr.starts_with("il_vs") || instr.starts_with("il_ps") => {
-            Instruction::DontCare(g_instr)
+        instr if check_if_dontcare(instr) => Instruction::DontCare(g_instr),
+        instr if instr.starts_with("dcl_") => decode_declare(&g_instr)?,
+        _ => {
+            if let Some(alu) = decode_alu(&g_instr)? {
+                Instruction::Alu(alu)
+            } else {
+                Instruction::Unknown(g_instr)
+            }
         }
-        instr if instr.starts_with("dcl_") => decode_declare(g_instr)?,
-        _ => Instruction::Unknown(g_instr),
     };
 
     Ok(instr)
 }
 
-fn decode_declare(g_instr: grammar::Instruction) -> Result<Instruction, AMDILTextDecodeError> {
+fn check_if_dontcare(instr: &str) -> bool {
+    match instr {
+        instr if instr.starts_with("il_vs") || instr.starts_with("il_ps") => true,
+        "ret_dyn" => true,
+        "end" => true,
+        "" => true,
+        _ => false,
+    }
+}
+
+fn decode_declare(g_instr: &grammar::Instruction) -> Result<Instruction, AMDILTextDecodeError> {
     use AMDILTextDecodeError::BadValue;
 
     let instr = match (
@@ -93,7 +113,12 @@ fn decode_declare(g_instr: grammar::Instruction) -> Result<Instruction, AMDILTex
             let (name, swizzle) = match arg {
                 MatchableArg::Named(name) => (name, MaskedSwizzle::identity(4)),
                 MatchableArg::NamedSwizzled(name, swizzle) => (name, *swizzle),
-                _ => return Err(BadValue("bad argument for dcl_output_generic", g_instr)),
+                _ => {
+                    return Err(BadValue(
+                        "bad argument for dcl_output_generic",
+                        g_instr.clone(),
+                    ))
+                }
             };
             Instruction::Decl(VectorDeclaration::NamedOutputRegister {
                 name: name.to_owned(),
@@ -108,7 +133,12 @@ fn decode_declare(g_instr: grammar::Instruction) -> Result<Instruction, AMDILTex
             let (name, swizzle) = match arg {
                 MatchableArg::Named(name) => (name, MaskedSwizzle::identity(4)),
                 MatchableArg::NamedSwizzled(name, swizzle) => (name, *swizzle),
-                _ => return Err(BadValue("bad argument for dcl_input_generic", g_instr)),
+                _ => {
+                    return Err(BadValue(
+                        "bad argument for dcl_input_generic",
+                        g_instr.clone(),
+                    ))
+                }
             };
             Instruction::Decl(VectorDeclaration::NamedOutputRegister {
                 name: name.to_owned(),
@@ -125,8 +155,8 @@ fn decode_declare(g_instr: grammar::Instruction) -> Result<Instruction, AMDILTex
             name.clone(),
             [*x, *y, *z, *w],
         )),
-        ("dcl_global_flags", [..]) => Instruction::DontCare(g_instr),
-        _ => Instruction::Unknown(g_instr),
+        ("dcl_global_flags", [..]) => Instruction::DontCare(g_instr.clone()),
+        _ => Instruction::Unknown(g_instr.clone()),
     };
 
     Ok(instr)
