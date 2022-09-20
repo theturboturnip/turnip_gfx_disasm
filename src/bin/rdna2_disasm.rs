@@ -1,8 +1,8 @@
 use std::path::PathBuf;
 
 use clap::Parser;
-use turnip_gfx_disasm::abstract_machine::scalar::{BasicScalarDataRefFilter, ScalarDataRef};
-use turnip_gfx_disasm::abstract_machine::WorldState;
+use turnip_gfx_disasm::abstract_machine::scalar::ScalarDataRef;
+use turnip_gfx_disasm::abstract_machine::ScalarDependencies;
 use turnip_gfx_disasm::rdna2::RDNA2Decoder;
 use turnip_gfx_disasm::Decoder;
 
@@ -25,7 +25,7 @@ fn main() {
         .decode(shader.as_slice())
         .expect("Whoops, error decompiling");
 
-    let mut resolver = WorldState::new(BasicScalarDataRefFilter::new());
+    let mut resolver = ScalarDependencies::new();
     for a in actions {
         resolver.accum_action(a.as_ref());
     }

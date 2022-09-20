@@ -5,7 +5,12 @@
 //! All data is represented as 4-component vectors.
 //! Inputs to instructions can be swizzled i.e. can have their components reordered or reused (v0.xyxx, v3.wzwx etc. are valid)
 
-use super::DataRef;
+use super::{AbstractVM, DataRef};
+
+pub enum ScalarAbstractVM {}
+impl AbstractVM for ScalarAbstractVM {
+    type TScalarRef = (VectorDataRef, VectorComponent);
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum VectorComponent {
@@ -94,7 +99,23 @@ pub enum VectorDataRef {
     NamedInputRegister(String, MaskedSwizzle),
     NamedOutputRegister(String, MaskedSwizzle),
 }
-impl DataRef for VectorDataRef {}
+impl DataRef for VectorDataRef {
+    fn is_pure_input(&self) -> bool {
+        match self {
+            Self::Literal(..) => true,
+            Self::NamedLiteral(..) => true,
+            Self::NamedInputRegister(..) => true,
+            // TODO consider concept of i/o buffers
+            Self::NamedBuffer { .. } => true,
+            _ => false,
+        }
+    }
+}
+impl DataRef for (VectorDataRef, VectorComponent) {
+    fn is_pure_input(&self) -> bool {
+        self.0.is_pure_input()
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum VectorDeclaration {

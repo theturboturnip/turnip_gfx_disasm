@@ -1,6 +1,12 @@
 use crate::Dependency;
 
-use super::{DataRef, DataRefFilter};
+use super::{AbstractVM, DataRef};
+
+pub enum ScalarAbstractVM {}
+impl AbstractVM for ScalarAbstractVM {
+    type TScalarRef = ScalarDataRef;
+}
+pub type ScalarDependency = Dependency<ScalarAbstractVM>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ScalarOutput {
@@ -44,21 +50,11 @@ pub enum ScalarDataRef {
     /// e.g. output color, so we have a component index here.
     Output(ScalarOutput),
 }
-impl DataRef for ScalarDataRef {}
-
-pub struct BasicScalarDataRefFilter {}
-impl BasicScalarDataRefFilter {
-    pub fn new() -> Self {
-        Self {}
-    }
-}
-impl DataRefFilter<ScalarDataRef> for BasicScalarDataRefFilter {
-    fn is_pure_input(&self, v: &ScalarDataRef) -> bool {
-        match v {
+impl DataRef for ScalarDataRef {
+    fn is_pure_input(&self) -> bool {
+        match self {
             ScalarDataRef::Literal(..) => true,
             _ => false,
         }
     }
 }
-
-pub type ScalarDependency = Dependency<ScalarDataRef>;

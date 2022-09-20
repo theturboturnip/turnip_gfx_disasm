@@ -8,7 +8,7 @@
 use std::marker::PhantomData;
 
 use crate::{
-    abstract_machine::scalar::{ScalarDataRef, ScalarDependency},
+    abstract_machine::scalar::{ScalarAbstractVM, ScalarDataRef, ScalarDependency},
     rdna2::opcodes::SOPP_Opcode,
     Action,
 };
@@ -119,7 +119,7 @@ impl Decodable for Instruction {
         }
     }
 }
-impl Action<ScalarDataRef> for Instruction {
+impl Action<ScalarAbstractVM> for Instruction {
     fn dependencies(&self) -> Vec<ScalarDependency> {
         match self {
             Self::ScalarALU(instr) => instr.dependencies(),
@@ -132,7 +132,7 @@ impl Action<ScalarDataRef> for Instruction {
     }
 }
 
-pub type RDNA2Program = Vec<Box<dyn Action<ScalarDataRef>>>;
+pub type RDNA2Program = Vec<Box<dyn Action<ScalarAbstractVM>>>;
 
 pub struct RDNA2Decoder<'a> {
     _lifetime: PhantomData<&'a ()>, // NOTE: there's no generic type here!
@@ -144,9 +144,9 @@ impl<'a> RDNA2Decoder<'a> {
         }
     }
 }
-impl<'a> super::Decoder<ScalarDataRef> for RDNA2Decoder<'a> {
+impl<'a> super::Decoder<ScalarAbstractVM> for RDNA2Decoder<'a> {
     type Input = &'a [u8];
-    type BaseAction = Box<dyn Action<ScalarDataRef>>;
+    type BaseAction = Box<dyn Action<ScalarAbstractVM>>;
     type Err = RDNA2DecodeError;
 
     fn decode(&self, mut data: Self::Input) -> Result<RDNA2Program, RDNA2DecodeError> {

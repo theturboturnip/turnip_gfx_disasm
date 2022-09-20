@@ -3,7 +3,7 @@ use bitutils::bits;
 
 use crate::{
     abstract_machine::{
-        scalar::{ScalarDataRef, ScalarDependency},
+        scalar::{ScalarAbstractVM, ScalarDataRef, ScalarDependency},
         DataKind, DataWidth, ValueRef,
     },
     Action,
@@ -147,7 +147,7 @@ impl Decodable for VOP {
         }
     }
 }
-impl Action<ScalarDataRef> for VOP {
+impl Action<ScalarAbstractVM> for VOP {
     fn dependencies(&self) -> Vec<ScalarDependency> {
         match self {
             Self::VOP1 {
@@ -357,7 +357,7 @@ impl Decodable for VOP3 {
         }
     }
 }
-impl Action<ScalarDataRef> for VOP3 {
+impl Action<ScalarAbstractVM> for VOP3 {
     fn dependencies(&self) -> Vec<ScalarDependency> {
         todo!()
     }
