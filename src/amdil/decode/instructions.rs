@@ -76,10 +76,11 @@ impl AMDILDecodable for Instruction {
             // Declaration/Init
             IL_DCL_CONST_BUFFER => {
                 if opcode.pri_modifier_present {
-                    let icb_idx = todo!("Where is the ICB number defined? there's a raw 32-bit length where the Src would be :(");
+                    todo!("Where is the ICB number defined? there's a raw 32-bit length where the Src would be :(");
+                    let icb_idx = 0;
                     let (mut data, len) = decode_raw_token(data)?;
                     let mut cb_data = vec![];
-                    for i in 0..len {
+                    for _ in 0..len {
                         let (new_data, cb_item) = decode_raw_token(data)?;
                         data = new_data;
                         cb_data.push(cb_item);
@@ -92,7 +93,7 @@ impl AMDILDecodable for Instruction {
                         }),
                     ))
                 } else {
-                    let (data, src) = decode_token::<IL_Src>(data)?;
+                    let (_, src) = decode_token::<IL_Src>(data)?;
                     todo!(
                         "Look at this IL_Src and figure out where m and n are defined {:?}",
                         src

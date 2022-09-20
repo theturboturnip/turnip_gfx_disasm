@@ -1,8 +1,4 @@
-use std::{
-    collections::{HashMap, HashSet},
-    hash::Hash,
-    ops::Deref,
-};
+use std::{hash::Hash, ops::Deref};
 
 pub mod analysis;
 pub mod scalar;

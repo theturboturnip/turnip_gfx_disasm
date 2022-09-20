@@ -232,7 +232,7 @@ impl Action<Vector2ScalarAbstractVM> for VectorDeclaration {
                     }),
                 })
                 .collect(),
-            VectorDeclaration::NamedBuffer { name, len } => {
+            VectorDeclaration::NamedBuffer { .. } => {
                 // TODO Declare all of the values in the array?
                 vec![]
             }
@@ -240,12 +240,12 @@ impl Action<Vector2ScalarAbstractVM> for VectorDeclaration {
             VectorDeclaration::NamedInputRegister {
                 name,
                 len,
-                reg_type,
+                reg_type: _,
             }
             | VectorDeclaration::NamedOutputRegister {
                 name,
                 len,
-                reg_type,
+                reg_type: _,
             } => VECTOR_COMPONENTS
                 .iter()
                 .take(*len as usize)
@@ -254,8 +254,6 @@ impl Action<Vector2ScalarAbstractVM> for VectorDeclaration {
                     value: None,
                 })
                 .collect(),
-
-            _ => todo!(),
         }
     }
 }

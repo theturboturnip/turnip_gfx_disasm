@@ -6,7 +6,7 @@ use super::opcodes::{
 };
 use super::utils::{decode_scalar_src, extract_u32, ScalarInputOperand};
 use super::{Decodable, RDNA2DecodeError};
-use crate::abstract_machine::scalar::{ScalarAbstractVM, ScalarDataRef, ScalarOutcome};
+use crate::abstract_machine::scalar::{ScalarAbstractVM, ScalarOutcome};
 use crate::Action;
 
 #[derive(Debug, Clone, Copy)]

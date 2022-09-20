@@ -51,7 +51,6 @@ struct ALUInstructionDef {
 
 #[derive(Debug, Clone)]
 pub struct ALUInstruction {
-    name: &'static str,
     dst: VectorDataRef,
     srcs: Vec<VectorDataRef>,
     output_dep: OutputDep,
@@ -100,7 +99,6 @@ pub fn decode_alu(
 
             // ok, produce the instruction
             Ok(Some(ALUInstruction {
-                name: *static_name,
                 dst,
                 srcs,
                 output_dep: instr_def.output_dep,

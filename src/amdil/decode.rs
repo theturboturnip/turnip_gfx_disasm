@@ -5,8 +5,7 @@ use num_traits::FromPrimitive;
 use self::instructions::Instruction;
 
 use super::tokens::{
-    IL_Dst, IL_Dst_Mod, IL_Lang, IL_Opcode, IL_Rel_Addr, IL_Src, IL_Src_Mod, IL_Version,
-    RelativeAddressing,
+    IL_Dst, IL_Dst_Mod, IL_Lang, IL_Rel_Addr, IL_Src, IL_Src_Mod, IL_Version, RelativeAddressing,
 };
 
 pub mod instructions;

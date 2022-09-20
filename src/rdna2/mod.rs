@@ -4,11 +4,13 @@
 //! Note: this assumes binaries are LITTLE-ENDIAN!
 
 #![allow(non_snake_case)]
+#![allow(dead_code)]
+#![allow(non_camel_case_types)]
 
 use std::marker::PhantomData;
 
 use crate::{
-    abstract_machine::scalar::{ScalarAbstractVM, ScalarDataRef, ScalarOutcome},
+    abstract_machine::scalar::{ScalarAbstractVM, ScalarOutcome},
     rdna2::opcodes::SOPP_Opcode,
     Action,
 };

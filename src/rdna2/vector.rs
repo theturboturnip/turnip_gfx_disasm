@@ -151,7 +151,7 @@ impl Action<ScalarAbstractVM> for VOP {
     fn outcomes(&self) -> Vec<ScalarOutcome> {
         match self {
             Self::VOP1 {
-                OP,
+                OP: _,
                 VDST,
                 SRC0,
                 extra,
@@ -173,7 +173,7 @@ impl Action<ScalarAbstractVM> for VOP {
                 }]
             }
             Self::VOP2 {
-                OP,
+                OP: _,
                 VDST,
                 VSRC1,
                 SRC0,
