@@ -5,12 +5,14 @@
 //! All data is represented as 4-component vectors.
 //! Inputs to instructions can be swizzled i.e. can have their components reordered or reused (v0.xyxx, v3.wzwx etc. are valid)
 
+use std::ops::Index;
+
 use super::{AbstractVM, DataRef, ScalarBasedAbstractVM};
 
 #[derive(Debug)]
 pub enum Vector2ScalarAbstractVM {}
 impl AbstractVM for Vector2ScalarAbstractVM {
-    type TDataRef = (VectorDataRef, VectorComponent);
+    type TDataRef = (VectorNameRef, VectorComponent);
 }
 impl ScalarBasedAbstractVM for Vector2ScalarAbstractVM {}
 
@@ -22,7 +24,7 @@ pub enum VectorComponent {
     W,
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct MaskedSwizzle([Option<VectorComponent>; 4]);
+pub struct MaskedSwizzle(pub [Option<VectorComponent>; 4]);
 impl MaskedSwizzle {
     pub fn new(x: [Option<VectorComponent>; 4]) -> Self {
         MaskedSwizzle(x)
@@ -96,6 +98,13 @@ impl MaskedSwizzle {
         ])
     }
 }
+impl Index<usize> for MaskedSwizzle {
+    type Output = Option<VectorComponent>;
+
+    fn index(&self, index: usize) -> &Self::Output {
+        &self.0[index]
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum VectorNameRef {
@@ -163,12 +172,7 @@ impl DataRef for VectorNameRef {
         }
     }
 }
-impl DataRef for VectorDataRef {
-    fn is_pure_input(&self) -> bool {
-        self.name.is_pure_input()
-    }
-}
-impl DataRef for (VectorDataRef, VectorComponent) {
+impl DataRef for (VectorNameRef, VectorComponent) {
     fn is_pure_input(&self) -> bool {
         self.0.is_pure_input()
     }

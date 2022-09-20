@@ -1,7 +1,10 @@
 use crate::{
-    abstract_machine::vector::{MaskedSwizzle, Vector2ScalarAbstractVM, VectorDataRef},
+    abstract_machine::{
+        vector::{MaskedSwizzle, Vector2ScalarAbstractVM, VectorDataRef},
+        DataKind, DataWidth, TypedRef,
+    },
     amdil_text::grammar,
-    Action,
+    Action, Outcome,
 };
 use phf::phf_map;
 
@@ -43,6 +46,7 @@ struct ALUInstructionDef {
     n_in: usize,
     input_mask: InputMask,
     output_dep: OutputDep,
+    data_kind: DataKind,
 }
 
 #[derive(Debug, Clone)]
@@ -51,14 +55,15 @@ pub struct ALUInstruction {
     dst: VectorDataRef,
     srcs: Vec<VectorDataRef>,
     output_dep: OutputDep,
+    data_kind: DataKind,
 }
 
 const ALU_INSTR_DEFS: phf::Map<&'static str, ALUInstructionDef> = phf_map! {
-    "mov" => ALUInstructionDef{ n_in: 1, input_mask: InputMask::InheritFromOutput, output_dep: OutputDep::PerComponent },
-    "dp4_ieee" => ALUInstructionDef{ n_in: 2, input_mask: InputMask::TruncateTo(4), output_dep: OutputDep::All },
-    "dp3_ieee" => ALUInstructionDef{ n_in: 2, input_mask: InputMask::TruncateTo(3), output_dep: OutputDep::All },
-    "max_ieee" => ALUInstructionDef{ n_in: 2, input_mask: InputMask::InheritFromOutput, output_dep: OutputDep::PerComponent },
-    "add" => ALUInstructionDef{ n_in: 2, input_mask: InputMask::InheritFromOutput, output_dep: OutputDep::PerComponent },
+    "mov" => ALUInstructionDef{ n_in: 1, input_mask: InputMask::InheritFromOutput, output_dep: OutputDep::PerComponent, data_kind: DataKind::Untyped },
+    "dp4_ieee" => ALUInstructionDef{ n_in: 2, input_mask: InputMask::TruncateTo(4), output_dep: OutputDep::All, data_kind: DataKind::Float },
+    "dp3_ieee" => ALUInstructionDef{ n_in: 2, input_mask: InputMask::TruncateTo(3), output_dep: OutputDep::All, data_kind: DataKind::Float },
+    "max_ieee" => ALUInstructionDef{ n_in: 2, input_mask: InputMask::InheritFromOutput, output_dep: OutputDep::PerComponent, data_kind: DataKind::Float },
+    "add" => ALUInstructionDef{ n_in: 2, input_mask: InputMask::InheritFromOutput, output_dep: OutputDep::PerComponent, data_kind: DataKind::Untyped },
 };
 
 pub fn decode_alu(
@@ -99,6 +104,7 @@ pub fn decode_alu(
                 dst,
                 srcs,
                 output_dep: instr_def.output_dep,
+                data_kind: instr_def.data_kind,
             }))
         }
         (None, _) => Ok(None),
@@ -106,7 +112,61 @@ pub fn decode_alu(
 }
 
 impl Action<Vector2ScalarAbstractVM> for ALUInstruction {
-    fn outcomes(&self) -> Vec<crate::Outcome<Vector2ScalarAbstractVM>> {
-        todo!()
+    fn outcomes(&self) -> Vec<Outcome<Vector2ScalarAbstractVM>> {
+        let mut outcomes = vec![];
+        for i in 0..4 {
+            match (self.output_dep, self.dst.swizzle[i]) {
+                (OutputDep::PerComponent, Some(dst_comp)) => outcomes.push(Outcome::Dependency {
+                    output: TypedRef {
+                        data: (self.dst.name.clone(), dst_comp),
+                        kind: self.data_kind,
+                        width: DataWidth::E32,
+                    },
+                    inputs: self
+                        .srcs
+                        .iter()
+                        .map(|src| {
+                            let src_comp = src.swizzle[i].expect(
+                                "src component which mapped to dst component wasn't available",
+                            );
+                            TypedRef {
+                                data: (src.name.clone(), src_comp),
+                                kind: self.data_kind,
+                                width: DataWidth::E32,
+                            }
+                        })
+                        .collect(),
+                }),
+                (OutputDep::All, Some(dst_comp)) => outcomes.push(Outcome::Dependency {
+                    output: TypedRef {
+                        data: (self.dst.name.clone(), dst_comp),
+                        kind: self.data_kind,
+                        width: DataWidth::E32,
+                    },
+                    inputs: self
+                        .srcs
+                        .iter()
+                        .map(|src| {
+                            src.swizzle
+                                .0
+                                .iter()
+                                // Get rid of None values from the source component
+                                .filter_map(|comp| *comp)
+                                // Map non-None source components -> TypedRef
+                                .map(|src_comp| TypedRef {
+                                    data: (src.name.clone(), src_comp),
+                                    kind: self.data_kind,
+                                    width: DataWidth::E32,
+                                })
+                            // Collect a set of TypedRefs for each input
+                        })
+                        // Flatten Iterator<Iterator<TypedRef>> into Iterator<TypedRef>
+                        .flatten()
+                        .collect(),
+                }),
+                (_, None) => {}
+            }
+        }
+        outcomes
     }
 }
