@@ -5,10 +5,6 @@ use crate::abstract_machine::{
     DataKind, ElementAbstractVM, ElementAction, ElementOutcome, TypedRef,
 };
 
-// pub trait ScalarVariableRef: Eq + Clone {
-//     fn get_variable_ref(&self) -> &Variable;
-// }
-
 pub type ScalarVariableRef = (Variable, VectorComponent);
 pub type VectorVariableRef = (Variable, MaskedSwizzle);
 
@@ -18,12 +14,6 @@ pub trait VariableCapableAbstractVM: ElementAbstractVM {
     fn variable_info(elem: &Self::TElementDataRef, unique_id: u64) -> (String, u8);
 }
 
-// pub trait VariableCapableAction<TVM: VariableCapableAbstractVM> {
-//     /// Equivalent to [Action::outcomes], except the outcomes are grouped together by which "variables" they could affect.
-//     fn variable_grouped_outcomes(&self) -> Vec<Vec<Outcome<TVM>>>;
-// }
-
-///
 pub type Variable = Rc<RefCell<VariableInfo>>;
 
 /// Single, unnamed unit of value with a specified kind
@@ -54,7 +44,10 @@ pub enum VariableAbstractVMOutcome {
         output: VectorVariableRef,
         op: String,
         inputs: Vec<VectorVariableRef>,
+        // Mapping of each individual scalar output to each individual scalar input
+        scalar_deps: Vec<(ScalarVariableRef, Vec<ScalarVariableRef>)>,
     },
+    // TODO how to handle literals
 }
 impl std::fmt::Display for VariableAbstractVMOutcome {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
@@ -85,7 +78,9 @@ impl std::fmt::Display for VariableAbstractVMOutcome {
                 }
                 write!(f, ");")
             }
-            Self::Operation { output, op, inputs } => {
+            Self::Operation {
+                output, op, inputs, ..
+            } => {
                 {
                     let output_var = output.0.borrow();
                     write!(
@@ -137,11 +132,6 @@ impl<TVM: VariableCapableAbstractVM> VariableAbstractMachine<TVM> {
             components,
             tick_created: self.tick,
         }));
-        // println!(
-        //     "\t creating variable {} for elem {:?}",
-        //     &variable.borrow().name,
-        //     elem
-        // );
         self.known_variables.push(variable.clone());
         for (scalar_ref, scalar_var_ref) in Self::map_to_scalar_vars(elem, &variable) {
             self.current_scalar_names.insert(scalar_ref, scalar_var_ref);
@@ -274,25 +264,7 @@ impl<TVM: VariableCapableAbstractVM> VariableAbstractMachine<TVM> {
                         .map(|elem| self.map_elem_ref_to_variable(elem))
                         .collect();
 
-                    // Gather an equivalent to component_deps where all inputs have been converted to Variable references
-                    // Do this after converting the input elements themselves, because that might have created new variables and changed the scalar mapping
-                    let component_dep_vars: Vec<_> = component_deps
-                        .into_iter()
-                        .map(|(output, inputs)| {
-                            let input_vars: Vec<_> = inputs
-                                .into_iter()
-                                .map(|input| {
-                                    if let Some(as_var) = self.current_scalar_names.get(&input.data)
-                                    {
-                                        (*as_var).clone()
-                                    } else {
-                                        panic!("Undeclared/uninitialized item used: {:?}", input)
-                                    }
-                                })
-                                .collect();
-                            (output, input_vars)
-                        })
-                        .collect();
+                    // Create a new variable for the output
 
                     // TODO apply an extra rule:
                     // 5) any component doesn't have a dependency on its old value
@@ -307,12 +279,32 @@ impl<TVM: VariableCapableAbstractVM> VariableAbstractMachine<TVM> {
                     //     break;
                     // }
 
-                    // allow_differing_lengths is actually OK to be true - if we remove it, things like "write o1.w" become separate variables
                     let output_var = self.map_elem_ref_to_variable(output_elem);
-                    // assert_eq!(
-                    //     output_var.0.borrow().components as usize,
-                    //     component_dep_vars.len()
-                    // );
+
+                    // Gather an equivalent to component_deps where all inputs have been converted to Variable references
+                    // Do this after converting the input elements themselves, because that might have created new variables and changed the scalar mapping
+                    let scalar_deps: Vec<_> = component_deps
+                        .into_iter()
+                        .map(|(scalar_output, scalar_inputs)| {
+                            let scalar_input_vars: Vec<_> = scalar_inputs
+                                .into_iter()
+                                .map(|input| {
+                                    if let Some(as_var) = self.current_scalar_names.get(&input.data)
+                                    {
+                                        (*as_var).clone()
+                                    } else {
+                                        panic!("Undeclared/uninitialized item used: {:?}", input)
+                                    }
+                                })
+                                .collect();
+                            let scalar_output_var = self
+                                .current_scalar_names
+                                .get(&scalar_output.data)
+                                .unwrap()
+                                .clone();
+                            (scalar_output_var, scalar_input_vars)
+                        })
+                        .collect();
 
                     // TODO if we have a concretized type, try hole resolution in variables
 
@@ -320,6 +312,7 @@ impl<TVM: VariableCapableAbstractVM> VariableAbstractMachine<TVM> {
                         output: output_var,
                         op: opname,
                         inputs: input_vars,
+                        scalar_deps,
                     })
                 }
             }
