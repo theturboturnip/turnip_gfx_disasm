@@ -15,7 +15,7 @@ pub type VectorVariableRef = (Variable, MaskedSwizzle);
 /// Variable analysis is possible on vector and scalar VMs, but needs to be able to refer to specifically scalar values.
 pub trait VariableCapableAbstractVM: ElementAbstractVM {
     /// Returns a (name, components) pair which informs the value of a variable mapping to the given element.
-    fn variable_info(elem: &Self::TElementDataRef) -> (String, u8);
+    fn variable_info(elem: &Self::TElementDataRef, unique_id: u64) -> (String, u8);
 }
 
 // pub trait VariableCapableAction<TVM: VariableCapableAbstractVM> {
@@ -27,6 +27,8 @@ pub trait VariableCapableAbstractVM: ElementAbstractVM {
 pub type Variable = Rc<RefCell<VariableInfo>>;
 
 /// Single, unnamed unit of value with a specified kind
+///
+/// TODO store information on whether this is "important" i.e. a shader input or output
 #[derive(Debug)]
 pub struct VariableInfo {
     id: usize,
@@ -61,7 +63,7 @@ impl<TVM: VariableCapableAbstractVM> VariableAbstractMachine<TVM> {
         elem: &TVM::TElementDataRef,
         kind: DataKind,
     ) -> Variable {
-        let (name, components) = TVM::variable_info(elem);
+        let (name, components) = TVM::variable_info(elem, self.known_variables.len() as u64);
         let variable = Rc::new(RefCell::new(VariableInfo {
             id: self.known_variables.len(),
             name,
@@ -69,7 +71,11 @@ impl<TVM: VariableCapableAbstractVM> VariableAbstractMachine<TVM> {
             components,
             tick_created: self.tick,
         }));
-        println!("\t creating variable {:?} for elem {:?}", &variable, elem);
+        // println!(
+        //     "\t creating variable {} for elem {:?}",
+        //     &variable.borrow().name,
+        //     elem
+        // );
         self.known_variables.push(variable.clone());
         for (scalar_ref, scalar_var_ref) in Self::map_to_scalar_vars(elem, &variable) {
             self.current_scalar_names.insert(scalar_ref, scalar_var_ref);
@@ -106,6 +112,7 @@ impl<TVM: VariableCapableAbstractVM> VariableAbstractMachine<TVM> {
             match self.current_scalar_names.get(&scalar_comp) {
                 None => {
                     // 1) component has not been registered before
+                    println!("\tnew var because new elem {:?}", scalar_comp);
                     needs_new_var = true;
                     break;
                 }
@@ -117,6 +124,10 @@ impl<TVM: VariableCapableAbstractVM> VariableAbstractMachine<TVM> {
                     };
                     if old_kind != elem.kind && old_kind != DataKind::Hole {
                         // 2) component has changed type
+                        println!(
+                            "\tnew var because elem {:?} changed type from {:?} to {:?}",
+                            scalar_comp, old_kind, elem.kind
+                        );
                         needs_new_var = true;
                         break;
                     }
@@ -130,6 +141,7 @@ impl<TVM: VariableCapableAbstractVM> VariableAbstractMachine<TVM> {
                             // One of the previously examined components maps to a different variable than this component
                             // => not all output components were mapped to the same old variable
                             // => 3) the output components do not combine to make a previously known variable
+                            println!("\tnew var because elem {:?} had a different mapped var from previous components", scalar_comp);
                             needs_new_var = true;
                             break;
                         }
@@ -169,10 +181,19 @@ impl<TVM: VariableCapableAbstractVM> VariableAbstractMachine<TVM> {
             )
         } else {
             // Otherwise, create a new variable
-            (
+            let (var, swizz) = (
                 self.add_new_variable_from_elem(&elem.data, elem.kind),
                 MaskedSwizzle::identity(expected_number_of_comps),
-            )
+            );
+            // TODO RECORD VARIABLE ORIGIN
+            println!(
+                "\t{:?}{} {} === {:?};",
+                var.borrow().kind,
+                var.borrow().components,
+                var.borrow().name,
+                elem,
+            );
+            (var, swizz)
         }
     }
 
@@ -182,7 +203,7 @@ impl<TVM: VariableCapableAbstractVM> VariableAbstractMachine<TVM> {
         variable: &Variable,
     ) -> Vec<(TVM::TScalarDataRef, ScalarVariableRef)> {
         // Check the length of the element is equal to the length of the variable
-        assert_eq!(TVM::variable_info(elem).1, variable.borrow().components);
+        assert_eq!(TVM::variable_info(elem, 0).1, variable.borrow().components);
         TVM::expand_element(elem)
             .into_iter()
             .enumerate()
@@ -191,15 +212,25 @@ impl<TVM: VariableCapableAbstractVM> VariableAbstractMachine<TVM> {
     }
 
     pub fn accum_action(&mut self, action: &dyn ElementAction<TVM>) {
+        println!("tick {: >3}:", self.tick);
         for outcome in action.per_element_outcomes() {
             match outcome {
                 ElementOutcome::Declaration { name, value } => {
                     // Create a new variable based on the name
-                    self.add_new_variable_from_elem(
+                    let var = self.add_new_variable_from_elem(
                         &name,
-                        value.map_or(DataKind::Hole, |typed_ref| typed_ref.kind),
+                        (&value)
+                            .as_ref()
+                            .map_or(DataKind::Hole, |typed_ref| typed_ref.kind),
                     );
-                    // TODO save the value of the variable
+                    // TODO RECORD VARIABLE ORIGIN
+                    println!(
+                        "\t{:?}{} {} === {:?};",
+                        var.borrow().kind,
+                        var.borrow().components,
+                        var.borrow().name,
+                        value,
+                    );
                 }
                 ElementOutcome::Dependency {
                     output_elem,
@@ -207,7 +238,7 @@ impl<TVM: VariableCapableAbstractVM> VariableAbstractMachine<TVM> {
                     component_deps,
                 } => {
                     // Convert the input elements into variables
-                    let input_vars = input_elems
+                    let input_vars: Vec<VectorVariableRef> = input_elems
                         .into_iter()
                         .map(|elem| self.map_elem_ref_to_variable(elem, true))
                         .collect();
@@ -245,24 +276,25 @@ impl<TVM: VariableCapableAbstractVM> VariableAbstractMachine<TVM> {
                     //     break;
                     // }
 
-                    let output_var = self.map_elem_ref_to_variable(output_elem, false);
-                    assert_eq!(
-                        output_var.0.borrow().components as usize,
-                        component_dep_vars.len()
-                    );
+                    // allow_differing_lengths is actually OK to be true - if we remove it, things like "write o1.w" become separate variables
+                    let output_var = self.map_elem_ref_to_variable(output_elem, true);
+                    // assert_eq!(
+                    //     output_var.0.borrow().components as usize,
+                    //     component_dep_vars.len()
+                    // );
 
                     // TODO if we have a concretized type, try hole resolution in variables
 
                     // TODO record a proper action that states which variables created this variable
-                    println!(
-                        "\ttick {: >3}: {:?} <- {:?}",
-                        self.tick, &output_var, &input_vars
-                    );
+                    print!("\t{}{} <- ", output_var.0.borrow().name, output_var.1);
+                    for in_ref in input_vars.iter() {
+                        print!("{}{}, ", in_ref.0.borrow().name, in_ref.1)
+                    }
+                    print!(";\n");
                     self.actions.push((self.tick, output_var, input_vars))
                 }
             }
-
-            self.tick += 1;
         }
+        self.tick += 1;
     }
 }

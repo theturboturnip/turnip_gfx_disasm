@@ -34,9 +34,9 @@ impl ElementAbstractVM for Vector2ScalarAbstractVM {
     }
 }
 impl VariableCapableAbstractVM for Vector2ScalarAbstractVM {
-    fn variable_info(elem: &Self::TElementDataRef) -> (String, u8) {
+    fn variable_info(elem: &Self::TElementDataRef, unique_id: u64) -> (String, u8) {
         let name = match &elem.name {
-            VectorNameRef::NamedRegister(name) => name.clone(),
+            VectorNameRef::NamedRegister(_) => format!("variable{unique_id:0>3}"),
             VectorNameRef::Literal(data) => format!(
                 "({:x}, {:x}, {:x}, {:x})",
                 data[0], data[1], data[2], data[3]
@@ -162,6 +162,21 @@ impl Index<usize> for MaskedSwizzle {
 
     fn index(&self, index: usize) -> &Self::Output {
         &self.0[index]
+    }
+}
+impl std::fmt::Display for MaskedSwizzle {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, ".")?;
+        for c in self.0 {
+            match c {
+                None => write!(f, "_"),
+                Some(VectorComponent::X) => write!(f, "x"),
+                Some(VectorComponent::Y) => write!(f, "y"),
+                Some(VectorComponent::Z) => write!(f, "z"),
+                Some(VectorComponent::W) => write!(f, "w"),
+            }?
+        }
+        Ok(())
     }
 }
 
@@ -313,6 +328,28 @@ impl ElementAction<Vector2ScalarAbstractVM> for VectorDeclaration {
                     kind: DataKind::Hole,
                     width: super::DataWidth::E32,
                 }),
+            }],
+            VectorDeclaration::NamedInputRegister {
+                name,
+                len,
+                reg_type: _,
+            } => vec![ElementOutcome::Declaration {
+                name: VectorDataRef::named_input_register(
+                    name.clone(),
+                    MaskedSwizzle::identity(*len as usize),
+                ),
+                value: None,
+            }],
+            VectorDeclaration::NamedOutputRegister {
+                name,
+                len,
+                reg_type: _,
+            } => vec![ElementOutcome::Declaration {
+                name: VectorDataRef::named_output_register(
+                    name.clone(),
+                    MaskedSwizzle::identity(*len as usize),
+                ),
+                value: None,
             }],
             _ => {
                 vec![]

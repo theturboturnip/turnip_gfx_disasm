@@ -58,11 +58,11 @@ pub struct ALUInstruction {
 }
 
 const ALU_INSTR_DEFS: phf::Map<&'static str, ALUInstructionDef> = phf_map! {
-    "mov" => ALUInstructionDef{ n_in: 1, input_mask: InputMask::InheritFromOutput, output_dep: OutputDep::PerComponent, data_kind: DataKind::Untyped },
+    "mov" => ALUInstructionDef{ n_in: 1, input_mask: InputMask::InheritFromOutput, output_dep: OutputDep::PerComponent, data_kind: DataKind::Hole },
     "dp4_ieee" => ALUInstructionDef{ n_in: 2, input_mask: InputMask::TruncateTo(4), output_dep: OutputDep::All, data_kind: DataKind::Float },
     "dp3_ieee" => ALUInstructionDef{ n_in: 2, input_mask: InputMask::TruncateTo(3), output_dep: OutputDep::All, data_kind: DataKind::Float },
     "max_ieee" => ALUInstructionDef{ n_in: 2, input_mask: InputMask::InheritFromOutput, output_dep: OutputDep::PerComponent, data_kind: DataKind::Float },
-    "add" => ALUInstructionDef{ n_in: 2, input_mask: InputMask::InheritFromOutput, output_dep: OutputDep::PerComponent, data_kind: DataKind::Untyped },
+    "add" => ALUInstructionDef{ n_in: 2, input_mask: InputMask::InheritFromOutput, output_dep: OutputDep::PerComponent, data_kind: DataKind::Float },
 };
 
 pub fn decode_alu(
