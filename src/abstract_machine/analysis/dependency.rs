@@ -7,7 +7,7 @@ use crate::{
 
 /// Dependency solver for scalar-based abstract VMs
 pub struct ScalarDependencies<TVM: ScalarBasedAbstractVM> {
-    dependents: HashMap<TVM::TDataRef, HashSet<TypedRef<TVM::TDataRef>>>,
+    dependents: HashMap<TVM::TScalarDataRef, HashSet<TypedRef<TVM::TScalarDataRef>>>,
 }
 impl<TVM: ScalarBasedAbstractVM> ScalarDependencies<TVM> {
     pub fn new() -> Self {
@@ -63,7 +63,9 @@ impl<TVM: ScalarBasedAbstractVM> ScalarDependencies<TVM> {
         }
     }
 
-    pub fn dependents(&self) -> &HashMap<TVM::TDataRef, HashSet<TypedRef<TVM::TDataRef>>> {
+    pub fn dependents(
+        &self,
+    ) -> &HashMap<TVM::TScalarDataRef, HashSet<TypedRef<TVM::TScalarDataRef>>> {
         &self.dependents
     }
 }

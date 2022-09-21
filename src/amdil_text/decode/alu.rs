@@ -1,7 +1,7 @@
 use crate::{
     abstract_machine::{
         vector::{Vector2ScalarAbstractVM, VectorDataRef},
-        DataKind, DataWidth, TypedRef,
+        DataKind, DataWidth, ElementAction, ElementOutcome, TypedRef,
     },
     amdil_text::grammar,
     Action, Outcome,
@@ -166,5 +166,36 @@ impl Action<Vector2ScalarAbstractVM> for ALUInstruction {
             }
         }
         outcomes
+    }
+}
+impl ElementAction<Vector2ScalarAbstractVM> for ALUInstruction {
+    fn per_element_outcomes(&self) -> Vec<ElementOutcome<Vector2ScalarAbstractVM>> {
+        let comp_outcomes = Self::outcomes(&self);
+        vec![ElementOutcome::Dependency {
+            output_elem: TypedRef {
+                data: self.dst.clone(),
+                kind: self.data_kind,
+                width: DataWidth::E32,
+            },
+            input_elems: self
+                .srcs
+                .iter()
+                .map(|src| TypedRef {
+                    data: src.clone(),
+                    kind: self.data_kind,
+                    width: DataWidth::E32,
+                })
+                .collect(),
+            component_deps: comp_outcomes
+                .into_iter()
+                .map(|out| match out {
+                    Outcome::Dependency {
+                        output: output_comps,
+                        inputs: inputs_comps,
+                    } => (output_comps, inputs_comps),
+                    _ => panic!("ALUInstruction::outcomes returned a not-dependency"),
+                })
+                .collect(),
+        }]
     }
 }

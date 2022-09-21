@@ -1,5 +1,8 @@
 use crate::{
-    abstract_machine::vector::{MaskedSwizzle, Vector2ScalarAbstractVM, VectorDeclaration},
+    abstract_machine::{
+        vector::{MaskedSwizzle, Vector2ScalarAbstractVM, VectorDeclaration},
+        ElementAction, ElementOutcome,
+    },
     Action,
 };
 
@@ -37,6 +40,25 @@ impl Action<Vector2ScalarAbstractVM> for Instruction {
             }
             Instruction::Decl(decl) => decl.outcomes(),
             Instruction::Alu(alu) => alu.outcomes(),
+        }
+    }
+}
+impl ElementAction<Vector2ScalarAbstractVM> for Instruction {
+    fn per_element_outcomes(&self) -> Vec<ElementOutcome<Vector2ScalarAbstractVM>> {
+        match self {
+            Instruction::DontCare(..) => {
+                vec![]
+            }
+            Instruction::Unknown(g_instr) => {
+                if g_instr.args.len() >= 2 {
+                    todo!("Best-effort outcomes for Unknown instructions with an identifiable src and dst")
+                } else {
+                    // Assume the unknown instruction doesn't do anything necessary
+                    vec![]
+                }
+            }
+            Instruction::Decl(decl) => decl.per_element_outcomes(),
+            Instruction::Alu(alu) => alu.per_element_outcomes(),
         }
     }
 }

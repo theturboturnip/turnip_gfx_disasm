@@ -5,7 +5,7 @@ use super::{AbstractVM, DataRef, ScalarBasedAbstractVM};
 #[derive(Debug)]
 pub enum ScalarAbstractVM {}
 impl AbstractVM for ScalarAbstractVM {
-    type TDataRef = ScalarDataRef;
+    type TScalarDataRef = ScalarDataRef;
 }
 impl ScalarBasedAbstractVM for ScalarAbstractVM {}
 pub type ScalarOutcome = Outcome<ScalarAbstractVM>;

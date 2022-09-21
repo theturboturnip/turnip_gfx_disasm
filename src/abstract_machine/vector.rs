@@ -9,20 +9,55 @@ use std::ops::Index;
 
 use crate::{Action, Outcome};
 
-use super::{AbstractVM, DataRef, ScalarBasedAbstractVM, TypedRef};
+use super::{
+    analysis::variable::VariableCapableAbstractVM, AbstractVM, DataKind, DataRef,
+    ElementAbstractVM, ElementAction, ElementDataRef, ElementOutcome, ScalarBasedAbstractVM,
+    TypedRef,
+};
 
+// TODO rename to VectorAbstractVM
 #[derive(Debug)]
 pub enum Vector2ScalarAbstractVM {}
 impl AbstractVM for Vector2ScalarAbstractVM {
-    type TDataRef = (VectorNameRef, VectorComponent);
+    type TScalarDataRef = (VectorNameRef, VectorComponent);
 }
 impl ScalarBasedAbstractVM for Vector2ScalarAbstractVM {}
+impl ElementAbstractVM for Vector2ScalarAbstractVM {
+    type TElementDataRef = VectorDataRef;
 
-#[derive(Debug)]
-pub enum VectorAbstractVM {}
-impl AbstractVM for VectorAbstractVM {
-    type TDataRef = VectorDataRef;
+    fn expand_element(elem: &Self::TElementDataRef) -> Vec<Self::TScalarDataRef> {
+        elem.swizzle
+            .0
+            .iter()
+            .filter_map(|comp| comp.map(|comp| (elem.name.clone(), comp)))
+            .collect()
+    }
 }
+impl VariableCapableAbstractVM for Vector2ScalarAbstractVM {
+    fn variable_info(elem: &Self::TElementDataRef) -> (String, u8) {
+        let name = match &elem.name {
+            VectorNameRef::NamedRegister(name) => name.clone(),
+            VectorNameRef::Literal(data) => format!(
+                "({:x}, {:x}, {:x}, {:x})",
+                data[0], data[1], data[2], data[3]
+            ),
+            VectorNameRef::NamedLiteral(name, ..) => name.clone(),
+            VectorNameRef::NamedBuffer { name, idx } => format!("{name}[{idx}]"),
+            VectorNameRef::NamedInputRegister(name, ..) => name.clone(),
+            VectorNameRef::NamedOutputRegister(name, ..) => name.clone(),
+        };
+        (
+            name,
+            elem.swizzle.0.iter().filter(|c| c.is_some()).count() as u8,
+        )
+    }
+}
+
+// #[derive(Debug)]
+// pub enum VectorAbstractVM {}
+// impl AbstractVM for VectorAbstractVM {
+//     type TDataRef = VectorDataRef;
+// }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum VectorComponent {
@@ -31,7 +66,7 @@ pub enum VectorComponent {
     Z,
     W,
 }
-const VECTOR_COMPONENTS: [VectorComponent; 4] = [
+pub const VECTOR_COMPONENTS: [VectorComponent; 4] = [
     VectorComponent::X,
     VectorComponent::Y,
     VectorComponent::Z,
@@ -42,7 +77,16 @@ const VECTOR_COMPONENTS: [VectorComponent; 4] = [
 pub struct MaskedSwizzle(pub [Option<VectorComponent>; 4]);
 impl MaskedSwizzle {
     pub fn new(x: [Option<VectorComponent>; 4]) -> Self {
-        MaskedSwizzle(x)
+        Self(x)
+    }
+    /// Based on up to four components from vec, create a new masked swizzle
+    pub fn new_from_vec(vec: Vec<VectorComponent>) -> Self {
+        Self([
+            if vec.len() > 0 { Some(vec[0]) } else { None },
+            if vec.len() > 1 { Some(vec[1]) } else { None },
+            if vec.len() > 2 { Some(vec[2]) } else { None },
+            if vec.len() > 3 { Some(vec[3]) } else { None },
+        ])
     }
     pub fn identity(num: usize) -> Self {
         use VectorComponent::*;
@@ -192,6 +236,7 @@ impl DataRef for VectorDataRef {
         self.name.is_pure_input()
     }
 }
+impl ElementDataRef for VectorDataRef {}
 impl DataRef for (VectorNameRef, VectorComponent) {
     fn is_pure_input(&self) -> bool {
         self.0.is_pure_input()
@@ -250,10 +295,28 @@ impl Action<Vector2ScalarAbstractVM> for VectorDeclaration {
                 .iter()
                 .take(*len as usize)
                 .map(|comp| Outcome::Declaration {
+                    // TODO THIS IS WRONG FOR OUTPUT REGISTERS
                     name: (VectorNameRef::NamedInputRegister(name.clone()), *comp),
                     value: None,
                 })
                 .collect(),
+        }
+    }
+}
+impl ElementAction<Vector2ScalarAbstractVM> for VectorDeclaration {
+    fn per_element_outcomes(&self) -> Vec<ElementOutcome<Vector2ScalarAbstractVM>> {
+        match self {
+            VectorDeclaration::NamedLiteral(name, value) => vec![ElementOutcome::Declaration {
+                name: VectorDataRef::named_literal(name.clone(), MaskedSwizzle::identity(4)),
+                value: Some(TypedRef {
+                    data: VectorDataRef::literal(*value, MaskedSwizzle::identity(4)),
+                    kind: DataKind::Hole,
+                    width: super::DataWidth::E32,
+                }),
+            }],
+            _ => {
+                vec![]
+            }
         }
     }
 }
