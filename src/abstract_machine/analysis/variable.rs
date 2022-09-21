@@ -38,6 +38,72 @@ pub struct VariableInfo {
     tick_created: u64,
 }
 
+#[derive(Debug, Clone)]
+pub enum VariableAbstractVMOutcome {
+    // State that a new variable exists without setting its value
+    Declaration {
+        new_var: Variable,
+    },
+    // State that a new variable exists and has a given value taken directly from other variables
+    Definition {
+        new_var: Variable,
+        components: Vec<ScalarVariableRef>,
+    },
+    // State that the output of an operation has been assigned to some components of a variable
+    Operation {
+        output: VectorVariableRef,
+        op: String,
+        inputs: Vec<VectorVariableRef>,
+    },
+}
+impl std::fmt::Display for VariableAbstractVMOutcome {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            Self::Declaration { new_var } => {
+                let var = new_var.borrow();
+                write!(
+                    f,
+                    "{:?}{} {}({});",
+                    var.kind, var.components, var.name, var.id
+                )
+            }
+            Self::Definition {
+                new_var,
+                components,
+            } => {
+                {
+                    let var = new_var.borrow();
+                    write!(
+                        f,
+                        "{:?}{} {}({}) = {:?}{}(",
+                        var.kind, var.components, var.name, var.id, var.kind, var.components
+                    )?;
+                }
+                for (refed_var, comp) in components {
+                    let referenced_var = refed_var.borrow();
+                    write!(f, "{}.{:?}, ", referenced_var.name, *comp)?;
+                }
+                write!(f, ");")
+            }
+            Self::Operation { output, op, inputs } => {
+                {
+                    let output_var = output.0.borrow();
+                    write!(
+                        f,
+                        "{}({}){} = {}(",
+                        output_var.name, output_var.id, output.1, op
+                    )?;
+                }
+                for (refed_var, swizz) in inputs {
+                    let referenced_var = refed_var.borrow();
+                    write!(f, "{}{}, ", referenced_var.name, swizz)?;
+                }
+                write!(f, ");")
+            }
+        }
+    }
+}
+
 /// The state of the abstract machine at a given "tick" throughout the program
 ///
 /// Maps each known scalar to a "scalar variable reference" - e.g. "at this point in the program the scalar ref r0.x is mapped to variable_0.y"
@@ -46,7 +112,7 @@ pub struct VariableAbstractMachine<TVM: VariableCapableAbstractVM> {
     tick: u64,
     current_scalar_names: HashMap<TVM::TScalarDataRef, ScalarVariableRef>,
     known_variables: Vec<Variable>,
-    actions: Vec<(u64, VectorVariableRef, Vec<VectorVariableRef>)>,
+    actions: Vec<(u64, VariableAbstractVMOutcome)>,
 }
 impl<TVM: VariableCapableAbstractVM> VariableAbstractMachine<TVM> {
     pub fn new() -> Self {
@@ -91,109 +157,72 @@ impl<TVM: VariableCapableAbstractVM> VariableAbstractMachine<TVM> {
     ///       i.e. any component does not have a mapping in the current_scalar_names
     /// 2) any component changes kind
     /// 3) the element components do not combine to make a previously known variable
-    /// 4) the element components *do* combine to make a previously known variable,
-    ///    but the length of that variable is different from the element's own length
-    ///    (only applied if `allow_differing_lengths` argument is false)
     ///
     /// In all other cases, an existing variable is returned
     fn map_elem_ref_to_variable(
         &mut self,
         elem: TypedRef<TVM::TElementDataRef>,
-        allow_differing_lengths: bool,
     ) -> VectorVariableRef {
-        let mut needs_new_var = false;
-        // The ID of the "old variable" - a variable which all the output components map to, which may be reused
-        let mut id_of_old_variable = None;
-        // The constituent components of the "old variable" that each output component maps to
-        let mut comps_of_old_variable = vec![];
         let scalar_comps = TVM::expand_element(&elem.data);
         let expected_number_of_comps = scalar_comps.len();
-        for scalar_comp in scalar_comps {
-            match self.current_scalar_names.get(&scalar_comp) {
-                None => {
-                    // 1) component has not been registered before
-                    println!("\tnew var because new elem {:?}", scalar_comp);
-                    needs_new_var = true;
-                    break;
-                }
-                Some((scalar_comps_old_variable, comp_of_old_variable)) => {
-                    // Get the kind and ID of the "old variable"
-                    let (old_kind, old_id) = {
-                        let var = scalar_comps_old_variable.borrow();
-                        (var.kind, var.id)
-                    };
-                    if old_kind != elem.kind && old_kind != DataKind::Hole {
-                        // 2) component has changed type
-                        println!(
-                            "\tnew var because elem {:?} changed type from {:?} to {:?}",
-                            scalar_comp, old_kind, elem.kind
-                        );
-                        needs_new_var = true;
-                        break;
-                    }
+        let scalar_comps_as_vars: Vec<Option<_>> = scalar_comps
+            .into_iter()
+            .map(|scalar_comp| self.current_scalar_names.get(&scalar_comp))
+            .collect();
 
-                    match id_of_old_variable {
-                        Some(expected_old_id) if expected_old_id == old_id => {}
-                        None => {
-                            id_of_old_variable = Some(old_id);
-                        }
-                        Some(_) => {
-                            // One of the previously examined components maps to a different variable than this component
-                            // => not all output components were mapped to the same old variable
-                            // => 3) the output components do not combine to make a previously known variable
-                            println!("\tnew var because elem {:?} had a different mapped var from previous components", scalar_comp);
-                            needs_new_var = true;
-                            break;
-                        }
-                    }
-
-                    comps_of_old_variable.push(*comp_of_old_variable);
+        // Check for the 1) and 2) cases
+        if scalar_comps_as_vars.iter().any(|name| {
+            match name {
+                // 1) at least one component has not been registered before.
+                None => true,
+                // 2) at least one component has a different type to it's previous usage
+                Some((old_var, _)) => {
+                    let old_kind = { old_var.borrow().kind };
+                    old_kind != elem.kind && old_kind != DataKind::Hole
                 }
             }
-        }
-
-        let mut old_variable_to_use = id_of_old_variable.map(|id| &self.known_variables[id]);
-
-        if !allow_differing_lengths {
-            match old_variable_to_use {
-                Some(var) => {
-                    if var.borrow().components as usize != expected_number_of_comps {
-                        // 4) the output components *do* combine to make a previously known variable,
-                        //    but the length of that variable is different from the expected output
-                        needs_new_var = true;
-                    }
-                }
-                None => {}
-            }
-        }
-
-        // Combine the "needs_new_var" flag with old_variable_to_use
-        if needs_new_var {
-            old_variable_to_use = None;
-        }
-
-        // If old_variable_to_use is not None, i.e. we found an old variable and didn't set needs_new_var to false,
-        // use the old variable
-        if let Some(var) = old_variable_to_use {
-            (
-                var.clone(),
-                MaskedSwizzle::new_from_vec(comps_of_old_variable),
-            )
-        } else {
-            // Otherwise, create a new variable
+        }) {
+            // make a new variable that doesn't depend on any previous values
             let (var, swizz) = (
                 self.add_new_variable_from_elem(&elem.data, elem.kind),
                 MaskedSwizzle::identity(expected_number_of_comps),
             );
-            // TODO RECORD VARIABLE ORIGIN
-            println!(
-                "\t{:?}{} {} === {:?};",
-                var.borrow().kind,
-                var.borrow().components,
-                var.borrow().name,
-                elem,
-            );
+            self.add_outcome(VariableAbstractVMOutcome::Declaration {
+                new_var: var.clone(),
+            });
             (var, swizz)
+        } else {
+            let scalar_comps_as_vars: Vec<ScalarVariableRef> = scalar_comps_as_vars
+                .into_iter()
+                .map(|name| name.unwrap().clone())
+                .collect();
+
+            let mut old_var_iter = scalar_comps_as_vars.iter(); //Rc::ptr_eq
+            let (expected_old_var, _) = old_var_iter.next().unwrap();
+            if old_var_iter.any(|(old_var, _)| !Rc::ptr_eq(expected_old_var, old_var)) {
+                // 3) not all components map to the same old vector variable
+                // make a new variable that doesn't depend on any previous values
+                let (var, swizz) = (
+                    self.add_new_variable_from_elem(&elem.data, elem.kind),
+                    MaskedSwizzle::identity(expected_number_of_comps),
+                );
+                self.add_outcome(VariableAbstractVMOutcome::Definition {
+                    new_var: var.clone(),
+                    components: scalar_comps_as_vars.into_iter().collect(),
+                });
+                (var, swizz)
+            } else {
+                // All components come from the same variable, we can just reuse that one
+                (
+                    expected_old_var.clone(),
+                    MaskedSwizzle::new_from_vec(
+                        scalar_comps_as_vars
+                            .into_iter()
+                            .map(|(_, comp)| comp)
+                            .collect(),
+                    ),
+                )
+            }
         }
     }
 
@@ -211,6 +240,11 @@ impl<TVM: VariableCapableAbstractVM> VariableAbstractMachine<TVM> {
             .collect()
     }
 
+    fn add_outcome(&mut self, outcome: VariableAbstractVMOutcome) {
+        println!("\t{}", outcome);
+        self.actions.push((self.tick, outcome))
+    }
+
     pub fn accum_action(&mut self, action: &dyn ElementAction<TVM>) {
         println!("tick {: >3}:", self.tick);
         for outcome in action.per_element_outcomes() {
@@ -224,15 +258,12 @@ impl<TVM: VariableCapableAbstractVM> VariableAbstractMachine<TVM> {
                             .map_or(DataKind::Hole, |typed_ref| typed_ref.kind),
                     );
                     // TODO RECORD VARIABLE ORIGIN
-                    println!(
-                        "\t{:?}{} {} === {:?};",
-                        var.borrow().kind,
-                        var.borrow().components,
-                        var.borrow().name,
-                        value,
-                    );
+                    self.add_outcome(VariableAbstractVMOutcome::Declaration {
+                        new_var: var.clone(),
+                    })
                 }
                 ElementOutcome::Dependency {
+                    opname,
                     output_elem,
                     input_elems,
                     component_deps,
@@ -240,7 +271,7 @@ impl<TVM: VariableCapableAbstractVM> VariableAbstractMachine<TVM> {
                     // Convert the input elements into variables
                     let input_vars: Vec<VectorVariableRef> = input_elems
                         .into_iter()
-                        .map(|elem| self.map_elem_ref_to_variable(elem, true))
+                        .map(|elem| self.map_elem_ref_to_variable(elem))
                         .collect();
 
                     // Gather an equivalent to component_deps where all inputs have been converted to Variable references
@@ -255,7 +286,7 @@ impl<TVM: VariableCapableAbstractVM> VariableAbstractMachine<TVM> {
                                     {
                                         (*as_var).clone()
                                     } else {
-                                        panic!("Undeclared/uninitialized item used")
+                                        panic!("Undeclared/uninitialized item used: {:?}", input)
                                     }
                                 })
                                 .collect();
@@ -277,7 +308,7 @@ impl<TVM: VariableCapableAbstractVM> VariableAbstractMachine<TVM> {
                     // }
 
                     // allow_differing_lengths is actually OK to be true - if we remove it, things like "write o1.w" become separate variables
-                    let output_var = self.map_elem_ref_to_variable(output_elem, true);
+                    let output_var = self.map_elem_ref_to_variable(output_elem);
                     // assert_eq!(
                     //     output_var.0.borrow().components as usize,
                     //     component_dep_vars.len()
@@ -285,13 +316,11 @@ impl<TVM: VariableCapableAbstractVM> VariableAbstractMachine<TVM> {
 
                     // TODO if we have a concretized type, try hole resolution in variables
 
-                    // TODO record a proper action that states which variables created this variable
-                    print!("\t{}{} <- ", output_var.0.borrow().name, output_var.1);
-                    for in_ref in input_vars.iter() {
-                        print!("{}{}, ", in_ref.0.borrow().name, in_ref.1)
-                    }
-                    print!(";\n");
-                    self.actions.push((self.tick, output_var, input_vars))
+                    self.add_outcome(VariableAbstractVMOutcome::Operation {
+                        output: output_var,
+                        op: opname,
+                        inputs: input_vars,
+                    })
                 }
             }
         }

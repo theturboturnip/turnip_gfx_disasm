@@ -51,6 +51,7 @@ struct ALUInstructionDef {
 
 #[derive(Debug, Clone)]
 pub struct ALUInstruction {
+    name: &'static str,
     dst: VectorDataRef,
     srcs: Vec<VectorDataRef>,
     output_dep: OutputDep,
@@ -99,6 +100,7 @@ pub fn decode_alu(
 
             // ok, produce the instruction
             Ok(Some(ALUInstruction {
+                name: *static_name,
                 dst,
                 srcs,
                 output_dep: instr_def.output_dep,
@@ -172,6 +174,7 @@ impl ElementAction<Vector2ScalarAbstractVM> for ALUInstruction {
     fn per_element_outcomes(&self) -> Vec<ElementOutcome<Vector2ScalarAbstractVM>> {
         let comp_outcomes = Self::outcomes(&self);
         vec![ElementOutcome::Dependency {
+            opname: self.name.to_owned(),
             output_elem: TypedRef {
                 data: self.dst.clone(),
                 kind: self.data_kind,

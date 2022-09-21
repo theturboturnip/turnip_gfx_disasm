@@ -90,13 +90,13 @@ pub enum ElementOutcome<TVM: ElementAbstractVM> {
     },
     // Declare that an output element has a new value, based on many input scalars.
     Dependency {
+        opname: String,
         output_elem: TypedRef<TVM::TElementDataRef>,
         input_elems: Vec<TypedRef<TVM::TElementDataRef>>,
         component_deps: Vec<(
             TypedRef<TVM::TScalarDataRef>,
             Vec<TypedRef<TVM::TScalarDataRef>>,
         )>,
-        // TODO this should have more data: name of operation?
     },
 }
 
