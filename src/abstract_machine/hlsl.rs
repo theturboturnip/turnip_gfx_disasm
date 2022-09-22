@@ -1,10 +1,10 @@
-use super::{AbstractVM, DataRef, TypedRef};
+use super::{DataRef, ScalarAbstractVM, TypedRef};
 
 pub trait HLSLCompatibleDataRef: DataRef {
     // TODO function for converting to HLSL-ready output
 }
 
-pub trait HLSLAbstractVM: AbstractVM {
+pub trait HLSLAbstractVM: ScalarAbstractVM {
     /// Element = the unit that abstract VM instructions operate on.
     ///
     /// e.g. for DXBC and AMDIL instructions operate on vectors => TElementDataRef = a VectorDataRef.

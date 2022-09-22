@@ -7,17 +7,17 @@
 
 use crate::abstract_machine::vector::{MaskedSwizzle, VectorComponent, VECTOR_COMPONENTS};
 use crate::abstract_machine::DataWidth;
-use crate::{Action, Outcome};
+use crate::{ScalarAction, ScalarOutcome};
 
 use crate::abstract_machine::{
     analysis::variable::VariableCapableAbstractVM,
     hlsl::{HLSLAbstractVM, HLSLAction, HLSLCompatibleDataRef, HLSLOutcome},
-    AbstractVM, DataKind, DataRef, TypedRef,
+    DataKind, DataRef, ScalarAbstractVM, TypedRef,
 };
 
 #[derive(Debug)]
 pub enum AMDILAbstractVM {}
-impl AbstractVM for AMDILAbstractVM {
+impl ScalarAbstractVM for AMDILAbstractVM {
     type TScalarDataRef = (AMDILNameRef, VectorComponent);
 }
 impl HLSLAbstractVM for AMDILAbstractVM {
@@ -149,12 +149,12 @@ pub enum AMDILDeclaration {
         reg_type: String,
     },
 }
-impl Action<AMDILAbstractVM> for AMDILDeclaration {
-    fn outcomes(&self) -> Vec<crate::Outcome<AMDILAbstractVM>> {
+impl ScalarAction<AMDILAbstractVM> for AMDILDeclaration {
+    fn outcomes(&self) -> Vec<crate::ScalarOutcome<AMDILAbstractVM>> {
         match self {
             AMDILDeclaration::NamedLiteral(name, value) => VECTOR_COMPONENTS
                 .iter()
-                .map(|comp| Outcome::Declaration {
+                .map(|comp| ScalarOutcome::Declaration {
                     name: (AMDILNameRef::NamedLiteral(name.clone()), *comp),
                     value: Some(TypedRef {
                         data: (AMDILNameRef::Literal(*value), *comp),
@@ -180,7 +180,7 @@ impl Action<AMDILAbstractVM> for AMDILDeclaration {
             } => VECTOR_COMPONENTS
                 .iter()
                 .take(*len as usize)
-                .map(|comp| Outcome::Declaration {
+                .map(|comp| ScalarOutcome::Declaration {
                     // TODO THIS IS WRONG FOR OUTPUT REGISTERS
                     name: (AMDILNameRef::NamedInputRegister(name.clone()), *comp),
                     value: None,

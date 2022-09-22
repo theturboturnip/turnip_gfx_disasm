@@ -1,13 +1,13 @@
-use crate::Outcome;
+use crate::ScalarOutcome;
 
-use crate::abstract_machine::{AbstractVM, DataRef};
+use crate::abstract_machine::{DataRef, ScalarAbstractVM};
 
 #[derive(Debug)]
 pub enum RDNA2AbstractVM {}
-impl AbstractVM for RDNA2AbstractVM {
+impl ScalarAbstractVM for RDNA2AbstractVM {
     type TScalarDataRef = RDNA2DataRef;
 }
-pub type RDNA2Outcome = Outcome<RDNA2AbstractVM>;
+pub type RDNA2Outcome = ScalarOutcome<RDNA2AbstractVM>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum RDNA2Output {

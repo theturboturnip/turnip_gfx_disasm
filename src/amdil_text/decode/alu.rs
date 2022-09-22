@@ -7,7 +7,7 @@ use crate::{
         grammar,
         vm::{AMDILAbstractVM, AMDILDataRef},
     },
-    Action, Outcome,
+    ScalarAction, ScalarOutcome,
 };
 use phf::phf_map;
 
@@ -114,12 +114,13 @@ pub fn decode_alu(
     }
 }
 
-impl Action<AMDILAbstractVM> for ALUInstruction {
-    fn outcomes(&self) -> Vec<Outcome<AMDILAbstractVM>> {
+impl ScalarAction<AMDILAbstractVM> for ALUInstruction {
+    fn outcomes(&self) -> Vec<ScalarOutcome<AMDILAbstractVM>> {
         let mut outcomes = vec![];
         for i in 0..4 {
             match (self.output_dep, self.dst.swizzle[i]) {
-                (OutputDep::PerComponent, Some(dst_comp)) => outcomes.push(Outcome::Dependency {
+                (OutputDep::PerComponent, Some(dst_comp)) => {
+                    outcomes.push(ScalarOutcome::Dependency {
                     output: TypedRef {
                         data: (self.dst.name.clone(), dst_comp),
                         kind: self.data_kind,
@@ -139,8 +140,9 @@ impl Action<AMDILAbstractVM> for ALUInstruction {
                             }
                         })
                         .collect(),
-                }),
-                (OutputDep::All, Some(dst_comp)) => outcomes.push(Outcome::Dependency {
+                    })
+                }
+                (OutputDep::All, Some(dst_comp)) => outcomes.push(ScalarOutcome::Dependency {
                     output: TypedRef {
                         data: (self.dst.name.clone(), dst_comp),
                         kind: self.data_kind,
@@ -195,7 +197,7 @@ impl HLSLAction<AMDILAbstractVM> for ALUInstruction {
             component_deps: comp_outcomes
                 .into_iter()
                 .map(|out| match out {
-                    Outcome::Dependency {
+                    ScalarOutcome::Dependency {
                         output: output_comps,
                         inputs: inputs_comps,
                     } => (output_comps, inputs_comps),

@@ -8,6 +8,11 @@ pub trait DataRef: Clone + PartialEq + Eq + Hash + std::fmt::Debug {
     /// Returns true if the data is a pure input and should not be expanded into dependencies when passed as a parent.
     fn is_pure_input(&self) -> bool;
 }
+impl DataRef for [u64; 4] {
+    fn is_pure_input(&self) -> bool {
+        true
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum DataKind {
@@ -34,20 +39,22 @@ pub struct TypedRef<TData: DataRef> {
     pub width: DataWidth,
 }
 
-// TODO rename this to ScalarBasedAbstractVM?
-pub trait AbstractVM: std::fmt::Debug {
+/// Base type for abstract VMs
+///
+/// All VMs, even vector-based ones, should implement simplistic vector-to-scalar translation
+pub trait ScalarAbstractVM: std::fmt::Debug {
     type TScalarDataRef: DataRef;
 }
 
-pub trait Action<TVM: AbstractVM> {
-    fn outcomes(&self) -> Vec<Outcome<TVM>>;
+pub trait ScalarAction<TVM: ScalarAbstractVM> {
+    fn outcomes(&self) -> Vec<ScalarOutcome<TVM>>;
 }
 
 // TODO does Declaration need to be separate from Dependency?
 // or can every Declaration be represented as a Dependency
 
 #[derive(Debug, Clone)]
-pub enum Outcome<TVM: AbstractVM> {
+pub enum ScalarOutcome<TVM: ScalarAbstractVM> {
     // Declare that some named scalar exists, and optionally has a known value.
     Declaration {
         name: TVM::TScalarDataRef,
@@ -60,9 +67,9 @@ pub enum Outcome<TVM: AbstractVM> {
     },
 }
 
-pub trait Decoder<TVM: AbstractVM> {
+pub trait Decoder<TVM: ScalarAbstractVM> {
     type Input;
-    type BaseAction: Deref<Target = dyn Action<TVM>>;
+    type BaseAction: Deref<Target = dyn ScalarAction<TVM>>;
     type Err;
 
     fn decode(&self, data: Self::Input) -> Result<Vec<Self::BaseAction>, Self::Err>;

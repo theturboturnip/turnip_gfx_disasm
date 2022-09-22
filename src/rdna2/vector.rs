@@ -3,7 +3,7 @@ use bitutils::bits;
 
 use crate::{
     abstract_machine::{DataKind, DataWidth, TypedRef},
-    Action, Outcome,
+    ScalarAction, ScalarOutcome,
 };
 
 use super::{
@@ -145,7 +145,7 @@ impl Decodable for VOP {
         }
     }
 }
-impl Action<RDNA2AbstractVM> for VOP {
+impl ScalarAction<RDNA2AbstractVM> for VOP {
     fn outcomes(&self) -> Vec<RDNA2Outcome> {
         match self {
             Self::VOP1 {
@@ -157,7 +157,7 @@ impl Action<RDNA2AbstractVM> for VOP {
                 // TODO data kind and width
                 let kind = DataKind::Untyped;
                 let width = DataWidth::E64;
-                vec![Outcome::Dependency {
+                vec![ScalarOutcome::Dependency {
                     inputs: vec![TypedRef {
                         data: VOP::operand_to_dataref(*SRC0, *extra),
                         kind,
@@ -180,7 +180,7 @@ impl Action<RDNA2AbstractVM> for VOP {
                 // TODO data kind and width
                 let kind = DataKind::Untyped;
                 let width = DataWidth::E64;
-                vec![Outcome::Dependency {
+                vec![ScalarOutcome::Dependency {
                     inputs: vec![
                         TypedRef {
                             data: VOP::operand_to_dataref(*SRC0, *extra),
@@ -355,7 +355,7 @@ impl Decodable for VOP3 {
         }
     }
 }
-impl Action<RDNA2AbstractVM> for VOP3 {
+impl ScalarAction<RDNA2AbstractVM> for VOP3 {
     fn outcomes(&self) -> Vec<RDNA2Outcome> {
         todo!()
     }

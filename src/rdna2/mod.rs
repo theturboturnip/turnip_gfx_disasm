@@ -12,7 +12,7 @@ use std::marker::PhantomData;
 use crate::{
     rdna2::opcodes::SOPP_Opcode,
     rdna2::vm::{RDNA2AbstractVM, RDNA2Outcome},
-    Action,
+    ScalarAction,
 };
 
 mod opcodes;
@@ -123,7 +123,7 @@ impl Decodable for Instruction {
         }
     }
 }
-impl Action<RDNA2AbstractVM> for Instruction {
+impl ScalarAction<RDNA2AbstractVM> for Instruction {
     fn outcomes(&self) -> Vec<RDNA2Outcome> {
         match self {
             Self::ScalarALU(instr) => instr.outcomes(),
@@ -136,7 +136,7 @@ impl Action<RDNA2AbstractVM> for Instruction {
     }
 }
 
-pub type RDNA2Program = Vec<Box<dyn Action<RDNA2AbstractVM>>>;
+pub type RDNA2Program = Vec<Box<dyn ScalarAction<RDNA2AbstractVM>>>;
 
 pub struct RDNA2Decoder<'a> {
     _lifetime: PhantomData<&'a ()>, // NOTE: there's no generic type here!
@@ -150,7 +150,7 @@ impl<'a> RDNA2Decoder<'a> {
 }
 impl<'a> super::Decoder<RDNA2AbstractVM> for RDNA2Decoder<'a> {
     type Input = &'a [u8];
-    type BaseAction = Box<dyn Action<RDNA2AbstractVM>>;
+    type BaseAction = Box<dyn ScalarAction<RDNA2AbstractVM>>;
     type Err = RDNA2DecodeError;
 
     fn decode(&self, mut data: Self::Input) -> Result<RDNA2Program, RDNA2DecodeError> {
@@ -160,7 +160,7 @@ impl<'a> super::Decoder<RDNA2AbstractVM> for RDNA2Decoder<'a> {
             println!("{:?}", instr);
             for dep in instr.outcomes() {
                 match dep {
-                    crate::Outcome::Dependency { output, inputs } => {
+                    crate::ScalarOutcome::Dependency { output, inputs } => {
                         println!("\t{:?} -> {:?}", inputs, output)
                     }
                     _ => println!("\t{:?}", dep),

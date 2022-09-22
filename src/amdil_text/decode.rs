@@ -3,7 +3,7 @@ use crate::{
         hlsl::{HLSLAction, HLSLOutcome},
         vector::MaskedSwizzle,
     },
-    Action,
+    ScalarAction,
 };
 
 use super::{
@@ -27,8 +27,8 @@ pub enum Instruction {
     Decl(AMDILDeclaration),
     Alu(ALUInstruction),
 }
-impl Action<AMDILAbstractVM> for Instruction {
-    fn outcomes(&self) -> Vec<crate::Outcome<AMDILAbstractVM>> {
+impl ScalarAction<AMDILAbstractVM> for Instruction {
+    fn outcomes(&self) -> Vec<crate::ScalarOutcome<AMDILAbstractVM>> {
         match self {
             Instruction::DontCare(..) => {
                 vec![]

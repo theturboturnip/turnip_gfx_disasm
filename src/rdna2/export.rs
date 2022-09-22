@@ -6,7 +6,7 @@ use bitutils::bits;
 use crate::{
     abstract_machine::{DataKind, DataWidth, TypedRef},
     rdna2::vm::{RDNA2AbstractVM, RDNA2DataRef, RDNA2Outcome, RDNA2Output},
-    Action, Outcome,
+    ScalarAction, ScalarOutcome,
 };
 
 use super::{utils::extract_u32, Decodable, RDNA2DecodeError};
@@ -67,7 +67,7 @@ impl Decodable for EXPORT {
         }
     }
 }
-impl Action<RDNA2AbstractVM> for EXPORT {
+impl ScalarAction<RDNA2AbstractVM> for EXPORT {
     fn outcomes(&self) -> Vec<RDNA2Outcome> {
         let mut deps = vec![];
         let possible_exports = if self.COMPR {
@@ -115,7 +115,7 @@ impl Action<RDNA2AbstractVM> for EXPORT {
                 DataWidth::E32
             };
 
-            deps.push(Outcome::Dependency {
+            deps.push(ScalarOutcome::Dependency {
                 inputs: vec![TypedRef {
                     data: RDNA2DataRef::GeneralPurposeRegister(possible_exports[i] as u64),
                     kind: DataKind::Untyped,

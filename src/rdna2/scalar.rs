@@ -7,7 +7,7 @@ use super::opcodes::{
 use super::utils::{decode_scalar_src, extract_u32, ScalarInputOperand};
 use super::vm::{RDNA2AbstractVM, RDNA2Outcome};
 use super::{Decodable, RDNA2DecodeError};
-use crate::Action;
+use crate::ScalarAction;
 
 #[derive(Debug, Clone, Copy)]
 pub enum ScalarALUInstr {
@@ -132,7 +132,7 @@ impl Decodable for ScalarALUInstr {
         }
     }
 }
-impl Action<RDNA2AbstractVM> for ScalarALUInstr {
+impl ScalarAction<RDNA2AbstractVM> for ScalarALUInstr {
     fn outcomes(&self) -> Vec<RDNA2Outcome> {
         match self {
             Self::SOPP { OP, .. } => match OP {
@@ -182,7 +182,7 @@ impl Decodable for SMEM {
         }
     }
 }
-impl Action<RDNA2AbstractVM> for SMEM {
+impl ScalarAction<RDNA2AbstractVM> for SMEM {
     fn outcomes(&self) -> Vec<RDNA2Outcome> {
         todo!()
     }

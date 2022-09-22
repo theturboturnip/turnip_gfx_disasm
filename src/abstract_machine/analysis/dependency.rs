@@ -1,15 +1,15 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::{
-    abstract_machine::{AbstractVM, DataRef, TypedRef},
-    Action, Outcome,
+    abstract_machine::{DataRef, ScalarAbstractVM, TypedRef},
+    ScalarAction, ScalarOutcome,
 };
 
 /// Dependency solver for scalar-based abstract VMs
-pub struct ScalarDependencies<TVM: AbstractVM> {
+pub struct ScalarDependencies<TVM: ScalarAbstractVM> {
     dependents: HashMap<TVM::TScalarDataRef, HashSet<TypedRef<TVM::TScalarDataRef>>>,
 }
-impl<TVM: AbstractVM> ScalarDependencies<TVM> {
+impl<TVM: ScalarAbstractVM> ScalarDependencies<TVM> {
     pub fn new() -> Self {
         Self {
             dependents: HashMap::new(),
@@ -20,16 +20,16 @@ impl<TVM: AbstractVM> ScalarDependencies<TVM> {
     ///
     /// e.g. if the action introduces a dependency of GeneralPurposeRegister(1) onto Output(o),
     /// set `self.dependents[Output(o)]` to the contents of `self.dependents[GeneralPurposeRegister(1)]`
-    pub fn accum_action(&mut self, action: &dyn Action<TVM>) {
+    pub fn accum_action(&mut self, action: &dyn ScalarAction<TVM>) {
         for dep in action.outcomes() {
             match dep {
-                Outcome::Declaration {
+                ScalarOutcome::Declaration {
                     name,
                     value: Some(value),
                 } => {
                     self.dependents.insert(name, [value].into());
                 }
-                Outcome::Dependency { output, inputs } => {
+                ScalarOutcome::Dependency { output, inputs } => {
                     if output.data.is_pure_input() {
                         println!(
                             "Weird! Someone is writing to a pure input. Ignoring dependency {:?} -> {:?}",
