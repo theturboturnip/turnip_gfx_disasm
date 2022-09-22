@@ -7,6 +7,5 @@ extern crate num_derive;
 
 pub mod abstract_machine;
 pub use abstract_machine::{Action, Decoder, Outcome};
-pub mod amdil;
 pub mod amdil_text;
 pub mod rdna2;
