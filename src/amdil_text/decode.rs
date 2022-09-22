@@ -1,12 +1,12 @@
 use crate::{
-    abstract_machine::{
-        vector::{MaskedSwizzle, Vector2ScalarAbstractVM, VectorDeclaration},
-        ElementAction, ElementOutcome,
-    },
+    abstract_machine::{vector::MaskedSwizzle, ElementAction, ElementOutcome},
     Action,
 };
 
-use super::grammar;
+use super::{
+    grammar,
+    vm::{AMDILAbstractVM, AMDILDeclaration},
+};
 
 pub mod alu;
 use alu::{decode_alu, ALUInstruction};
@@ -21,11 +21,11 @@ pub enum AMDILTextDecodeError {
 pub enum Instruction {
     Unknown(grammar::Instruction),
     DontCare(grammar::Instruction),
-    Decl(VectorDeclaration),
+    Decl(AMDILDeclaration),
     Alu(ALUInstruction),
 }
-impl Action<Vector2ScalarAbstractVM> for Instruction {
-    fn outcomes(&self) -> Vec<crate::Outcome<Vector2ScalarAbstractVM>> {
+impl Action<AMDILAbstractVM> for Instruction {
+    fn outcomes(&self) -> Vec<crate::Outcome<AMDILAbstractVM>> {
         match self {
             Instruction::DontCare(..) => {
                 vec![]
@@ -43,8 +43,8 @@ impl Action<Vector2ScalarAbstractVM> for Instruction {
         }
     }
 }
-impl ElementAction<Vector2ScalarAbstractVM> for Instruction {
-    fn per_element_outcomes(&self) -> Vec<ElementOutcome<Vector2ScalarAbstractVM>> {
+impl ElementAction<AMDILAbstractVM> for Instruction {
+    fn per_element_outcomes(&self) -> Vec<ElementOutcome<AMDILAbstractVM>> {
         match self {
             Instruction::DontCare(..) => {
                 vec![]
@@ -128,7 +128,7 @@ fn decode_declare(g_instr: &grammar::Instruction) -> Result<Instruction, AMDILTe
         decode_args(&g_instr.args).as_slice(),
     ) {
         ("dcl_cb", [MatchableArg::NamedIndexed(cb_name, len)]) => {
-            Instruction::Decl(VectorDeclaration::NamedBuffer {
+            Instruction::Decl(AMDILDeclaration::NamedBuffer {
                 name: cb_name.to_string(),
                 len: *len,
             })
@@ -144,7 +144,7 @@ fn decode_declare(g_instr: &grammar::Instruction) -> Result<Instruction, AMDILTe
                     ))
                 }
             };
-            Instruction::Decl(VectorDeclaration::NamedInputRegister {
+            Instruction::Decl(AMDILDeclaration::NamedInputRegister {
                 name: name.to_owned(),
                 len: swizzle
                     .as_nonzero_length()
@@ -163,7 +163,7 @@ fn decode_declare(g_instr: &grammar::Instruction) -> Result<Instruction, AMDILTe
                     ))
                 }
             };
-            Instruction::Decl(VectorDeclaration::NamedOutputRegister {
+            Instruction::Decl(AMDILDeclaration::NamedOutputRegister {
                 name: name.to_owned(),
                 len: swizzle
                     .as_nonzero_length()
@@ -183,7 +183,7 @@ fn decode_declare(g_instr: &grammar::Instruction) -> Result<Instruction, AMDILTe
                     ))
                 }
             };
-            Instruction::Decl(VectorDeclaration::NamedOutputRegister {
+            Instruction::Decl(AMDILDeclaration::NamedOutputRegister {
                 name: name.to_owned(),
                 len: swizzle
                     .as_nonzero_length()
@@ -194,7 +194,7 @@ fn decode_declare(g_instr: &grammar::Instruction) -> Result<Instruction, AMDILTe
         (
             "dcl_literal",
             [MatchableArg::Named(name), MatchableArg::HexLiteral(x), MatchableArg::HexLiteral(y), MatchableArg::HexLiteral(z), MatchableArg::HexLiteral(w)],
-        ) => Instruction::Decl(VectorDeclaration::NamedLiteral(
+        ) => Instruction::Decl(AMDILDeclaration::NamedLiteral(
             name.clone(),
             [*x, *y, *z, *w],
         )),

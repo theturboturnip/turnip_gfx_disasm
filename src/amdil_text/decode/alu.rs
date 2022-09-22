@@ -1,9 +1,9 @@
 use crate::{
-    abstract_machine::{
-        vector::{Vector2ScalarAbstractVM, VectorDataRef},
-        DataKind, DataWidth, ElementAction, ElementOutcome, TypedRef,
+    abstract_machine::{DataKind, DataWidth, ElementAction, ElementOutcome, TypedRef},
+    amdil_text::{
+        grammar,
+        vm::{AMDILAbstractVM, AMDILDataRef},
     },
-    amdil_text::grammar,
     Action, Outcome,
 };
 use phf::phf_map;
@@ -18,12 +18,12 @@ enum InputMask {
     TruncateTo(u8),
 }
 impl InputMask {
-    fn apply(&self, output: &VectorDataRef, input: VectorDataRef) -> VectorDataRef {
+    fn apply(&self, output: &AMDILDataRef, input: AMDILDataRef) -> AMDILDataRef {
         let swizzle = match self {
             Self::InheritFromOutput => input.swizzle.masked_out(output.swizzle),
             Self::TruncateTo(x) => input.swizzle.truncated(*x),
         };
-        VectorDataRef {
+        AMDILDataRef {
             name: input.name,
             swizzle,
         }
@@ -52,8 +52,8 @@ struct ALUInstructionDef {
 #[derive(Debug, Clone)]
 pub struct ALUInstruction {
     name: &'static str,
-    dst: VectorDataRef,
-    srcs: Vec<VectorDataRef>,
+    dst: AMDILDataRef,
+    srcs: Vec<AMDILDataRef>,
     output_dep: OutputDep,
     data_kind: DataKind,
 }
@@ -75,7 +75,7 @@ pub fn decode_alu(
     ) {
         (Some((static_name, instr_def)), matchable_args) => {
             // Map matchable_args into VectorDataRefs
-            let args: Result<Vec<VectorDataRef>, AMDILTextDecodeError> =
+            let args: Result<Vec<AMDILDataRef>, AMDILTextDecodeError> =
                 matchable_args.iter().map(arg_as_vector_data_ref).collect();
 
             // Take n_out destination items, n_in src items
@@ -111,8 +111,8 @@ pub fn decode_alu(
     }
 }
 
-impl Action<Vector2ScalarAbstractVM> for ALUInstruction {
-    fn outcomes(&self) -> Vec<Outcome<Vector2ScalarAbstractVM>> {
+impl Action<AMDILAbstractVM> for ALUInstruction {
+    fn outcomes(&self) -> Vec<Outcome<AMDILAbstractVM>> {
         let mut outcomes = vec![];
         for i in 0..4 {
             match (self.output_dep, self.dst.swizzle[i]) {
@@ -170,8 +170,8 @@ impl Action<Vector2ScalarAbstractVM> for ALUInstruction {
         outcomes
     }
 }
-impl ElementAction<Vector2ScalarAbstractVM> for ALUInstruction {
-    fn per_element_outcomes(&self) -> Vec<ElementOutcome<Vector2ScalarAbstractVM>> {
+impl ElementAction<AMDILAbstractVM> for ALUInstruction {
+    fn per_element_outcomes(&self) -> Vec<ElementOutcome<AMDILAbstractVM>> {
         let comp_outcomes = Self::outcomes(&self);
         vec![ElementOutcome::Dependency {
             opname: self.name.to_owned(),

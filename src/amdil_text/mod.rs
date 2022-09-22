@@ -1,6 +1,7 @@
 pub mod decode;
 pub use decode::Instruction;
 mod grammar;
+pub mod vm;
 
 // TODO error handling here
 pub fn decode_amdil_text_program(data: &str) -> Vec<Instruction> {
