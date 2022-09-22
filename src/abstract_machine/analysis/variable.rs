@@ -1,15 +1,16 @@
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 use crate::abstract_machine::{
+    hlsl::{HLSLAbstractVM, HLSLAction, HLSLOutcome},
     vector::{MaskedSwizzle, VectorComponent, VECTOR_COMPONENTS},
-    DataKind, ElementAbstractVM, ElementAction, ElementOutcome, TypedRef,
+    DataKind, TypedRef,
 };
 
 pub type ScalarVariableRef = (Variable, VectorComponent);
 pub type VectorVariableRef = (Variable, MaskedSwizzle);
 
 /// Variable analysis is possible on vector and scalar VMs, but needs to be able to refer to specifically scalar values.
-pub trait VariableCapableAbstractVM: ElementAbstractVM {
+pub trait VariableCapableAbstractVM: HLSLAbstractVM {
     /// Returns a (name, components) pair which informs the value of a variable mapping to the given element.
     fn variable_info(elem: &Self::TElementDataRef, unique_id: u64) -> (String, u8);
 }
@@ -235,11 +236,11 @@ impl<TVM: VariableCapableAbstractVM> VariableAbstractMachine<TVM> {
         self.actions.push((self.tick, outcome))
     }
 
-    pub fn accum_action(&mut self, action: &dyn ElementAction<TVM>) {
+    pub fn accum_action(&mut self, action: &dyn HLSLAction<TVM>) {
         println!("tick {: >3}:", self.tick);
         for outcome in action.per_element_outcomes() {
             match outcome {
-                ElementOutcome::Declaration { name, value } => {
+                HLSLOutcome::Declaration { name, value } => {
                     // Create a new variable based on the name
                     let var = self.add_new_variable_from_elem(
                         &name,
@@ -252,7 +253,7 @@ impl<TVM: VariableCapableAbstractVM> VariableAbstractMachine<TVM> {
                         new_var: var.clone(),
                     })
                 }
-                ElementOutcome::Dependency {
+                HLSLOutcome::Dependency {
                     opname,
                     output_elem,
                     input_elems,

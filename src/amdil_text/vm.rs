@@ -10,19 +10,18 @@ use crate::abstract_machine::DataWidth;
 use crate::{Action, Outcome};
 
 use crate::abstract_machine::{
-    analysis::variable::VariableCapableAbstractVM, AbstractVM, DataKind, DataRef,
-    ElementAbstractVM, ElementAction, ElementDataRef, ElementOutcome, ScalarBasedAbstractVM,
-    TypedRef,
+    analysis::variable::VariableCapableAbstractVM,
+    hlsl::{HLSLAbstractVM, HLSLAction, HLSLCompatibleDataRef, HLSLOutcome},
+    AbstractVM, DataKind, DataRef, ScalarBasedAbstractVM, TypedRef,
 };
 
-// TODO rename to VectorAbstractVM
 #[derive(Debug)]
 pub enum AMDILAbstractVM {}
 impl AbstractVM for AMDILAbstractVM {
     type TScalarDataRef = (AMDILNameRef, VectorComponent);
 }
 impl ScalarBasedAbstractVM for AMDILAbstractVM {}
-impl ElementAbstractVM for AMDILAbstractVM {
+impl HLSLAbstractVM for AMDILAbstractVM {
     type TElementDataRef = AMDILDataRef;
 
     fn expand_element(elem: &Self::TElementDataRef) -> Vec<Self::TScalarDataRef> {
@@ -124,7 +123,7 @@ impl DataRef for AMDILDataRef {
         self.name.is_pure_input()
     }
 }
-impl ElementDataRef for AMDILDataRef {}
+impl HLSLCompatibleDataRef for AMDILDataRef {}
 impl DataRef for (AMDILNameRef, VectorComponent) {
     fn is_pure_input(&self) -> bool {
         self.0.is_pure_input()
@@ -191,10 +190,10 @@ impl Action<AMDILAbstractVM> for AMDILDeclaration {
         }
     }
 }
-impl ElementAction<AMDILAbstractVM> for AMDILDeclaration {
-    fn per_element_outcomes(&self) -> Vec<ElementOutcome<AMDILAbstractVM>> {
+impl HLSLAction<AMDILAbstractVM> for AMDILDeclaration {
+    fn per_element_outcomes(&self) -> Vec<HLSLOutcome<AMDILAbstractVM>> {
         match self {
-            AMDILDeclaration::NamedLiteral(name, value) => vec![ElementOutcome::Declaration {
+            AMDILDeclaration::NamedLiteral(name, value) => vec![HLSLOutcome::Declaration {
                 name: AMDILDataRef::named_literal(name.clone(), MaskedSwizzle::identity(4)),
                 value: Some(TypedRef {
                     data: AMDILDataRef::literal(*value, MaskedSwizzle::identity(4)),
@@ -206,7 +205,7 @@ impl ElementAction<AMDILAbstractVM> for AMDILDeclaration {
                 name,
                 len,
                 reg_type: _,
-            } => vec![ElementOutcome::Declaration {
+            } => vec![HLSLOutcome::Declaration {
                 name: AMDILDataRef::named_input_register(
                     name.clone(),
                     MaskedSwizzle::identity(*len as usize),
@@ -217,7 +216,7 @@ impl ElementAction<AMDILAbstractVM> for AMDILDeclaration {
                 name,
                 len,
                 reg_type: _,
-            } => vec![ElementOutcome::Declaration {
+            } => vec![HLSLOutcome::Declaration {
                 name: AMDILDataRef::named_output_register(
                     name.clone(),
                     MaskedSwizzle::identity(*len as usize),

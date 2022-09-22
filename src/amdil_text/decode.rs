@@ -1,5 +1,8 @@
 use crate::{
-    abstract_machine::{vector::MaskedSwizzle, ElementAction, ElementOutcome},
+    abstract_machine::{
+        hlsl::{HLSLAction, HLSLOutcome},
+        vector::MaskedSwizzle,
+    },
     Action,
 };
 
@@ -43,8 +46,8 @@ impl Action<AMDILAbstractVM> for Instruction {
         }
     }
 }
-impl ElementAction<AMDILAbstractVM> for Instruction {
-    fn per_element_outcomes(&self) -> Vec<ElementOutcome<AMDILAbstractVM>> {
+impl HLSLAction<AMDILAbstractVM> for Instruction {
+    fn per_element_outcomes(&self) -> Vec<HLSLOutcome<AMDILAbstractVM>> {
         match self {
             Instruction::DontCare(..) => {
                 vec![]

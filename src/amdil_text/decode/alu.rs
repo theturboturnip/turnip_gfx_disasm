@@ -1,5 +1,8 @@
 use crate::{
-    abstract_machine::{DataKind, DataWidth, ElementAction, ElementOutcome, TypedRef},
+    abstract_machine::{
+        hlsl::{HLSLAction, HLSLOutcome},
+        DataKind, DataWidth, TypedRef,
+    },
     amdil_text::{
         grammar,
         vm::{AMDILAbstractVM, AMDILDataRef},
@@ -170,10 +173,10 @@ impl Action<AMDILAbstractVM> for ALUInstruction {
         outcomes
     }
 }
-impl ElementAction<AMDILAbstractVM> for ALUInstruction {
-    fn per_element_outcomes(&self) -> Vec<ElementOutcome<AMDILAbstractVM>> {
+impl HLSLAction<AMDILAbstractVM> for ALUInstruction {
+    fn per_element_outcomes(&self) -> Vec<HLSLOutcome<AMDILAbstractVM>> {
         let comp_outcomes = Self::outcomes(&self);
-        vec![ElementOutcome::Dependency {
+        vec![HLSLOutcome::Dependency {
             opname: self.name.to_owned(),
             output_elem: TypedRef {
                 data: self.dst.clone(),
