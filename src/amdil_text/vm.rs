@@ -12,7 +12,7 @@ use crate::{Action, Outcome};
 use crate::abstract_machine::{
     analysis::variable::VariableCapableAbstractVM,
     hlsl::{HLSLAbstractVM, HLSLAction, HLSLCompatibleDataRef, HLSLOutcome},
-    AbstractVM, DataKind, DataRef, ScalarBasedAbstractVM, TypedRef,
+    AbstractVM, DataKind, DataRef, TypedRef,
 };
 
 #[derive(Debug)]
@@ -20,7 +20,6 @@ pub enum AMDILAbstractVM {}
 impl AbstractVM for AMDILAbstractVM {
     type TScalarDataRef = (AMDILNameRef, VectorComponent);
 }
-impl ScalarBasedAbstractVM for AMDILAbstractVM {}
 impl HLSLAbstractVM for AMDILAbstractVM {
     type TElementDataRef = AMDILDataRef;
 

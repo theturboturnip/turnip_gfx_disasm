@@ -39,9 +39,6 @@ pub trait AbstractVM: std::fmt::Debug {
     type TScalarDataRef: DataRef;
 }
 
-// Marker trait for VMs that use a TDataRef that refers to a single Scalar.
-pub trait ScalarBasedAbstractVM: AbstractVM {}
-
 pub trait Action<TVM: AbstractVM> {
     fn outcomes(&self) -> Vec<Outcome<TVM>>;
 }

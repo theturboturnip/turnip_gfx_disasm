@@ -1,15 +1,15 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::{
-    abstract_machine::{DataRef, ScalarBasedAbstractVM, TypedRef},
+    abstract_machine::{AbstractVM, DataRef, TypedRef},
     Action, Outcome,
 };
 
 /// Dependency solver for scalar-based abstract VMs
-pub struct ScalarDependencies<TVM: ScalarBasedAbstractVM> {
+pub struct ScalarDependencies<TVM: AbstractVM> {
     dependents: HashMap<TVM::TScalarDataRef, HashSet<TypedRef<TVM::TScalarDataRef>>>,
 }
-impl<TVM: ScalarBasedAbstractVM> ScalarDependencies<TVM> {
+impl<TVM: AbstractVM> ScalarDependencies<TVM> {
     pub fn new() -> Self {
         Self {
             dependents: HashMap::new(),
