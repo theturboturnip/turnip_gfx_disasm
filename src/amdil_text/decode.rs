@@ -1,6 +1,6 @@
 use crate::{
     abstract_machine::{
-        hlsl::{HLSLAction, HLSLOutcome},
+        hlsl::compat::{HLSLCompatibleAction, HLSLCompatibleOutcome},
         vector::MaskedSwizzle,
     },
     ScalarAction,
@@ -46,8 +46,8 @@ impl ScalarAction<AMDILAbstractVM> for Instruction {
         }
     }
 }
-impl HLSLAction<AMDILAbstractVM> for Instruction {
-    fn per_element_outcomes(&self) -> Vec<HLSLOutcome<AMDILAbstractVM>> {
+impl HLSLCompatibleAction<AMDILAbstractVM> for Instruction {
+    fn hlsl_outcomes(&self) -> Vec<HLSLCompatibleOutcome<AMDILAbstractVM>> {
         match self {
             Instruction::DontCare(..) => {
                 vec![]
@@ -60,8 +60,8 @@ impl HLSLAction<AMDILAbstractVM> for Instruction {
                     vec![]
                 }
             }
-            Instruction::Decl(decl) => decl.per_element_outcomes(),
-            Instruction::Alu(alu) => alu.per_element_outcomes(),
+            Instruction::Decl(decl) => decl.hlsl_outcomes(),
+            Instruction::Alu(alu) => alu.hlsl_outcomes(),
         }
     }
 }

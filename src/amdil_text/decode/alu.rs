@@ -1,6 +1,6 @@
 use crate::{
     abstract_machine::{
-        hlsl::{HLSLAction, HLSLOutcome},
+        hlsl::compat::{HLSLCompatibleAction, HLSLCompatibleOutcome},
         DataKind, DataWidth, TypedRef,
     },
     amdil_text::{
@@ -121,25 +121,25 @@ impl ScalarAction<AMDILAbstractVM> for ALUInstruction {
             match (self.output_dep, self.dst.swizzle[i]) {
                 (OutputDep::PerComponent, Some(dst_comp)) => {
                     outcomes.push(ScalarOutcome::Dependency {
-                    output: TypedRef {
-                        data: (self.dst.name.clone(), dst_comp),
-                        kind: self.data_kind,
-                        width: DataWidth::E32,
-                    },
-                    inputs: self
-                        .srcs
-                        .iter()
-                        .map(|src| {
-                            let src_comp = src.swizzle[i].expect(
-                                "src component which mapped to dst component wasn't available",
-                            );
-                            TypedRef {
-                                data: (src.name.clone(), src_comp),
-                                kind: self.data_kind,
-                                width: DataWidth::E32,
-                            }
-                        })
-                        .collect(),
+                        output: TypedRef {
+                            data: (self.dst.name.clone(), dst_comp),
+                            kind: self.data_kind,
+                            width: DataWidth::E32,
+                        },
+                        inputs: self
+                            .srcs
+                            .iter()
+                            .map(|src| {
+                                let src_comp = src.swizzle[i].expect(
+                                    "src component which mapped to dst component wasn't available",
+                                );
+                                TypedRef {
+                                    data: (src.name.clone(), src_comp),
+                                    kind: self.data_kind,
+                                    width: DataWidth::E32,
+                                }
+                            })
+                            .collect(),
                     })
                 }
                 (OutputDep::All, Some(dst_comp)) => outcomes.push(ScalarOutcome::Dependency {
@@ -175,24 +175,16 @@ impl ScalarAction<AMDILAbstractVM> for ALUInstruction {
         outcomes
     }
 }
-impl HLSLAction<AMDILAbstractVM> for ALUInstruction {
-    fn per_element_outcomes(&self) -> Vec<HLSLOutcome<AMDILAbstractVM>> {
+impl HLSLCompatibleAction<AMDILAbstractVM> for ALUInstruction {
+    fn hlsl_outcomes(&self) -> Vec<HLSLCompatibleOutcome<AMDILAbstractVM>> {
         let comp_outcomes = Self::outcomes(&self);
-        vec![HLSLOutcome::Dependency {
+        vec![HLSLCompatibleOutcome::Operation {
             opname: self.name.to_owned(),
-            output_elem: TypedRef {
-                data: self.dst.clone(),
-                kind: self.data_kind,
-                width: DataWidth::E32,
-            },
+            output_elem: self.dst.clone().into_hlsl(self.data_kind),
             input_elems: self
                 .srcs
                 .iter()
-                .map(|src| TypedRef {
-                    data: src.clone(),
-                    kind: self.data_kind,
-                    width: DataWidth::E32,
-                })
+                .map(|src| src.clone().into_hlsl(self.data_kind))
                 .collect(),
             component_deps: comp_outcomes
                 .into_iter()

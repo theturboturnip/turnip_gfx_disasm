@@ -1,19 +1,16 @@
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 use crate::abstract_machine::{
-    hlsl::{HLSLAbstractVM, HLSLAction, HLSLOutcome},
+    hlsl::compat::{
+        ExpandsIntoHLSLComponents, HLSLCompatibleAbstractVM, HLSLCompatibleAction,
+        HLSLCompatibleOutcome, HLSLDataRefSpec,
+    },
     vector::{MaskedSwizzle, VectorComponent, VECTOR_COMPONENTS},
-    DataKind, TypedRef,
+    DataKind, ScalarAbstractVM,
 };
 
 pub type ScalarVariableRef = (Variable, VectorComponent);
 pub type VectorVariableRef = (Variable, MaskedSwizzle);
-
-/// Variable analysis is possible on vector and scalar VMs, but needs to be able to refer to specifically scalar values.
-pub trait VariableCapableAbstractVM: HLSLAbstractVM {
-    /// Returns a (name, components) pair which informs the value of a variable mapping to the given element.
-    fn variable_info(elem: &Self::TElementDataRef, unique_id: u64) -> (String, u8);
-}
 
 pub type Variable = Rc<RefCell<VariableInfo>>;
 
@@ -104,13 +101,13 @@ impl std::fmt::Display for VariableAbstractVMOutcome {
 ///
 /// Maps each known scalar to a "scalar variable reference" - e.g. "at this point in the program the scalar ref r0.x is mapped to variable_0.y"
 #[derive(Debug)]
-pub struct VariableAbstractMachine<TVM: VariableCapableAbstractVM> {
+pub struct VariableAbstractMachine<TVM: HLSLCompatibleAbstractVM + ScalarAbstractVM> {
     tick: u64,
     current_scalar_names: HashMap<TVM::TScalarDataRef, ScalarVariableRef>,
     known_variables: Vec<Variable>,
     actions: Vec<(u64, VariableAbstractVMOutcome)>,
 }
-impl<TVM: VariableCapableAbstractVM> VariableAbstractMachine<TVM> {
+impl<TVM: HLSLCompatibleAbstractVM> VariableAbstractMachine<TVM> {
     pub fn new() -> Self {
         Self {
             tick: 0,
@@ -120,15 +117,17 @@ impl<TVM: VariableCapableAbstractVM> VariableAbstractMachine<TVM> {
         }
     }
 
-    fn add_new_variable_from_elem(
+    fn add_new_variable_from_expandable<
+        T: ExpandsIntoHLSLComponents<TName = TVM::TElementNameRef>,
+    >(
         &mut self,
-        elem: &TVM::TElementDataRef,
+        components: u8,
         kind: DataKind,
+        elem: &T,
     ) -> Variable {
-        let (name, components) = TVM::variable_info(elem, self.known_variables.len() as u64);
         let variable = Rc::new(RefCell::new(VariableInfo {
             id: self.known_variables.len(),
-            name,
+            name: format!("var{:0>3}", self.known_variables.len()),
             kind,
             components,
             tick_created: self.tick,
@@ -138,6 +137,17 @@ impl<TVM: VariableCapableAbstractVM> VariableAbstractMachine<TVM> {
             self.current_scalar_names.insert(scalar_ref, scalar_var_ref);
         }
         variable
+    }
+
+    fn add_new_variable_from_elem(
+        &mut self,
+        elem: &HLSLDataRefSpec<TVM::TElementNameRef>,
+    ) -> Variable {
+        self.add_new_variable_from_expandable(
+            elem.base_name_ref.1.num_used_components(),
+            elem.kind,
+            elem,
+        )
     }
 
     /// Take an element ref and convert it to a vector variable reference, potentially creating a new variable if necessary.
@@ -152,9 +162,11 @@ impl<TVM: VariableCapableAbstractVM> VariableAbstractMachine<TVM> {
     /// In all other cases, an existing variable is returned
     fn map_elem_ref_to_variable(
         &mut self,
-        elem: TypedRef<TVM::TElementDataRef>,
+        elem: &HLSLDataRefSpec<TVM::TElementNameRef>,
     ) -> VectorVariableRef {
-        let scalar_comps = TVM::expand_element(&elem.data);
+        // TODO ONLY REMAP NAMES FOR GENERAL REGISTERS
+
+        let scalar_comps = elem.expand();
         let expected_number_of_comps = scalar_comps.len();
         let scalar_comps_as_vars: Vec<Option<_>> = scalar_comps
             .into_iter()
@@ -175,7 +187,7 @@ impl<TVM: VariableCapableAbstractVM> VariableAbstractMachine<TVM> {
         }) {
             // make a new variable that doesn't depend on any previous values
             let (var, swizz) = (
-                self.add_new_variable_from_elem(&elem.data, elem.kind),
+                self.add_new_variable_from_elem(&elem),
                 MaskedSwizzle::identity(expected_number_of_comps),
             );
             self.add_outcome(VariableAbstractVMOutcome::Declaration {
@@ -194,7 +206,7 @@ impl<TVM: VariableCapableAbstractVM> VariableAbstractMachine<TVM> {
                 // 3) not all components map to the same old vector variable
                 // make a new variable that doesn't depend on any previous values
                 let (var, swizz) = (
-                    self.add_new_variable_from_elem(&elem.data, elem.kind),
+                    self.add_new_variable_from_elem(elem),
                     MaskedSwizzle::identity(expected_number_of_comps),
                 );
                 self.add_outcome(VariableAbstractVMOutcome::Definition {
@@ -218,13 +230,15 @@ impl<TVM: VariableCapableAbstractVM> VariableAbstractMachine<TVM> {
     }
 
     /// Given a [ElementAbstractVM::TElementDataRef] and the [Variable] it *directly* maps to, return the (scalar data -> scalar variable) mappings
-    fn map_to_scalar_vars(
-        elem: &TVM::TElementDataRef,
+    fn map_to_scalar_vars<T: ExpandsIntoHLSLComponents<TName = TVM::TElementNameRef>>(
+        elem: &T,
         variable: &Variable,
-    ) -> Vec<(TVM::TScalarDataRef, ScalarVariableRef)> {
-        // Check the length of the element is equal to the length of the variable
-        assert_eq!(TVM::variable_info(elem, 0).1, variable.borrow().components);
-        TVM::expand_element(elem)
+    ) -> Vec<((TVM::TElementNameRef, VectorComponent), ScalarVariableRef)> {
+        // assert_eq!(
+        //     variable.borrow().components,
+        //     elem.base_name_ref.1.num_used_components()
+        // );
+        elem.expand()
             .into_iter()
             .enumerate()
             .map(|(idx, elem)| (elem, (variable.clone(), VECTOR_COMPONENTS[idx])))
@@ -236,24 +250,23 @@ impl<TVM: VariableCapableAbstractVM> VariableAbstractMachine<TVM> {
         self.actions.push((self.tick, outcome))
     }
 
-    pub fn accum_action(&mut self, action: &dyn HLSLAction<TVM>) {
+    pub fn accum_action(&mut self, action: &dyn HLSLCompatibleAction<TVM>) {
         println!("tick {: >3}:", self.tick);
-        for outcome in action.per_element_outcomes() {
+        for outcome in action.hlsl_outcomes() {
             match outcome {
-                HLSLOutcome::Declaration { name, value } => {
+                HLSLCompatibleOutcome::Declaration {
+                    name,
+                    literal_value,
+                } => {
                     // Create a new variable based on the name
-                    let var = self.add_new_variable_from_elem(
-                        &name,
-                        (&value)
-                            .as_ref()
-                            .map_or(DataKind::Hole, |typed_ref| typed_ref.kind),
-                    );
-                    // TODO RECORD VARIABLE ORIGIN
+                    let var =
+                        self.add_new_variable_from_expandable(name.n_components, name.kind, &name);
+                    // TODO RECORD VARIABLE VALUE
                     self.add_outcome(VariableAbstractVMOutcome::Declaration {
                         new_var: var.clone(),
                     })
                 }
-                HLSLOutcome::Dependency {
+                HLSLCompatibleOutcome::Operation {
                     opname,
                     output_elem,
                     input_elems,
@@ -262,7 +275,7 @@ impl<TVM: VariableCapableAbstractVM> VariableAbstractMachine<TVM> {
                     // Convert the input elements into variables
                     let input_vars: Vec<VectorVariableRef> = input_elems
                         .into_iter()
-                        .map(|elem| self.map_elem_ref_to_variable(elem))
+                        .map(|elem| self.map_elem_ref_to_variable(&elem))
                         .collect();
 
                     // Create a new variable for the output
@@ -280,7 +293,7 @@ impl<TVM: VariableCapableAbstractVM> VariableAbstractMachine<TVM> {
                     //     break;
                     // }
 
-                    let output_var = self.map_elem_ref_to_variable(output_elem);
+                    let output_var = self.map_elem_ref_to_variable(&output_elem);
 
                     // Gather an equivalent to component_deps where all inputs have been converted to Variable references
                     // Do this after converting the input elements themselves, because that might have created new variables and changed the scalar mapping

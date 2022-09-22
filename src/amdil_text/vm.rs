@@ -5,50 +5,20 @@
 //! All data is represented as 4-component vectors.
 //! Inputs to instructions can be swizzled i.e. can have their components reordered or reused (v0.xyxx, v3.wzwx etc. are valid)
 
-use crate::abstract_machine::vector::{MaskedSwizzle, VectorComponent, VECTOR_COMPONENTS};
+use crate::abstract_machine::hlsl::compat::HLSLCompatibleAbstractVM;
+use crate::abstract_machine::vector::{MaskedSwizzle, VECTOR_COMPONENTS};
 use crate::abstract_machine::DataWidth;
 use crate::{ScalarAction, ScalarOutcome};
 
-use crate::abstract_machine::{
-    analysis::variable::VariableCapableAbstractVM,
-    hlsl::{HLSLAbstractVM, HLSLAction, HLSLCompatibleDataRef, HLSLOutcome},
-    DataKind, DataRef, ScalarAbstractVM, TypedRef,
-};
+use crate::abstract_machine::{DataKind, DataRef, TypedRef};
+
+pub mod hlsl;
 
 #[derive(Debug)]
 pub enum AMDILAbstractVM {}
-impl ScalarAbstractVM for AMDILAbstractVM {
-    type TScalarDataRef = (AMDILNameRef, VectorComponent);
-}
-impl HLSLAbstractVM for AMDILAbstractVM {
-    type TElementDataRef = AMDILDataRef;
-
-    fn expand_element(elem: &Self::TElementDataRef) -> Vec<Self::TScalarDataRef> {
-        elem.swizzle
-            .0
-            .iter()
-            .filter_map(|comp| comp.map(|comp| (elem.name.clone(), comp)))
-            .collect()
-    }
-}
-impl VariableCapableAbstractVM for AMDILAbstractVM {
-    fn variable_info(elem: &Self::TElementDataRef, unique_id: u64) -> (String, u8) {
-        let name = match &elem.name {
-            AMDILNameRef::NamedRegister(_) => format!("variable{unique_id:0>3}"),
-            AMDILNameRef::Literal(data) => format!(
-                "({:x}, {:x}, {:x}, {:x})",
-                data[0], data[1], data[2], data[3]
-            ),
-            AMDILNameRef::NamedLiteral(name, ..) => name.clone(),
-            AMDILNameRef::NamedBuffer { name, idx } => format!("{name}[{idx}]"),
-            AMDILNameRef::NamedInputRegister(name, ..) => name.clone(),
-            AMDILNameRef::NamedOutputRegister(name, ..) => name.clone(),
-        };
-        (
-            name,
-            elem.swizzle.0.iter().filter(|c| c.is_some()).count() as u8,
-        )
-    }
+// ScalarAbstractVM is automatically implemented, because HLSLAbstractVM is implemented
+impl HLSLCompatibleAbstractVM for AMDILAbstractVM {
+    type TElementNameRef = AMDILNameRef;
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -122,12 +92,6 @@ impl DataRef for AMDILDataRef {
         self.name.is_pure_input()
     }
 }
-impl HLSLCompatibleDataRef for AMDILDataRef {}
-impl DataRef for (AMDILNameRef, VectorComponent) {
-    fn is_pure_input(&self) -> bool {
-        self.0.is_pure_input()
-    }
-}
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum AMDILDeclaration {
@@ -186,45 +150,6 @@ impl ScalarAction<AMDILAbstractVM> for AMDILDeclaration {
                     value: None,
                 })
                 .collect(),
-        }
-    }
-}
-impl HLSLAction<AMDILAbstractVM> for AMDILDeclaration {
-    fn per_element_outcomes(&self) -> Vec<HLSLOutcome<AMDILAbstractVM>> {
-        match self {
-            AMDILDeclaration::NamedLiteral(name, value) => vec![HLSLOutcome::Declaration {
-                name: AMDILDataRef::named_literal(name.clone(), MaskedSwizzle::identity(4)),
-                value: Some(TypedRef {
-                    data: AMDILDataRef::literal(*value, MaskedSwizzle::identity(4)),
-                    kind: DataKind::Hole,
-                    width: DataWidth::E32,
-                }),
-            }],
-            AMDILDeclaration::NamedInputRegister {
-                name,
-                len,
-                reg_type: _,
-            } => vec![HLSLOutcome::Declaration {
-                name: AMDILDataRef::named_input_register(
-                    name.clone(),
-                    MaskedSwizzle::identity(*len as usize),
-                ),
-                value: None,
-            }],
-            AMDILDeclaration::NamedOutputRegister {
-                name,
-                len,
-                reg_type: _,
-            } => vec![HLSLOutcome::Declaration {
-                name: AMDILDataRef::named_output_register(
-                    name.clone(),
-                    MaskedSwizzle::identity(*len as usize),
-                ),
-                value: None,
-            }],
-            _ => {
-                vec![]
-            }
         }
     }
 }

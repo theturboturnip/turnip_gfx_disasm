@@ -99,6 +99,16 @@ impl MaskedSwizzle {
             if len >= 4 { self.0[3] } else { None },
         ])
     }
+
+    pub fn num_used_components(&self) -> u8 {
+        self.0.iter().fold(0, |num_used, comp| {
+            if comp.is_some() {
+                num_used + 1
+            } else {
+                num_used
+            }
+        })
+    }
 }
 impl Index<usize> for MaskedSwizzle {
     type Output = Option<VectorComponent>;
