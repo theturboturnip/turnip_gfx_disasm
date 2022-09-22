@@ -1,7 +1,6 @@
 use std::{hash::Hash, ops::Deref};
 
 pub mod analysis;
-pub mod scalar;
 pub mod vector;
 
 pub trait DataRef: Clone + PartialEq + Eq + Hash + std::fmt::Debug {

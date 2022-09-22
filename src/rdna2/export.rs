@@ -4,10 +4,8 @@ use std::convert::TryFrom;
 use bitutils::bits;
 
 use crate::{
-    abstract_machine::{
-        scalar::{ScalarAbstractVM, ScalarDataRef, ScalarOutcome, ScalarOutput},
-        DataKind, DataWidth, TypedRef,
-    },
+    abstract_machine::{DataKind, DataWidth, TypedRef},
+    rdna2::vm::{RDNA2AbstractVM, RDNA2DataRef, RDNA2Outcome, RDNA2Output},
     Action, Outcome,
 };
 
@@ -69,8 +67,8 @@ impl Decodable for EXPORT {
         }
     }
 }
-impl Action<ScalarAbstractVM> for EXPORT {
-    fn outcomes(&self) -> Vec<ScalarOutcome> {
+impl Action<RDNA2AbstractVM> for EXPORT {
+    fn outcomes(&self) -> Vec<RDNA2Outcome> {
         let mut deps = vec![];
         let possible_exports = if self.COMPR {
             [self.VSRC0, self.VSRC0, self.VSRC1, self.VSRC1]
@@ -86,24 +84,24 @@ impl Action<ScalarAbstractVM> for EXPORT {
             // bit i is set => output #i is enabled
 
             let output_ref = match self.TARGET {
-                TARGET::Position(idx) => ScalarOutput::VertPosition {
+                TARGET::Position(idx) => RDNA2Output::VertPosition {
                     idx: idx as u64,
                     vector_comp: i,
                 },
-                TARGET::Parameter(idx) => ScalarOutput::VertParameter {
+                TARGET::Parameter(idx) => RDNA2Output::VertParameter {
                     idx: idx as u64,
                     vector_comp: i,
                 },
-                TARGET::RenderTarget(rt) => ScalarOutput::FragColor {
+                TARGET::RenderTarget(rt) => RDNA2Output::FragColor {
                     idx: rt as u64,
                     vector_comp: i,
                 },
-                TARGET::Z => ScalarOutput::Other {
+                TARGET::Z => RDNA2Output::Other {
                     name: "Z",
                     idx: 0,
                     vector_comp: i,
                 },
-                TARGET::PrimitiveData => ScalarOutput::Other {
+                TARGET::PrimitiveData => RDNA2Output::Other {
                     name: "PrimitiveData",
                     idx: 0,
                     vector_comp: i,
@@ -119,12 +117,12 @@ impl Action<ScalarAbstractVM> for EXPORT {
 
             deps.push(Outcome::Dependency {
                 inputs: vec![TypedRef {
-                    data: ScalarDataRef::GeneralPurposeRegister(possible_exports[i] as u64),
+                    data: RDNA2DataRef::GeneralPurposeRegister(possible_exports[i] as u64),
                     kind: DataKind::Untyped,
                     width,
                 }],
                 output: TypedRef {
-                    data: ScalarDataRef::Output(output_ref),
+                    data: RDNA2DataRef::Output(output_ref),
                     kind: DataKind::Untyped,
                     width,
                 },

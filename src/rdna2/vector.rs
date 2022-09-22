@@ -2,10 +2,7 @@
 use bitutils::bits;
 
 use crate::{
-    abstract_machine::{
-        scalar::{ScalarAbstractVM, ScalarDataRef, ScalarOutcome},
-        DataKind, DataWidth, TypedRef,
-    },
+    abstract_machine::{DataKind, DataWidth, TypedRef},
     Action, Outcome,
 };
 
@@ -15,6 +12,7 @@ use super::{
         VOPC_Opcode,
     },
     utils::{decode_vector_src, extract_u32, ScalarInputOperand, VectorInputOperand},
+    vm::{RDNA2AbstractVM, RDNA2DataRef, RDNA2Outcome},
     Decodable, RDNA2DecodeError,
 };
 
@@ -41,20 +39,20 @@ pub enum VOP {
     },
 }
 impl VOP {
-    fn operand_to_dataref(SRC0: VectorInputOperand, extra: Option<u32>) -> ScalarDataRef {
+    fn operand_to_dataref(SRC0: VectorInputOperand, extra: Option<u32>) -> RDNA2DataRef {
         match SRC0 {
             VectorInputOperand::Base(ScalarInputOperand::ScalarValueRef(v)) => v,
             VectorInputOperand::Base(ScalarInputOperand::Extra32BitConstant) => {
-                ScalarDataRef::Literal(extra.unwrap() as u64)
+                RDNA2DataRef::Literal(extra.unwrap() as u64)
             }
             VectorInputOperand::DPP8
             | VectorInputOperand::DPP16
             | VectorInputOperand::DPP8FI
             | VectorInputOperand::SDWA => {
                 // TODO this is some form of parallelism between workers for DPP - mention that?
-                ScalarDataRef::GeneralPurposeRegister(bits!(extra.unwrap(), 0:7) as u64)
+                RDNA2DataRef::GeneralPurposeRegister(bits!(extra.unwrap(), 0:7) as u64)
             }
-            VectorInputOperand::LDSDirect => ScalarDataRef::SpecialReg {
+            VectorInputOperand::LDSDirect => RDNA2DataRef::SpecialReg {
                 name: "LDS (Local Data Shader) Direct Access",
                 idx: 0,
             },
@@ -147,8 +145,8 @@ impl Decodable for VOP {
         }
     }
 }
-impl Action<ScalarAbstractVM> for VOP {
-    fn outcomes(&self) -> Vec<ScalarOutcome> {
+impl Action<RDNA2AbstractVM> for VOP {
+    fn outcomes(&self) -> Vec<RDNA2Outcome> {
         match self {
             Self::VOP1 {
                 OP: _,
@@ -166,7 +164,7 @@ impl Action<ScalarAbstractVM> for VOP {
                         width,
                     }],
                     output: TypedRef {
-                        data: ScalarDataRef::GeneralPurposeRegister(*VDST as u64),
+                        data: RDNA2DataRef::GeneralPurposeRegister(*VDST as u64),
                         kind,
                         width,
                     },
@@ -190,13 +188,13 @@ impl Action<ScalarAbstractVM> for VOP {
                             width,
                         },
                         TypedRef {
-                            data: ScalarDataRef::GeneralPurposeRegister(*VSRC1 as u64),
+                            data: RDNA2DataRef::GeneralPurposeRegister(*VSRC1 as u64),
                             kind,
                             width,
                         },
                     ],
                     output: TypedRef {
-                        data: ScalarDataRef::GeneralPurposeRegister(*VDST as u64),
+                        data: RDNA2DataRef::GeneralPurposeRegister(*VDST as u64),
                         kind,
                         width,
                     },
@@ -357,8 +355,8 @@ impl Decodable for VOP3 {
         }
     }
 }
-impl Action<ScalarAbstractVM> for VOP3 {
-    fn outcomes(&self) -> Vec<ScalarOutcome> {
+impl Action<RDNA2AbstractVM> for VOP3 {
+    fn outcomes(&self) -> Vec<RDNA2Outcome> {
         todo!()
     }
 }

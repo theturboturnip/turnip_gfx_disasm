@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use clap::Parser;
 use turnip_gfx_disasm::abstract_machine::analysis::dependency::ScalarDependencies;
-use turnip_gfx_disasm::abstract_machine::scalar::ScalarDataRef;
+use turnip_gfx_disasm::rdna2::vm::RDNA2DataRef;
 use turnip_gfx_disasm::rdna2::RDNA2Decoder;
 use turnip_gfx_disasm::Decoder;
 
@@ -32,7 +32,7 @@ fn main() {
 
     for dependent in resolver.dependents() {
         match dependent.0 {
-            ScalarDataRef::Output { .. } => {
+            RDNA2DataRef::Output { .. } => {
                 println!("Output {:?} depends on {:?}", dependent.0, dependent.1)
             }
             _ => {}

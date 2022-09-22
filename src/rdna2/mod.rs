@@ -10,8 +10,8 @@
 use std::marker::PhantomData;
 
 use crate::{
-    abstract_machine::scalar::{ScalarAbstractVM, ScalarOutcome},
     rdna2::opcodes::SOPP_Opcode,
+    rdna2::vm::{RDNA2AbstractVM, RDNA2Outcome},
     Action,
 };
 
@@ -25,6 +25,8 @@ use vector::{VOP, VOP3};
 
 mod export;
 use export::EXPORT;
+
+pub mod vm;
 
 mod utils;
 
@@ -121,8 +123,8 @@ impl Decodable for Instruction {
         }
     }
 }
-impl Action<ScalarAbstractVM> for Instruction {
-    fn outcomes(&self) -> Vec<ScalarOutcome> {
+impl Action<RDNA2AbstractVM> for Instruction {
+    fn outcomes(&self) -> Vec<RDNA2Outcome> {
         match self {
             Self::ScalarALU(instr) => instr.outcomes(),
             Self::ScalarMemory(instr) => instr.outcomes(),
@@ -134,7 +136,7 @@ impl Action<ScalarAbstractVM> for Instruction {
     }
 }
 
-pub type RDNA2Program = Vec<Box<dyn Action<ScalarAbstractVM>>>;
+pub type RDNA2Program = Vec<Box<dyn Action<RDNA2AbstractVM>>>;
 
 pub struct RDNA2Decoder<'a> {
     _lifetime: PhantomData<&'a ()>, // NOTE: there's no generic type here!
@@ -146,9 +148,9 @@ impl<'a> RDNA2Decoder<'a> {
         }
     }
 }
-impl<'a> super::Decoder<ScalarAbstractVM> for RDNA2Decoder<'a> {
+impl<'a> super::Decoder<RDNA2AbstractVM> for RDNA2Decoder<'a> {
     type Input = &'a [u8];
-    type BaseAction = Box<dyn Action<ScalarAbstractVM>>;
+    type BaseAction = Box<dyn Action<RDNA2AbstractVM>>;
     type Err = RDNA2DecodeError;
 
     fn decode(&self, mut data: Self::Input) -> Result<RDNA2Program, RDNA2DecodeError> {

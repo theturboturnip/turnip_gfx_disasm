@@ -1,17 +1,17 @@
 use crate::Outcome;
 
-use super::{AbstractVM, DataRef, ScalarBasedAbstractVM};
+use crate::abstract_machine::{AbstractVM, DataRef, ScalarBasedAbstractVM};
 
 #[derive(Debug)]
-pub enum ScalarAbstractVM {}
-impl AbstractVM for ScalarAbstractVM {
-    type TScalarDataRef = ScalarDataRef;
+pub enum RDNA2AbstractVM {}
+impl AbstractVM for RDNA2AbstractVM {
+    type TScalarDataRef = RDNA2DataRef;
 }
-impl ScalarBasedAbstractVM for ScalarAbstractVM {}
-pub type ScalarOutcome = Outcome<ScalarAbstractVM>;
+impl ScalarBasedAbstractVM for RDNA2AbstractVM {}
+pub type RDNA2Outcome = Outcome<RDNA2AbstractVM>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum ScalarOutput {
+pub enum RDNA2Output {
     VertPosition {
         idx: u64,
         vector_comp: usize,
@@ -31,11 +31,8 @@ pub enum ScalarOutput {
     },
 }
 
-/// TODO more values here - special registers? function arguments?
-///
-/// TODO type information?
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum ScalarDataRef {
+pub enum RDNA2DataRef {
     /// 64-bit scalar per-executor-group register
     GeneralPurposeGlobalRegister(u64),
     /// 64-bit scalar per-executor register
@@ -50,12 +47,12 @@ pub enum ScalarDataRef {
     ///
     /// Fragment shaders are a special case because they usually write to vectors
     /// e.g. output color, so we have a component index here.
-    Output(ScalarOutput),
+    Output(RDNA2Output),
 }
-impl DataRef for ScalarDataRef {
+impl DataRef for RDNA2DataRef {
     fn is_pure_input(&self) -> bool {
         match self {
-            ScalarDataRef::Literal(..) => true,
+            RDNA2DataRef::Literal(..) => true,
             _ => false,
         }
     }
