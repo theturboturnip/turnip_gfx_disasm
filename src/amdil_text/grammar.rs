@@ -2,12 +2,12 @@ use std::num::ParseIntError;
 
 use nom::{
     branch::alt,
-    bytes::complete::{tag, take_while, take_while1},
+    bytes::complete::{tag, take_until1, take_while, take_while1},
     character::complete::{anychar, line_ending},
-    combinator::opt,
+    combinator::{complete, opt},
     error::{ErrorKind, ParseError},
-    multi::{many0, many_m_n, separated_list0},
-    sequence::delimited,
+    multi::{many0, many_m_n, separated_list0, separated_list1},
+    sequence::{delimited, tuple},
     IResult,
 };
 
@@ -15,8 +15,27 @@ use crate::abstract_machine::vector::{MaskedSwizzle, VectorComponent};
 
 #[derive(Debug, Clone)]
 pub struct Instruction {
+    /// Instruction name
+    ///
+    /// ```text
+    /// [a-zA-Z][a-zA-Z0-9]+           // Base name
+    /// (                              // Modifier-or-extra-name-part
+    ///     _                          // Modifier separator (or just part of the base name)
+    ///     [a-zA-Z0-9]+               // Modifier name (or just part of the base name)
+    ///     (                          // Modifier argument (if present, preceding separator+name were a modifier)
+    ///         \([a-zA-Z0-9]+\)
+    ///     )?
+    /// )*
+    /// ```
     pub instr: String,
+    pub instr_mods: Vec<InstrMod>,
     pub args: Vec<Arg>,
+}
+
+#[derive(Debug, Clone)]
+pub struct InstrMod {
+    pub name: String,
+    pub value: String,
 }
 
 #[derive(Debug, Clone)]
@@ -59,16 +78,15 @@ pub fn parse_lines(data: &str) -> IResult<&str, Vec<Instruction>, AMDILTextParse
     )(data)?;
     let instrs: Result<Vec<Instruction>, nom::Err<AMDILTextParseError<&str>>> = lines
         .into_iter()
-        .map(|data| match parse_line(data) {
-            Ok((_, instr)) => Ok(instr),
-            Err(e) => Err(e),
-        })
+        // Filter out empty lines
+        .filter(|data| data.len() > 0)
+        .map(|data| Ok(parse_line(data)?.1))
         .collect();
 
     Ok((data, instrs?))
 }
 fn parse_line(data: &str) -> IResult<&str, Instruction, AMDILTextParseError<&str>> {
-    let (data, instr) = take_while(|c| c != ' ')(data)?;
+    let (data, (instr, instr_mods)) = parse_instruction_name(data)?;
 
     // If there is a space
     let (data, args) = if let (data, Some(_)) = opt(tag(" "))(data)? {
@@ -86,7 +104,51 @@ fn parse_line(data: &str) -> IResult<&str, Instruction, AMDILTextParseError<&str
         data,
         Instruction {
             instr: instr.to_owned(),
+            instr_mods,
             args,
+        },
+    ))
+}
+fn parse_instruction_name(
+    data: &str,
+) -> IResult<&str, (String, Vec<InstrMod>), AMDILTextParseError<&str>> {
+    let (remaining_data, full_name) = take_while1(|c| c != ' ')(data)?;
+
+    // The components of the instruction name are underscore-separated
+    let (_, components) =
+        complete(separated_list1(tag("_"), take_while1(|c| c != '_')))(full_name)?;
+    let mut instr = components[0].to_owned();
+    let mut instr_mods = vec![];
+    for comp in components[1..].into_iter() {
+        if let Ok((_, instr_mod)) = parse_instr_mod(*comp) {
+            instr_mods.push(instr_mod);
+        } else if instr_mods.len() == 0 {
+            instr.push('_');
+            instr.push_str(*comp);
+        } else {
+            // Bad instruction name: non-modifier encountered after modifier
+            // TODO return error
+            panic!(
+                "bad instruction name '{}': non-modifier '{}' encountered after modifiers {:?}",
+                full_name, *comp, instr_mods
+            );
+        }
+    }
+
+    Ok((remaining_data, (instr, instr_mods)))
+}
+fn parse_instr_mod(data: &str) -> IResult<&str, InstrMod, AMDILTextParseError<&str>> {
+    use nom::character::complete::char;
+    let (data, (name, value)) = complete(tuple((
+        take_until1("("),
+        delimited(char('('), take_until1(")"), char(')')),
+    )))(data)?;
+
+    Ok((
+        data,
+        InstrMod {
+            name: name.to_owned(),
+            value: value.to_owned(),
         },
     ))
 }
@@ -134,6 +196,7 @@ fn parse_swizzle_mod(data: &str) -> IResult<&str, ArgMod, AMDILTextParseError<&s
             'z' => Some(VectorComponent::Z),
             'w' => Some(VectorComponent::W),
             '_' => None,
+            // TODO 0 and 1 are also allowed, but not included in VectorComponent yet
             _ => return Err(nom::Err::Error(AMDILTextParseError::BadVectorComponent(c))),
         };
         Ok((data, comp))

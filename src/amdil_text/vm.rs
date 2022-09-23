@@ -139,13 +139,7 @@ impl ScalarAction<AMDILAbstractVM> for AMDILDeclaration {
                 // TODO Declare all of the values in the array?
                 vec![]
             }
-            // VECTOR_COMPONENTS.iter().map(|comp| Outcome::Declaration { name: VectorNameRef::NamedBuffer { name: (), idx: () }, value: () })
             AMDILDeclaration::NamedInputRegister {
-                name,
-                len,
-                reg_type: _,
-            }
-            | AMDILDeclaration::NamedOutputRegister {
                 name,
                 len,
                 reg_type: _,
@@ -153,8 +147,19 @@ impl ScalarAction<AMDILAbstractVM> for AMDILDeclaration {
                 .iter()
                 .take(*len as usize)
                 .map(|comp| ScalarOutcome::Declaration {
-                    // TODO THIS IS WRONG FOR OUTPUT REGISTERS
                     name: (AMDILNameRef::NamedInputRegister(name.clone()), *comp).into(),
+                    value: None,
+                })
+                .collect(),
+            AMDILDeclaration::NamedOutputRegister {
+                name,
+                len,
+                reg_type: _,
+            } => VECTOR_COMPONENTS
+                .iter()
+                .take(*len as usize)
+                .map(|comp| ScalarOutcome::Declaration {
+                    name: (AMDILNameRef::NamedOutputRegister(name.clone()), *comp).into(),
                     value: None,
                 })
                 .collect(),
