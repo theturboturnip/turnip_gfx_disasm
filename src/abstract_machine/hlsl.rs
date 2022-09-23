@@ -1,3 +1,10 @@
+use std::{cell::RefCell, rc::Rc};
+
+use super::{
+    vector::{MaskedSwizzle, VectorComponent},
+    DataKind,
+};
+
 pub mod compat {
     use crate::abstract_machine::{
         vector::{MaskedSwizzle, VectorComponent, VECTOR_COMPONENTS},
@@ -6,7 +13,7 @@ pub mod compat {
 
     pub trait ExpandsIntoHLSLComponents {
         type TName;
-        fn expand(&self) -> Vec<(Self::TName, VectorComponent)>;
+        fn expand(&self) -> Vec<HLSLCompatibleScalarRef<Self::TName>>;
     }
 
     #[derive(Debug, Clone)]
@@ -18,14 +25,14 @@ pub mod compat {
     #[derive(Debug, Clone)]
     pub enum HLSLDataRefType {
         GenericRegister,
-        ShaderInput,
-        ShaderOutput,
+        ShaderInput(String),
+        ShaderOutput(String),
         Literal([u64; 4]),
         ArrayElement { of: Box<Self>, idx: u64 },
     }
     impl<TName: HLSLCompatibleNameRef> ExpandsIntoHLSLComponents for HLSLDataRefSpec<TName> {
         type TName = TName;
-        fn expand(&self) -> Vec<(TName, VectorComponent)> {
+        fn expand(&self) -> Vec<HLSLCompatibleScalarRef<TName>> {
             self.base_name_ref
                 .1
                  .0
@@ -46,13 +53,15 @@ pub mod compat {
     #[derive(Debug, Clone)]
     pub enum HLSLDeclarationSpecType {
         GenericRegister,
-        ShaderInput,
-        ShaderOutput,
-        Array { of: Box<Self>, len: u64 },
+        ShaderInput(String),
+        ShaderOutput(String),
+        // TODO re-enable array declarations once we re-work the HLSLCompatibleOutcome::Declaration enum, which is currently very single-variable-specific.
+        // Specifically, the declaration spec only has one base-name-ref, not one for each variable.
+        // Array { of: Box<Self>, len: u64 },
     }
     impl<TName: HLSLCompatibleNameRef> ExpandsIntoHLSLComponents for HLSLDeclarationSpec<TName> {
         type TName = TName;
-        fn expand(&self) -> Vec<(TName, VectorComponent)> {
+        fn expand(&self) -> Vec<HLSLCompatibleScalarRef<TName>> {
             (0..self.n_components)
                 .into_iter()
                 .map(|i| (self.base_name_ref.clone(), VECTOR_COMPONENTS[i as usize]))
@@ -78,14 +87,6 @@ pub mod compat {
         /// e.g. for DXBC and AMDIL instructions operate on vectors => TElementDataRef = a VectorDataRef.
         /// Must be convertible to an HLSL-esque representation
         type TElementNameRef: HLSLCompatibleNameRef;
-
-        // /// A type representing actual data that was used or mutated in an instruction
-        // ///
-        // /// Usually something like (TElementNameRef, MaskedSwizzle)
-        // type TElementDataRef: HLSLCompatibleDataRef;
-
-        // /// Given a [HLSLAbstractVM::TElementDataRef], expand it into constituent [AbstractVM::TScalarDataRef]
-        // fn expand_element(elem: &Self::TElementDataRef) -> Vec<Self::TScalarDataRef>;
     }
     impl<T> ScalarAbstractVM for T
     where
@@ -112,9 +113,113 @@ pub mod compat {
             output_elem: HLSLDataRefSpec<TVM::TElementNameRef>,
             input_elems: Vec<HLSLDataRefSpec<TVM::TElementNameRef>>,
             component_deps: Vec<(
-                TypedRef<TVM::TScalarDataRef>,
-                Vec<TypedRef<TVM::TScalarDataRef>>,
+                TypedRef<HLSLCompatibleScalarRef<TVM::TElementNameRef>>,
+                Vec<TypedRef<HLSLCompatibleScalarRef<TVM::TElementNameRef>>>,
             )>,
         },
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum HLSLVectorRef {
+    GenericRegister(u64),
+    ShaderInput(String),
+    ShaderOutput(String),
+    Literal([u64; 4]),
+    // TODO read/write permissions for ArrayElement?
+    ArrayElement { of: Box<Self>, idx: u64 },
+}
+
+pub type HLSLScalarElementRef = (HLSLVariable, VectorComponent);
+pub type HLSLElementRef = (HLSLVariable, MaskedSwizzle);
+
+pub type HLSLVariable = Rc<RefCell<HLSLVariableInfo>>;
+
+/// Single, unnamed unit of value with a specified kind
+///
+/// TODO store information on whether this is "important" i.e. a shader input or output
+#[derive(Debug)]
+pub struct HLSLVariableInfo {
+    pub vector_ref: HLSLVectorRef,
+    pub kind: DataKind,
+    pub n_components: u8,
+}
+
+#[derive(Debug, Clone)]
+pub enum HLSLOutcome {
+    // State that a new variable exists without setting its value
+    Declaration {
+        new_var: HLSLVariable,
+    },
+    // State that a new variable exists and has a given value taken directly from other variables
+    Definition {
+        new_var: HLSLVariable,
+        components: Vec<HLSLScalarElementRef>,
+    },
+    // State that the output of an operation has been assigned to some components of a variable
+    Operation {
+        output: HLSLElementRef,
+        op: String,
+        inputs: Vec<HLSLElementRef>,
+        // Mapping of each individual scalar output to each individual scalar input
+        scalar_deps: Vec<(HLSLScalarElementRef, Vec<HLSLScalarElementRef>)>,
+    },
+}
+
+impl std::fmt::Display for HLSLVectorRef {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        // TODO have a formatter that takes type into account
+        match self {
+            Self::GenericRegister(id) => write!(f, "var{:0>3}", id),
+            Self::Literal(data) => write!(
+                f,
+                "(0x{:x}, 0x{:x}, 0x{:x}, 0x{:x})",
+                data[0], data[1], data[2], data[3]
+            ),
+            Self::ShaderInput(name) | Self::ShaderOutput(name) => write!(f, "{}", name),
+            Self::ArrayElement { of: elem, idx } => write!(f, "{}[{}]", elem, idx),
+        }
+    }
+}
+
+impl std::fmt::Display for HLSLOutcome {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            Self::Declaration { new_var } => {
+                let var = new_var.borrow();
+                write!(f, "{:?}{} {};", var.kind, var.n_components, var.vector_ref)
+            }
+            Self::Definition {
+                new_var,
+                components,
+            } => {
+                {
+                    let var = new_var.borrow();
+                    write!(
+                        f,
+                        "{:?}{} {} = {:?}{}(",
+                        var.kind, var.n_components, var.vector_ref, var.kind, var.n_components
+                    )?;
+                }
+                for (refed_var, comp) in components {
+                    let referenced_var = refed_var.borrow();
+                    write!(f, "{}.{:?}, ", referenced_var.vector_ref, *comp)?;
+                }
+                write!(f, ");")
+            }
+            Self::Operation {
+                output, op, inputs, ..
+            } => {
+                {
+                    let output_var = output.0.borrow();
+                    write!(f, "{}{} = {}(", output_var.vector_ref, output.1, op)?;
+                }
+                for (refed_var, swizz) in inputs {
+                    let referenced_var = refed_var.borrow();
+                    write!(f, "{}{}, ", referenced_var.vector_ref, swizz)?;
+                }
+                write!(f, ");")
+            }
+        }
     }
 }

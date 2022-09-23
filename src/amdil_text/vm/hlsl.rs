@@ -38,7 +38,7 @@ impl HLSLCompatibleAction<AMDILAbstractVM> for AMDILDeclaration {
                     base_name_ref: AMDILNameRef::NamedInputRegister(name.clone()),
                     kind: DataKind::Hole,
                     n_components: *len,
-                    decl_type: HLSLDeclarationSpecType::ShaderInput,
+                    decl_type: HLSLDeclarationSpecType::ShaderInput(name.clone()),
                     name: name.clone(),
                 },
                 literal_value: None,
@@ -52,43 +52,45 @@ impl HLSLCompatibleAction<AMDILAbstractVM> for AMDILDeclaration {
                     base_name_ref: AMDILNameRef::NamedOutputRegister(name.clone()),
                     kind: DataKind::Hole,
                     n_components: *len,
-                    decl_type: HLSLDeclarationSpecType::ShaderInput,
+                    decl_type: HLSLDeclarationSpecType::ShaderInput(name.clone()),
                     name: name.clone(),
                 },
                 literal_value: None,
             }],
-            AMDILDeclaration::NamedBuffer { name, len } => {
-                vec![HLSLCompatibleOutcome::Declaration {
-                    name: HLSLDeclarationSpec {
-                        base_name_ref: AMDILNameRef::NamedOutputRegister(name.clone()),
-                        kind: DataKind::Hole,
-                        n_components: 4,
-                        decl_type: HLSLDeclarationSpecType::Array {
-                            of: Box::new(HLSLDeclarationSpecType::ShaderInput),
-                            len: *len,
-                        },
-                        name: name.clone(),
-                    },
-                    literal_value: None,
-                }]
-            }
+            _ => vec![],
+            // TODO re-enable this
+            // AMDILDeclaration::NamedBuffer { name, len } => {
+            //     vec![HLSLCompatibleOutcome::Declaration {
+            //         name: HLSLDeclarationSpec {
+            //             base_name_ref: AMDILNameRef::NamedOutputRegister(name.clone()),
+            //             kind: DataKind::Hole,
+            //             n_components: 4,
+            //             decl_type: HLSLDeclarationSpecType::Array {
+            //                 of: Box::new(HLSLDeclarationSpecType::ShaderInput(name.clone())),
+            //                 len: *len,
+            //             },
+            //             name: name.clone(),
+            //         },
+            //         literal_value: None,
+            //     }]
+            // }
         }
     }
 }
 
 impl AMDILDataRef {
     pub fn into_hlsl(self, kind: DataKind) -> HLSLDataRefSpec<AMDILNameRef> {
-        let ref_type = match self.name {
-            AMDILNameRef::Literal(data) => HLSLDataRefType::Literal(data),
-            AMDILNameRef::NamedBuffer { idx, .. } => HLSLDataRefType::ArrayElement {
-                of: Box::new(HLSLDataRefType::ShaderInput),
-                idx,
+        let ref_type = match &self.name {
+            AMDILNameRef::Literal(data) => HLSLDataRefType::Literal(*data),
+            AMDILNameRef::NamedBuffer { name, idx } => HLSLDataRefType::ArrayElement {
+                of: Box::new(HLSLDataRefType::ShaderInput(name.clone())),
+                idx: *idx,
             },
             AMDILNameRef::NamedLiteral(_) | AMDILNameRef::NamedRegister(_) => {
                 HLSLDataRefType::GenericRegister
             }
-            AMDILNameRef::NamedInputRegister(_) => HLSLDataRefType::ShaderInput,
-            AMDILNameRef::NamedOutputRegister(_) => HLSLDataRefType::ShaderOutput,
+            AMDILNameRef::NamedInputRegister(name) => HLSLDataRefType::ShaderInput(name.clone()),
+            AMDILNameRef::NamedOutputRegister(name) => HLSLDataRefType::ShaderOutput(name.clone()),
         };
         HLSLDataRefSpec {
             base_name_ref: (self.name, self.swizzle),
