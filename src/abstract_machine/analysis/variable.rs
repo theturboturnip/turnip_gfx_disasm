@@ -267,7 +267,9 @@ impl<TVM: HLSLCompatibleAbstractVM> VariableAbstractMachine<TVM> {
                 // 2) at least one component has a different type to it's previous usage
                 Some((old_var, _)) => {
                     let old_kind = { old_var.borrow().kind };
-                    old_kind != dataspec.kind && old_kind != DataKind::Hole
+                    old_kind != dataspec.kind
+                        && old_kind != DataKind::Hole
+                        && dataspec.kind != DataKind::Hole
                 }
             }
         }) {
@@ -422,6 +424,21 @@ impl<TVM: HLSLCompatibleAbstractVM> VariableAbstractMachine<TVM> {
                         input_datarefs,
                         scalar_deps,
                     })
+                }
+                HLSLCompatibleOutcome::EarlyOut { inputs } => {
+                    let scalar_input_vars: Vec<_> = inputs
+                        .into_iter()
+                        .map(|input| {
+                            if let Some(as_var) = self.current_scalar_names.get(&input.data) {
+                                (*as_var).clone()
+                            } else {
+                                panic!("Undeclared/uninitialized item used: {:?}", input)
+                            }
+                        })
+                        .collect();
+                    self.add_outcome(HLSLOutcome::EarlyOut {
+                        inputs: scalar_input_vars,
+                    });
                 }
             }
         }

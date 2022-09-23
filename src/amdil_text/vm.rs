@@ -41,7 +41,7 @@ impl VMRef for AMDILNameRef {
     fn is_pure_input(&self) -> bool {
         match self {
             Self::Literal(..) => true,
-            Self::NamedLiteral(..) => true,
+            Self::NamedLiteral(..) => false, // Named literals always map to real literals in AMDIL
             Self::NamedInputRegister(..) => true,
             // TODO consider concept of i/o buffers
             Self::NamedBuffer { .. } => true,

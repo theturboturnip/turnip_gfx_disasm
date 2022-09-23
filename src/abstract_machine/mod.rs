@@ -78,14 +78,18 @@ impl<TVM: ScalarAbstractVM> ScalarAction<TVM> for Box<dyn ScalarAction<TVM>> {
 
 #[derive(Debug, Clone)]
 pub enum ScalarOutcome<TVM: ScalarAbstractVM> {
-    // Declare that some named scalar exists, and optionally has a known value.
+    /// Declare that some named scalar exists, and optionally has a known value.
     Declaration {
         name: TVM::TScalarDataRef,
         value: Option<TypedVMRef<TVM::TScalarDataRef>>,
     },
-    // Declare that an output scalar has a new value, based on many input scalars.
+    /// Declare that an output scalar has a new value, based on many input scalars.
     Dependency {
         output: TypedVMRef<TVM::TScalarDataRef>,
+        inputs: Vec<TypedVMRef<TVM::TScalarDataRef>>,
+    },
+    /// Declare that program flow may end early due to a set of input scalars.
+    EarlyOut {
         inputs: Vec<TypedVMRef<TVM::TScalarDataRef>>,
     },
 }

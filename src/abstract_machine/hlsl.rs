@@ -146,13 +146,13 @@ pub mod compat {
     /// An outcome of an action that can be translated to an HLSL outcome by a [crate::abstract_machine::analysis::variable::VariableAbstractMachine].
     #[derive(Debug, Clone)]
     pub enum HLSLCompatibleOutcome<TVM: HLSLCompatibleAbstractVM> {
-        // Declare that some named element exists, and optionally has a known literal value.
+        /// Declare that some named element exists, and optionally has a known literal value.
         Declaration {
             declspec: HLSLDeclarationSpec<TVM::TElementNameRef>,
             literal_value: Option<TypedVMRef<[u64; 4]>>,
         },
 
-        // Declare that an output element has a new value, based on many input scalars.
+        /// Declare that an output element has a new value, based on many input scalars.
         Operation {
             opname: String,
             output_dataspec: HLSLDataRefSpec<TVM::TElementNameRef>,
@@ -161,6 +161,11 @@ pub mod compat {
                 TypedVMRef<HLSLCompatibleScalarRef<TVM::TElementNameRef>>,
                 Vec<TypedVMRef<HLSLCompatibleScalarRef<TVM::TElementNameRef>>>,
             )>,
+        },
+
+        /// Declare that program flow may end early due to a set of input scalars.
+        EarlyOut {
+            inputs: Vec<TypedVMRef<HLSLCompatibleScalarRef<TVM::TElementNameRef>>>,
         },
     }
 }
@@ -211,6 +216,8 @@ pub enum HLSLOutcome {
         // Mapping of each individual scalar output to each individual scalar input
         scalar_deps: Vec<(HLSLScalarDataRef, Vec<HLSLScalarDataRef>)>,
     },
+    /// State that the program flow may end early due to some vector components
+    EarlyOut { inputs: Vec<HLSLScalarDataRef> },
 }
 
 impl std::fmt::Display for HLSLVectorName {
@@ -271,6 +278,14 @@ impl std::fmt::Display for HLSLOutcome {
                 for (refed_var, swizz) in input_datarefs {
                     let referenced_var = refed_var.borrow();
                     write!(f, "{}{}, ", referenced_var.vector_name, swizz)?;
+                }
+                write!(f, ");")
+            }
+            Self::EarlyOut { inputs } => {
+                write!(f, "early_out_based_on(")?;
+                for (refed_var, comp) in inputs {
+                    let referenced_var = refed_var.borrow();
+                    write!(f, "{}.{:?}, ", referenced_var.vector_name, *comp)?;
                 }
                 write!(f, ");")
             }

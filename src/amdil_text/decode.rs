@@ -3,12 +3,14 @@ use crate::{
         hlsl::compat::{HLSLCompatibleAction, HLSLCompatibleOutcome},
         vector::MaskedSwizzle,
     },
-    ScalarAction,
+    DataKind, DataWidth, ScalarAction, ScalarOutcome, TypedVMRef,
 };
+
+use self::registers::arg_as_vector_data_ref;
 
 use super::{
     grammar,
-    vm::{AMDILAbstractVM, AMDILDeclaration},
+    vm::{AMDILAbstractVM, AMDILDataRef, AMDILDeclaration},
 };
 
 pub mod alu;
@@ -26,6 +28,8 @@ pub enum Instruction {
     DontCare(grammar::Instruction),
     Decl(AMDILDeclaration),
     Alu(ALUInstruction),
+    /// Early out based on the a set of args
+    EarlyOut(Vec<MatchableArg>),
 }
 impl ScalarAction<AMDILAbstractVM> for Instruction {
     fn outcomes(&self) -> Vec<crate::ScalarOutcome<AMDILAbstractVM>> {
@@ -43,6 +47,30 @@ impl ScalarAction<AMDILAbstractVM> for Instruction {
             }
             Instruction::Decl(decl) => decl.outcomes(),
             Instruction::Alu(alu) => alu.outcomes(),
+            Instruction::EarlyOut(inputs) => {
+                let args: Result<Vec<AMDILDataRef>, AMDILTextDecodeError> =
+                    inputs.iter().map(arg_as_vector_data_ref).collect();
+                let args = args.unwrap();
+                let scalar_args = args
+                    .iter()
+                    .map(|v_arg| {
+                        v_arg
+                            .swizzle
+                            .0
+                            .iter()
+                            .filter_map(|comp| comp.map(|comp| (v_arg.name.clone(), comp)))
+                    })
+                    .flatten()
+                    .map(|comp_ref| TypedVMRef {
+                        data: comp_ref.into(),
+                        kind: DataKind::Hole,
+                        width: DataWidth::E32,
+                    })
+                    .collect();
+                vec![ScalarOutcome::EarlyOut {
+                    inputs: scalar_args,
+                }]
+            }
         }
     }
 }
@@ -62,6 +90,16 @@ impl HLSLCompatibleAction<AMDILAbstractVM> for Instruction {
             }
             Instruction::Decl(decl) => decl.hlsl_outcomes(),
             Instruction::Alu(alu) => alu.hlsl_outcomes(),
+            Instruction::EarlyOut(_) => vec![HLSLCompatibleOutcome::EarlyOut {
+                inputs: Self::outcomes(&self)
+                    .into_iter()
+                    .map(|s_outcome| match s_outcome {
+                        ScalarOutcome::EarlyOut { inputs } => inputs,
+                        _ => panic!(),
+                    })
+                    .flatten()
+                    .collect(),
+            }],
         }
     }
 }
@@ -99,6 +137,7 @@ pub fn decode_instruction(
     g_instr: grammar::Instruction,
 ) -> Result<Instruction, AMDILTextDecodeError> {
     let instr = match g_instr.instr.as_str() {
+        "discard_logicalnz" => Instruction::EarlyOut(decode_args(&g_instr.args)),
         instr if check_if_dontcare(instr) => Instruction::DontCare(g_instr),
         instr if instr.starts_with("dcl_") => decode_declare(&g_instr)?,
         _ => {
