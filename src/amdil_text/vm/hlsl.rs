@@ -1,7 +1,7 @@
 use crate::abstract_machine::{
     hlsl::compat::{
         HLSLCompatibleAction, HLSLCompatibleNameRef, HLSLCompatibleOutcome, HLSLDataRefSpec,
-        HLSLDataRefType, HLSLDeclarationSpec, HLSLDeclarationSpecType,
+        HLSLDeclarationSpec, HLSLDeclarationSpecType, HLSLNameRefType,
     },
     DataKind, DataWidth, TypedRef,
 };
@@ -81,20 +81,21 @@ impl HLSLCompatibleAction<AMDILAbstractVM> for AMDILDeclaration {
 impl AMDILDataRef {
     pub fn into_hlsl(self, kind: DataKind) -> HLSLDataRefSpec<AMDILNameRef> {
         let ref_type = match &self.name {
-            AMDILNameRef::Literal(data) => HLSLDataRefType::Literal(*data),
-            AMDILNameRef::NamedBuffer { name, idx } => HLSLDataRefType::ArrayElement {
-                of: Box::new(HLSLDataRefType::ShaderInput(name.clone())),
+            AMDILNameRef::Literal(data) => HLSLNameRefType::Literal(*data),
+            AMDILNameRef::NamedBuffer { name, idx } => HLSLNameRefType::ArrayElement {
+                of: Box::new(HLSLNameRefType::ShaderInput(name.clone())),
                 idx: *idx,
             },
             AMDILNameRef::NamedLiteral(_) | AMDILNameRef::NamedRegister(_) => {
-                HLSLDataRefType::GenericRegister
+                HLSLNameRefType::GenericRegister
             }
-            AMDILNameRef::NamedInputRegister(name) => HLSLDataRefType::ShaderInput(name.clone()),
-            AMDILNameRef::NamedOutputRegister(name) => HLSLDataRefType::ShaderOutput(name.clone()),
+            AMDILNameRef::NamedInputRegister(name) => HLSLNameRefType::ShaderInput(name.clone()),
+            AMDILNameRef::NamedOutputRegister(name) => HLSLNameRefType::ShaderOutput(name.clone()),
         };
         HLSLDataRefSpec {
-            vm_data_ref: (self.name, self.swizzle),
-            ref_type,
+            vm_name_ref: self.name,
+            swizzle: self.swizzle,
+            name_ref_type: ref_type,
             kind,
         }
     }

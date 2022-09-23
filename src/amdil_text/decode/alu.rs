@@ -122,7 +122,7 @@ impl ScalarAction<AMDILAbstractVM> for ALUInstruction {
                 (OutputDep::PerComponent, Some(dst_comp)) => {
                     outcomes.push(ScalarOutcome::Dependency {
                         output: TypedRef {
-                            data: (self.dst.name.clone(), dst_comp),
+                            data: (self.dst.name.clone(), dst_comp).into(),
                             kind: self.data_kind,
                             width: DataWidth::E32,
                         },
@@ -134,7 +134,7 @@ impl ScalarAction<AMDILAbstractVM> for ALUInstruction {
                                     "src component which mapped to dst component wasn't available",
                                 );
                                 TypedRef {
-                                    data: (src.name.clone(), src_comp),
+                                    data: (src.name.clone(), src_comp).into(),
                                     kind: self.data_kind,
                                     width: DataWidth::E32,
                                 }
@@ -144,7 +144,7 @@ impl ScalarAction<AMDILAbstractVM> for ALUInstruction {
                 }
                 (OutputDep::All, Some(dst_comp)) => outcomes.push(ScalarOutcome::Dependency {
                     output: TypedRef {
-                        data: (self.dst.name.clone(), dst_comp),
+                        data: (self.dst.name.clone(), dst_comp).into(),
                         kind: self.data_kind,
                         width: DataWidth::E32,
                     },
@@ -159,7 +159,7 @@ impl ScalarAction<AMDILAbstractVM> for ALUInstruction {
                                 .filter_map(|comp| *comp)
                                 // Map non-None source components -> TypedRef
                                 .map(|src_comp| TypedRef {
-                                    data: (src.name.clone(), src_comp),
+                                    data: (src.name.clone(), src_comp).into(),
                                     kind: self.data_kind,
                                     width: DataWidth::E32,
                                 })

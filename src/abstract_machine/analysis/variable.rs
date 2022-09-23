@@ -4,8 +4,8 @@ use crate::abstract_machine::{
     hlsl::{
         compat::{
             ExpandsIntoHLSLComponents, HLSLCompatibleAbstractVM, HLSLCompatibleAction,
-            HLSLCompatibleOutcome, HLSLCompatibleScalarRef, HLSLDataRefSpec, HLSLDataRefType,
-            HLSLDeclarationSpec, HLSLDeclarationSpecType,
+            HLSLCompatibleOutcome, HLSLCompatibleScalarRef, HLSLDataRefSpec, HLSLDeclarationSpec,
+            HLSLDeclarationSpecType, HLSLNameRefType,
         },
         HLSLOutcome, HLSLScalarDataRef, HLSLVariable, HLSLVariableInfo, HLSLVectorDataRef,
         HLSLVectorName,
@@ -117,7 +117,7 @@ impl<TVM: HLSLCompatibleAbstractVM + ScalarAbstractVM> VariableStore<TVM> {
     ) -> Vec<HLSLCompatibleScalarRef<TVM::TElementNameRef>> {
         (0..declspec.n_components)
             .into_iter()
-            .map(|i| (declspec.vm_name_ref.clone(), VECTOR_COMPONENTS[i as usize]))
+            .map(|i| (declspec.vm_name_ref.clone(), VECTOR_COMPONENTS[i as usize]).into())
             .collect()
     }
 
@@ -149,26 +149,28 @@ impl<TVM: HLSLCompatibleAbstractVM + ScalarAbstractVM> VariableStore<TVM> {
         dataspec: &HLSLDataRefSpec<TVM::TElementNameRef>,
     ) -> HLSLVariableInfo {
         HLSLVariableInfo {
-            vector_name: self.vector_name_for_datareftype(dataspec.ref_type.clone()),
+            vector_name: self.vector_name_for_datareftype(dataspec.name_ref_type.clone()),
             kind: dataspec.kind,
-            n_components: dataspec.vm_data_ref.1.num_used_components(),
+            n_components: dataspec.swizzle.num_used_components(),
         }
     }
 
-    /// Given the type of a data reference, return the corresponding vector name.
+    /// Given the type of a name reference, return an actual vector name.
+    ///
+    /// May increment the counter for general variable IDs.
     ///
     /// Separate from [variable_info_for_dataspec] because it needs to be recursive for arrays.
-    fn vector_name_for_datareftype(&mut self, ref_type: HLSLDataRefType) -> HLSLVectorName {
-        match ref_type {
-            HLSLDataRefType::GenericRegister => {
+    fn vector_name_for_datareftype(&mut self, name_ref_type: HLSLNameRefType) -> HLSLVectorName {
+        match name_ref_type {
+            HLSLNameRefType::GenericRegister => {
                 let id = self.next_general_var_id;
                 self.next_general_var_id += 1;
                 HLSLVectorName::GenericRegister(id)
             }
-            HLSLDataRefType::ShaderInput(name) => HLSLVectorName::ShaderInput(name),
-            HLSLDataRefType::ShaderOutput(name) => HLSLVectorName::ShaderOutput(name),
-            HLSLDataRefType::Literal(data) => HLSLVectorName::Literal(data),
-            HLSLDataRefType::ArrayElement { of, idx } => HLSLVectorName::ArrayElement {
+            HLSLNameRefType::ShaderInput(name) => HLSLVectorName::ShaderInput(name),
+            HLSLNameRefType::ShaderOutput(name) => HLSLVectorName::ShaderOutput(name),
+            HLSLNameRefType::Literal(data) => HLSLVectorName::Literal(data),
+            HLSLNameRefType::ArrayElement { of, idx } => HLSLVectorName::ArrayElement {
                 of: Box::new(self.vector_name_for_datareftype(*of)),
                 idx,
             },
@@ -203,18 +205,18 @@ impl<TVM: HLSLCompatibleAbstractVM> VariableAbstractMachine<TVM> {
     /// e.g.
     /// map(r0.wyx_, var)
     /// will map r0.w -> var.x, r0.y -> var.y, r0.x -> var.z
-    pub fn map_dataref_directly_to_variable(
+    fn map_dataspec_directly_to_variable(
         &mut self,
-        vm_data_ref: &(TVM::TElementNameRef, MaskedSwizzle),
+        vm_name_ref: &TVM::TElementNameRef,
+        swizzle: &MaskedSwizzle,
         variable: &HLSLVariable,
     ) {
         let expected_n_components = variable.borrow().n_components as usize;
         // Filter-map over the components of the swizzle to remove None
-        vm_data_ref
-            .1
-             .0
+        swizzle
+            .0
             .iter()
-            .filter_map(|comp| comp.map(|comp| (vm_data_ref.0.clone(), comp)))
+            .filter_map(|comp| comp.map(|comp| (vm_name_ref.clone(), comp).into()))
             // Count the number of actual components used
             .enumerate()
             .map(|(idx, scalar)| {
@@ -223,6 +225,15 @@ impl<TVM: HLSLCompatibleAbstractVM> VariableAbstractMachine<TVM> {
                     .insert(scalar, (variable.clone(), VECTOR_COMPONENTS[idx]));
             })
             .collect()
+    }
+
+    fn add_and_map_new_variable_from_dataspec(
+        &mut self,
+        dataspec: &HLSLDataRefSpec<TVM::TElementNameRef>,
+    ) -> HLSLVariable {
+        let variable = self.variables.add_new_variable_from_dataspec(dataspec);
+        self.map_dataspec_directly_to_variable(&dataspec.vm_name_ref, &dataspec.swizzle, &variable);
+        variable
     }
 
     /// Take a dataspec (reference to a swizzled VM vector) and convert it to a vector data reference, potentially creating a new variable if necessary.
@@ -237,11 +248,11 @@ impl<TVM: HLSLCompatibleAbstractVM> VariableAbstractMachine<TVM> {
     /// In all other cases, an existing variable is returned
     fn map_dataspec_to_dataref(
         &mut self,
-        dataref: &HLSLDataRefSpec<TVM::TElementNameRef>,
+        dataspec: &HLSLDataRefSpec<TVM::TElementNameRef>,
     ) -> HLSLVectorDataRef {
         // TODO ONLY REMAP NAMES FOR GENERAL REGISTERS
 
-        let scalar_comps = dataref.expand();
+        let scalar_comps = dataspec.expand();
         let expected_number_of_comps = scalar_comps.len();
         let scalar_comps_as_vars: Vec<Option<_>> = scalar_comps
             .into_iter()
@@ -256,13 +267,12 @@ impl<TVM: HLSLCompatibleAbstractVM> VariableAbstractMachine<TVM> {
                 // 2) at least one component has a different type to it's previous usage
                 Some((old_var, _)) => {
                     let old_kind = { old_var.borrow().kind };
-                    old_kind != dataref.kind && old_kind != DataKind::Hole
+                    old_kind != dataspec.kind && old_kind != DataKind::Hole
                 }
             }
         }) {
             // make a new variable that doesn't depend on any previous values
-            let variable = self.variables.add_new_variable_from_dataspec(&dataref);
-            self.map_dataref_directly_to_variable(&dataref.vm_data_ref, &variable);
+            let variable = self.add_and_map_new_variable_from_dataspec(&dataspec);
             self.add_outcome(HLSLOutcome::Declaration {
                 new_var: variable.clone(),
             });
@@ -278,8 +288,7 @@ impl<TVM: HLSLCompatibleAbstractVM> VariableAbstractMachine<TVM> {
             if old_var_iter.any(|(old_var, _)| !Rc::ptr_eq(expected_old_var, old_var)) {
                 // 3) not all components map to the same old vector variable
                 // make a new variable that doesn't depend on any previous values
-                let variable = self.variables.add_new_variable_from_dataspec(dataref);
-                self.map_dataref_directly_to_variable(&dataref.vm_data_ref, &variable);
+                let variable = self.add_and_map_new_variable_from_dataspec(dataspec);
                 self.add_outcome(HLSLOutcome::Definition {
                     new_var: variable.clone(),
                     components: scalar_comps_as_vars.into_iter().collect(),
@@ -322,11 +331,9 @@ impl<TVM: HLSLCompatibleAbstractVM> VariableAbstractMachine<TVM> {
                     // self.add_new_variable_from_expandable(name.n_components, name.kind, &name);
 
                     // Map the variable
-                    self.map_dataref_directly_to_variable(
-                        &(
-                            declspec.vm_name_ref,
-                            MaskedSwizzle::identity(n_components as usize),
-                        ),
+                    self.map_dataspec_directly_to_variable(
+                        &declspec.vm_name_ref,
+                        &MaskedSwizzle::identity(n_components as usize),
                         &var,
                     );
 

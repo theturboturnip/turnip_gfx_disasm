@@ -119,9 +119,9 @@ impl ScalarAction<AMDILAbstractVM> for AMDILDeclaration {
             AMDILDeclaration::NamedLiteral(name, value) => VECTOR_COMPONENTS
                 .iter()
                 .map(|comp| ScalarOutcome::Declaration {
-                    name: (AMDILNameRef::NamedLiteral(name.clone()), *comp),
+                    name: (AMDILNameRef::NamedLiteral(name.clone()), *comp).into(),
                     value: Some(TypedRef {
-                        data: (AMDILNameRef::Literal(*value), *comp),
+                        data: (AMDILNameRef::Literal(*value), *comp).into(),
                         kind: DataKind::Untyped,
                         width: DataWidth::E32,
                     }),
@@ -146,7 +146,7 @@ impl ScalarAction<AMDILAbstractVM> for AMDILDeclaration {
                 .take(*len as usize)
                 .map(|comp| ScalarOutcome::Declaration {
                     // TODO THIS IS WRONG FOR OUTPUT REGISTERS
-                    name: (AMDILNameRef::NamedInputRegister(name.clone()), *comp),
+                    name: (AMDILNameRef::NamedInputRegister(name.clone()), *comp).into(),
                     value: None,
                 })
                 .collect(),

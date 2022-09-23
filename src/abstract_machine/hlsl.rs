@@ -11,38 +11,25 @@ pub mod compat {
         DataKind, DataRef, ScalarAbstractVM, TypedRef,
     };
 
-    pub trait ExpandsIntoHLSLComponents {
-        type TName;
-        fn expand(&self) -> Vec<HLSLCompatibleScalarRef<Self::TName>>;
-    }
-
+    /// An HLSL-compatible specification for a reference to a swizzled vector
     #[derive(Debug, Clone)]
     pub struct HLSLDataRefSpec<TName: HLSLCompatibleNameRef> {
-        pub vm_data_ref: (TName, MaskedSwizzle),
-        pub ref_type: HLSLDataRefType,
+        pub vm_name_ref: TName,
+        pub name_ref_type: HLSLNameRefType,
+        pub swizzle: MaskedSwizzle,
         pub kind: DataKind,
     }
-    // TODO move out of compat, rename to HLSLNameRef
+    /// The type of vector name an HLSL-compatible value will have
     #[derive(Debug, Clone)]
-    pub enum HLSLDataRefType {
+    pub enum HLSLNameRefType {
         GenericRegister,
         ShaderInput(String),
         ShaderOutput(String),
         Literal([u64; 4]),
         ArrayElement { of: Box<Self>, idx: u64 },
     }
-    impl<TName: HLSLCompatibleNameRef> ExpandsIntoHLSLComponents for HLSLDataRefSpec<TName> {
-        type TName = TName;
-        fn expand(&self) -> Vec<HLSLCompatibleScalarRef<TName>> {
-            self.vm_data_ref
-                .1
-                 .0
-                .iter()
-                .filter_map(|comp| comp.map(|comp| (self.vm_data_ref.0.clone(), comp)))
-                .collect()
-        }
-    }
 
+    /// An HLSL-compatible specification for a declaration of a new vector variable
     #[derive(Debug, Clone)]
     pub struct HLSLDeclarationSpec<TName: HLSLCompatibleNameRef> {
         pub vm_name_ref: TName,
@@ -51,6 +38,7 @@ pub mod compat {
         pub kind: DataKind,
         pub name: String,
     }
+    /// The type of vector name an HLSL-compatible declaration will have
     #[derive(Debug, Clone)]
     pub enum HLSLDeclarationSpecType {
         GenericRegister,
@@ -60,22 +48,81 @@ pub mod compat {
         // Specifically, the declaration spec only has one base-name-ref, not one for each variable.
         // Array { of: Box<Self>, len: u64 },
     }
+
+    /// Helper trait for HLSL-compatible specifications of references to vectors
+    ///
+    /// TODO make private
+    pub trait ExpandsIntoHLSLComponents {
+        type TName: HLSLCompatibleNameRef;
+
+        /// Expand the vector reference into constituent scalar references.
+        ///
+        /// TODO refactor this into something that just returns the constituent components?
+        fn expand(&self) -> Vec<HLSLCompatibleScalarRef<Self::TName>>;
+    }
+    impl<TName: HLSLCompatibleNameRef> ExpandsIntoHLSLComponents for HLSLDataRefSpec<TName> {
+        type TName = TName;
+        fn expand(&self) -> Vec<HLSLCompatibleScalarRef<TName>> {
+            self.swizzle
+                .0
+                .iter()
+                .filter_map(|comp| {
+                    comp.map(|comp| HLSLCompatibleScalarRef::new(self.vm_name_ref.clone(), comp))
+                })
+                .collect()
+        }
+    }
     impl<TName: HLSLCompatibleNameRef> ExpandsIntoHLSLComponents for HLSLDeclarationSpec<TName> {
         type TName = TName;
         fn expand(&self) -> Vec<HLSLCompatibleScalarRef<TName>> {
             (0..self.n_components)
                 .into_iter()
-                .map(|i| (self.vm_name_ref.clone(), VECTOR_COMPONENTS[i as usize]))
+                .map(|i| {
+                    HLSLCompatibleScalarRef::new(
+                        self.vm_name_ref.clone(),
+                        VECTOR_COMPONENTS[i as usize],
+                    )
+                })
                 .collect()
         }
     }
 
+    /// Marker trait for HLSL-compatible name references
+    /// TODO: This doesn't actually need to exist, it's just nice to be able to say "this type is a name ref not a data ref".
+    /// TODO: Introduce a top-level NameRef marker trait and use that instead
     pub trait HLSLCompatibleNameRef: DataRef {}
 
-    pub type HLSLCompatibleScalarRef<T> = (T, VectorComponent);
+    /// An HLSL-compatible reference to a scalar (a single component of a VM's vector)
+    #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+    pub struct HLSLCompatibleScalarRef<T: HLSLCompatibleNameRef> {
+        pub vm_name_ref: T,
+        pub comp: VectorComponent,
+    }
+    impl<T: HLSLCompatibleNameRef> HLSLCompatibleScalarRef<T> {
+        /// Make a new [HLSLCompatibleScalarRef]
+        pub fn new(vm_name_ref: T, comp: VectorComponent) -> Self {
+            Self { vm_name_ref, comp }
+        }
+        /// Make a new [HLSLCompatibleScalarRef], taking X as the component.
+        /// Useful for scalar-based VMs.
+        pub fn new_scalar(vm_name_ref: T) -> Self {
+            Self {
+                vm_name_ref,
+                comp: VectorComponent::X,
+            }
+        }
+    }
     impl<T: HLSLCompatibleNameRef> DataRef for HLSLCompatibleScalarRef<T> {
         fn is_pure_input(&self) -> bool {
-            self.0.is_pure_input()
+            self.vm_name_ref.is_pure_input()
+        }
+    }
+    impl<T: HLSLCompatibleNameRef> Into<HLSLCompatibleScalarRef<T>> for (T, VectorComponent) {
+        fn into(self) -> HLSLCompatibleScalarRef<T> {
+            HLSLCompatibleScalarRef {
+                vm_name_ref: self.0,
+                comp: self.1,
+            }
         }
     }
 
@@ -89,6 +136,7 @@ pub mod compat {
         /// Must be convertible to an HLSL-esque representation
         type TElementNameRef: HLSLCompatibleNameRef;
     }
+    // TODO don't automatically implement this for anyone. We don't actually need it for HLSL-based analysis
     impl<T> ScalarAbstractVM for T
     where
         T: HLSLCompatibleAbstractVM,
@@ -96,10 +144,14 @@ pub mod compat {
         type TScalarDataRef = HLSLCompatibleScalarRef<T::TElementNameRef>;
     }
 
+    /// An action that can be represented as a set of HLSL-compatible outcomes.
+    ///
+    /// See [HLSLCompatibleOutcome]
     pub trait HLSLCompatibleAction<TVM: HLSLCompatibleAbstractVM> {
         fn hlsl_outcomes(&self) -> Vec<HLSLCompatibleOutcome<TVM>>;
     }
 
+    /// An outcome of an action that can be translated to an HLSL outcome by a [crate::abstract_machine::analysis::variable::VariableAbstractMachine].
     #[derive(Debug, Clone)]
     pub enum HLSLCompatibleOutcome<TVM: HLSLCompatibleAbstractVM + ScalarAbstractVM> {
         // Declare that some named element exists, and optionally has a known literal value.
