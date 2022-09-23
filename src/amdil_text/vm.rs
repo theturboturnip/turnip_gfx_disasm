@@ -14,9 +14,14 @@ use crate::abstract_machine::{DataKind, TypedVMRef, VMRef};
 
 pub mod hlsl;
 
+/// The type of Action held by Programs for the [AMDILAbstractVM]
+pub type AMDILAction = super::decode::Instruction;
+
+/// Type for the AMDIL abstract VM. Implements [ScalarAbstractVM] and [HLSLCompatibleAbstractVM]
 #[derive(Debug)]
 pub enum AMDILAbstractVM {}
 impl ScalarAbstractVM for AMDILAbstractVM {
+    type Action = AMDILAction;
     type TScalarDataRef = HLSLCompatibleScalarRef<AMDILNameRef>;
 }
 impl HLSLCompatibleAbstractVM for AMDILAbstractVM {

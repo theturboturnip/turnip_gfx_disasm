@@ -1,4 +1,4 @@
-use std::{hash::Hash, ops::Deref};
+use std::hash::Hash;
 
 pub mod analysis;
 pub mod hlsl;
@@ -61,16 +61,20 @@ pub struct TypedVMRef<TData: VMRef> {
 /// Base type for abstract VMs
 ///
 /// All VMs, even vector-based ones, should implement simplistic vector-to-scalar translation
-pub trait ScalarAbstractVM: std::fmt::Debug {
+pub trait ScalarAbstractVM: std::fmt::Debug + Sized {
+    type Action: ScalarAction<Self>;
     type TScalarDataRef: VMDataRef;
 }
 
 pub trait ScalarAction<TVM: ScalarAbstractVM> {
     fn outcomes(&self) -> Vec<ScalarOutcome<TVM>>;
 }
-
-// TODO does Declaration need to be separate from Dependency?
-// or can every Declaration be represented as a Dependency
+/// Helper implementation for VMs which want to type-erase their actions
+impl<TVM: ScalarAbstractVM> ScalarAction<TVM> for Box<dyn ScalarAction<TVM>> {
+    fn outcomes(&self) -> Vec<ScalarOutcome<TVM>> {
+        self.as_ref().outcomes()
+    }
+}
 
 #[derive(Debug, Clone)]
 pub enum ScalarOutcome<TVM: ScalarAbstractVM> {
@@ -86,10 +90,16 @@ pub enum ScalarOutcome<TVM: ScalarAbstractVM> {
     },
 }
 
+/// Trait for programs that run on an abstract VM
+pub trait Program<TVM: ScalarAbstractVM> {
+    fn actions(&self) -> &Vec<TVM::Action>;
+}
+
+/// Trait for structs that can turn an arbitrary representation of a program (e.g. binary data) into a [Program] for a given [ScalarAbstractVM]
 pub trait Decoder<TVM: ScalarAbstractVM> {
     type Input;
-    type BaseAction: Deref<Target = dyn ScalarAction<TVM>>;
+    type ScalarProgram: Program<TVM>;
     type Err;
 
-    fn decode(&self, data: Self::Input) -> Result<Vec<Self::BaseAction>, Self::Err>;
+    fn decode(&self, data: Self::Input) -> Result<Self::ScalarProgram, Self::Err>;
 }

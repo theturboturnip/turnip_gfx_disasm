@@ -1,7 +1,7 @@
 //! The crate allows the parsing and analysis of many shader languages, by representing each language as an abstract virtual machine.
 //!
 //! Each language backend should at least create an implementation of [ScalarAbstractVM], and create a [Decoder] which decodes
-//! shader text (be it binary or character-based) into a set of [ScalarAction]s.
+//! shader text (be it binary or character-based) into [Program] returning a set of [ScalarAction]s.
 //! Usually, each instruction in the original language should map to a single [ScalarAction], but this isn't required.
 //!
 //! Each [ScalarAction] has a set of [ScalarOutcome]s.
@@ -31,6 +31,6 @@ pub mod amdil_text;
 pub mod rdna2;
 
 pub use abstract_machine::{
-    DataKind, DataWidth, Decoder, ScalarAbstractVM, ScalarAction, ScalarOutcome, TypedVMRef,
-    VMDataRef, VMNameRef, VMRef,
+    DataKind, DataWidth, Decoder, Program, ScalarAbstractVM, ScalarAction, ScalarOutcome,
+    TypedVMRef, VMDataRef, VMNameRef, VMRef,
 };

@@ -1,10 +1,13 @@
-use crate::ScalarOutcome;
+use crate::{ScalarAction, ScalarOutcome};
 
 use crate::abstract_machine::{ScalarAbstractVM, VMDataRef, VMRef};
+
+pub type RDNA2Action = Box<dyn ScalarAction<RDNA2AbstractVM>>;
 
 #[derive(Debug)]
 pub enum RDNA2AbstractVM {}
 impl ScalarAbstractVM for RDNA2AbstractVM {
+    type Action = RDNA2Action;
     type TScalarDataRef = RDNA2DataRef;
 }
 pub type RDNA2Outcome = ScalarOutcome<RDNA2AbstractVM>;

@@ -9,10 +9,11 @@
 
 use std::marker::PhantomData;
 
+pub use crate::rdna2::vm::RDNA2Action;
 use crate::{
     rdna2::opcodes::SOPP_Opcode,
     rdna2::vm::{RDNA2AbstractVM, RDNA2Outcome},
-    ScalarAction,
+    Decoder, Program, ScalarAction,
 };
 
 mod opcodes;
@@ -136,7 +137,12 @@ impl ScalarAction<RDNA2AbstractVM> for Instruction {
     }
 }
 
-pub type RDNA2Program = Vec<Box<dyn ScalarAction<RDNA2AbstractVM>>>;
+pub type RDNA2Program = Vec<RDNA2Action>;
+impl Program<RDNA2AbstractVM> for RDNA2Program {
+    fn actions(&self) -> &Vec<RDNA2Action> {
+        self
+    }
+}
 
 pub struct RDNA2Decoder<'a> {
     _lifetime: PhantomData<&'a ()>, // NOTE: there's no generic type here!
@@ -148,13 +154,13 @@ impl<'a> RDNA2Decoder<'a> {
         }
     }
 }
-impl<'a> super::Decoder<RDNA2AbstractVM> for RDNA2Decoder<'a> {
+impl<'a> Decoder<RDNA2AbstractVM> for RDNA2Decoder<'a> {
     type Input = &'a [u8];
-    type BaseAction = Box<dyn ScalarAction<RDNA2AbstractVM>>;
+    type ScalarProgram = RDNA2Program;
     type Err = RDNA2DecodeError;
 
     fn decode(&self, mut data: Self::Input) -> Result<RDNA2Program, RDNA2DecodeError> {
-        let mut instrs: Vec<Self::BaseAction> = vec![];
+        let mut instrs: Vec<RDNA2Action> = vec![];
         loop {
             let (consumed_data, instr) = Instruction::decode_consuming(data)?;
             println!("{:?}", instr);

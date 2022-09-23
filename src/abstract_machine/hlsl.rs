@@ -6,9 +6,12 @@ use super::{
 };
 
 pub mod compat {
-    use crate::abstract_machine::{
-        vector::{MaskedSwizzle, VectorComponent, VECTOR_COMPONENTS},
-        DataKind, ScalarAbstractVM, TypedVMRef, VMDataRef, VMNameRef, VMRef,
+    use crate::{
+        abstract_machine::{
+            vector::{MaskedSwizzle, VectorComponent, VECTOR_COMPONENTS},
+            DataKind, ScalarAbstractVM, TypedVMRef, VMDataRef, VMNameRef, VMRef,
+        },
+        ScalarAction,
     };
 
     /// An HLSL-compatible specification for a reference to a swizzled vector
@@ -136,7 +139,7 @@ pub mod compat {
     /// An action that can be represented as a set of HLSL-compatible outcomes.
     ///
     /// See [HLSLCompatibleOutcome]
-    pub trait HLSLCompatibleAction<TVM: HLSLCompatibleAbstractVM> {
+    pub trait HLSLCompatibleAction<TVM: HLSLCompatibleAbstractVM>: ScalarAction<TVM> {
         fn hlsl_outcomes(&self) -> Vec<HLSLCompatibleOutcome<TVM>>;
     }
 
