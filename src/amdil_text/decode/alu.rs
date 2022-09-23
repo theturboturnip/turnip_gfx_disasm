@@ -67,6 +67,13 @@ const ALU_INSTR_DEFS: phf::Map<&'static str, ALUInstructionDef> = phf_map! {
     "dp3_ieee" => ALUInstructionDef{ n_in: 2, input_mask: InputMask::TruncateTo(3), output_dep: OutputDep::All, data_kind: DataKind::Float },
     "max_ieee" => ALUInstructionDef{ n_in: 2, input_mask: InputMask::InheritFromOutput, output_dep: OutputDep::PerComponent, data_kind: DataKind::Float },
     "add" => ALUInstructionDef{ n_in: 2, input_mask: InputMask::InheritFromOutput, output_dep: OutputDep::PerComponent, data_kind: DataKind::Float },
+    // TODO this is horrifically inaccurate?
+    "sample" => ALUInstructionDef{n_in: 1, input_mask: InputMask::TruncateTo(2), output_dep: OutputDep::All, data_kind: DataKind::Float},
+    "lt" => ALUInstructionDef{n_in: 2, input_mask: InputMask::InheritFromOutput, output_dep: OutputDep::PerComponent, data_kind: DataKind::Float},
+    "ge" => ALUInstructionDef{n_in: 2, input_mask: InputMask::InheritFromOutput, output_dep: OutputDep::PerComponent, data_kind: DataKind::Float},
+    "div" => ALUInstructionDef{n_in: 2, input_mask: InputMask::InheritFromOutput, output_dep: OutputDep::PerComponent, data_kind: DataKind::Float},
+    // TODO allow different srcs to have different types
+    "cmov_logical" => ALUInstructionDef{n_in: 3, input_mask: InputMask::InheritFromOutput, output_dep: OutputDep::PerComponent, data_kind: DataKind::Hole},
 };
 
 pub fn decode_alu(
