@@ -5,18 +5,20 @@
 //! All data is represented as 4-component vectors.
 //! Inputs to instructions can be swizzled i.e. can have their components reordered or reused (v0.xyxx, v3.wzwx etc. are valid)
 
-use crate::abstract_machine::hlsl::compat::HLSLCompatibleAbstractVM;
+use crate::abstract_machine::hlsl::compat::{HLSLCompatibleAbstractVM, HLSLCompatibleScalarRef};
 use crate::abstract_machine::vector::{MaskedSwizzle, VECTOR_COMPONENTS};
-use crate::abstract_machine::DataWidth;
+use crate::abstract_machine::{DataWidth, ScalarAbstractVM, VMDataRef, VMNameRef};
 use crate::{ScalarAction, ScalarOutcome};
 
-use crate::abstract_machine::{DataKind, DataRef, TypedRef};
+use crate::abstract_machine::{DataKind, TypedVMRef, VMRef};
 
 pub mod hlsl;
 
 #[derive(Debug)]
 pub enum AMDILAbstractVM {}
-// ScalarAbstractVM is automatically implemented, because HLSLAbstractVM is implemented
+impl ScalarAbstractVM for AMDILAbstractVM {
+    type TScalarDataRef = HLSLCompatibleScalarRef<AMDILNameRef>;
+}
 impl HLSLCompatibleAbstractVM for AMDILAbstractVM {
     type TElementNameRef = AMDILNameRef;
 }
@@ -30,6 +32,19 @@ pub enum AMDILNameRef {
     NamedInputRegister(String),
     NamedOutputRegister(String),
 }
+impl VMRef for AMDILNameRef {
+    fn is_pure_input(&self) -> bool {
+        match self {
+            Self::Literal(..) => true,
+            Self::NamedLiteral(..) => true,
+            Self::NamedInputRegister(..) => true,
+            // TODO consider concept of i/o buffers
+            Self::NamedBuffer { .. } => true,
+            _ => false,
+        }
+    }
+}
+impl VMNameRef for AMDILNameRef {}
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct AMDILDataRef {
@@ -74,24 +89,12 @@ impl AMDILDataRef {
         }
     }
 }
-
-impl DataRef for AMDILNameRef {
-    fn is_pure_input(&self) -> bool {
-        match self {
-            Self::Literal(..) => true,
-            Self::NamedLiteral(..) => true,
-            Self::NamedInputRegister(..) => true,
-            // TODO consider concept of i/o buffers
-            Self::NamedBuffer { .. } => true,
-            _ => false,
-        }
-    }
-}
-impl DataRef for AMDILDataRef {
+impl VMRef for AMDILDataRef {
     fn is_pure_input(&self) -> bool {
         self.name.is_pure_input()
     }
 }
+impl VMDataRef for AMDILDataRef {}
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum AMDILDeclaration {
@@ -120,9 +123,9 @@ impl ScalarAction<AMDILAbstractVM> for AMDILDeclaration {
                 .iter()
                 .map(|comp| ScalarOutcome::Declaration {
                     name: (AMDILNameRef::NamedLiteral(name.clone()), *comp).into(),
-                    value: Some(TypedRef {
+                    value: Some(TypedVMRef {
                         data: (AMDILNameRef::Literal(*value), *comp).into(),
-                        kind: DataKind::Untyped,
+                        kind: DataKind::Hole,
                         width: DataWidth::E32,
                     }),
                 })

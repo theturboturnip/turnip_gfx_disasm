@@ -1,13 +1,13 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::{
-    abstract_machine::{DataRef, ScalarAbstractVM, TypedRef},
+    abstract_machine::{ScalarAbstractVM, TypedVMRef, VMRef},
     ScalarAction, ScalarOutcome,
 };
 
 /// Dependency solver for scalar-based abstract VMs
 pub struct ScalarDependencies<TVM: ScalarAbstractVM> {
-    dependents: HashMap<TVM::TScalarDataRef, HashSet<TypedRef<TVM::TScalarDataRef>>>,
+    dependents: HashMap<TVM::TScalarDataRef, HashSet<TypedVMRef<TVM::TScalarDataRef>>>,
 }
 impl<TVM: ScalarAbstractVM> ScalarDependencies<TVM> {
     pub fn new() -> Self {
@@ -65,7 +65,7 @@ impl<TVM: ScalarAbstractVM> ScalarDependencies<TVM> {
 
     pub fn dependents(
         &self,
-    ) -> &HashMap<TVM::TScalarDataRef, HashSet<TypedRef<TVM::TScalarDataRef>>> {
+    ) -> &HashMap<TVM::TScalarDataRef, HashSet<TypedVMRef<TVM::TScalarDataRef>>> {
         &self.dependents
     }
 }

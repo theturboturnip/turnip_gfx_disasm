@@ -2,7 +2,7 @@
 use bitutils::bits;
 
 use crate::{
-    abstract_machine::{DataKind, DataWidth, TypedRef},
+    abstract_machine::{DataKind, DataWidth, TypedVMRef},
     ScalarAction, ScalarOutcome,
 };
 
@@ -155,15 +155,15 @@ impl ScalarAction<RDNA2AbstractVM> for VOP {
                 extra,
             } => {
                 // TODO data kind and width
-                let kind = DataKind::Untyped;
+                let kind = DataKind::Hole;
                 let width = DataWidth::E64;
                 vec![ScalarOutcome::Dependency {
-                    inputs: vec![TypedRef {
+                    inputs: vec![TypedVMRef {
                         data: VOP::operand_to_dataref(*SRC0, *extra),
                         kind,
                         width,
                     }],
-                    output: TypedRef {
+                    output: TypedVMRef {
                         data: RDNA2DataRef::GeneralPurposeRegister(*VDST as u64),
                         kind,
                         width,
@@ -178,22 +178,22 @@ impl ScalarAction<RDNA2AbstractVM> for VOP {
                 extra,
             } => {
                 // TODO data kind and width
-                let kind = DataKind::Untyped;
+                let kind = DataKind::Hole;
                 let width = DataWidth::E64;
                 vec![ScalarOutcome::Dependency {
                     inputs: vec![
-                        TypedRef {
+                        TypedVMRef {
                             data: VOP::operand_to_dataref(*SRC0, *extra),
                             kind,
                             width,
                         },
-                        TypedRef {
+                        TypedVMRef {
                             data: RDNA2DataRef::GeneralPurposeRegister(*VSRC1 as u64),
                             kind,
                             width,
                         },
                     ],
-                    output: TypedRef {
+                    output: TypedVMRef {
                         data: RDNA2DataRef::GeneralPurposeRegister(*VDST as u64),
                         kind,
                         width,

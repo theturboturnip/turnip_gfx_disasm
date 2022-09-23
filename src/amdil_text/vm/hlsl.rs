@@ -1,14 +1,12 @@
 use crate::abstract_machine::{
     hlsl::compat::{
-        HLSLCompatibleAction, HLSLCompatibleNameRef, HLSLCompatibleOutcome, HLSLDataRefSpec,
-        HLSLDeclarationSpec, HLSLDeclarationSpecType, HLSLNameRefType,
+        HLSLCompatibleAction, HLSLCompatibleOutcome, HLSLDataRefSpec, HLSLDeclarationSpec,
+        HLSLDeclarationSpecType, HLSLNameRefType,
     },
-    DataKind, DataWidth, TypedRef,
+    DataKind, DataWidth, TypedVMRef,
 };
 
 use super::{AMDILAbstractVM, AMDILDataRef, AMDILDeclaration, AMDILNameRef};
-
-impl HLSLCompatibleNameRef for AMDILNameRef {}
 
 impl HLSLCompatibleAction<AMDILAbstractVM> for AMDILDeclaration {
     fn hlsl_outcomes(&self) -> Vec<HLSLCompatibleOutcome<AMDILAbstractVM>> {
@@ -22,7 +20,7 @@ impl HLSLCompatibleAction<AMDILAbstractVM> for AMDILDeclaration {
                         decl_type: HLSLDeclarationSpecType::GenericRegister,
                         name: name.clone(),
                     },
-                    literal_value: Some(TypedRef {
+                    literal_value: Some(TypedVMRef {
                         data: *value,
                         kind: DataKind::Hole,
                         width: DataWidth::E32,

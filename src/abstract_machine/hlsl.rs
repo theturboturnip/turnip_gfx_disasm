@@ -8,12 +8,12 @@ use super::{
 pub mod compat {
     use crate::abstract_machine::{
         vector::{MaskedSwizzle, VectorComponent, VECTOR_COMPONENTS},
-        DataKind, DataRef, ScalarAbstractVM, TypedRef,
+        DataKind, ScalarAbstractVM, TypedVMRef, VMDataRef, VMNameRef, VMRef,
     };
 
     /// An HLSL-compatible specification for a reference to a swizzled vector
     #[derive(Debug, Clone)]
-    pub struct HLSLDataRefSpec<TName: HLSLCompatibleNameRef> {
+    pub struct HLSLDataRefSpec<TName: VMNameRef> {
         pub vm_name_ref: TName,
         pub name_ref_type: HLSLNameRefType,
         pub swizzle: MaskedSwizzle,
@@ -31,7 +31,7 @@ pub mod compat {
 
     /// An HLSL-compatible specification for a declaration of a new vector variable
     #[derive(Debug, Clone)]
-    pub struct HLSLDeclarationSpec<TName: HLSLCompatibleNameRef> {
+    pub struct HLSLDeclarationSpec<TName: VMNameRef> {
         pub vm_name_ref: TName,
         pub decl_type: HLSLDeclarationSpecType,
         pub n_components: u8,
@@ -53,14 +53,14 @@ pub mod compat {
     ///
     /// TODO make private
     pub trait ExpandsIntoHLSLComponents {
-        type TName: HLSLCompatibleNameRef;
+        type TName: VMNameRef;
 
         /// Expand the vector reference into constituent scalar references.
         ///
         /// TODO refactor this into something that just returns the constituent components?
         fn expand(&self) -> Vec<HLSLCompatibleScalarRef<Self::TName>>;
     }
-    impl<TName: HLSLCompatibleNameRef> ExpandsIntoHLSLComponents for HLSLDataRefSpec<TName> {
+    impl<TName: VMNameRef> ExpandsIntoHLSLComponents for HLSLDataRefSpec<TName> {
         type TName = TName;
         fn expand(&self) -> Vec<HLSLCompatibleScalarRef<TName>> {
             self.swizzle
@@ -72,7 +72,7 @@ pub mod compat {
                 .collect()
         }
     }
-    impl<TName: HLSLCompatibleNameRef> ExpandsIntoHLSLComponents for HLSLDeclarationSpec<TName> {
+    impl<TName: VMNameRef> ExpandsIntoHLSLComponents for HLSLDeclarationSpec<TName> {
         type TName = TName;
         fn expand(&self) -> Vec<HLSLCompatibleScalarRef<TName>> {
             (0..self.n_components)
@@ -87,18 +87,13 @@ pub mod compat {
         }
     }
 
-    /// Marker trait for HLSL-compatible name references
-    /// TODO: This doesn't actually need to exist, it's just nice to be able to say "this type is a name ref not a data ref".
-    /// TODO: Introduce a top-level NameRef marker trait and use that instead
-    pub trait HLSLCompatibleNameRef: DataRef {}
-
     /// An HLSL-compatible reference to a scalar (a single component of a VM's vector)
     #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-    pub struct HLSLCompatibleScalarRef<T: HLSLCompatibleNameRef> {
+    pub struct HLSLCompatibleScalarRef<T: VMNameRef> {
         pub vm_name_ref: T,
         pub comp: VectorComponent,
     }
-    impl<T: HLSLCompatibleNameRef> HLSLCompatibleScalarRef<T> {
+    impl<T: VMNameRef> HLSLCompatibleScalarRef<T> {
         /// Make a new [HLSLCompatibleScalarRef]
         pub fn new(vm_name_ref: T, comp: VectorComponent) -> Self {
             Self { vm_name_ref, comp }
@@ -112,12 +107,13 @@ pub mod compat {
             }
         }
     }
-    impl<T: HLSLCompatibleNameRef> DataRef for HLSLCompatibleScalarRef<T> {
+    impl<T: VMNameRef> VMRef for HLSLCompatibleScalarRef<T> {
         fn is_pure_input(&self) -> bool {
             self.vm_name_ref.is_pure_input()
         }
     }
-    impl<T: HLSLCompatibleNameRef> Into<HLSLCompatibleScalarRef<T>> for (T, VectorComponent) {
+    impl<T: VMNameRef> VMDataRef for HLSLCompatibleScalarRef<T> {}
+    impl<T: VMNameRef> Into<HLSLCompatibleScalarRef<T>> for (T, VectorComponent) {
         fn into(self) -> HLSLCompatibleScalarRef<T> {
             HLSLCompatibleScalarRef {
                 vm_name_ref: self.0,
@@ -129,19 +125,12 @@ pub mod compat {
     /// Trait for abstract VMs that are capable of translation to HLSL.
     ///
     /// Allows VMs to define actions in terms of "elements" i.e. the basic unit that it specifically operates on.
-    pub trait HLSLCompatibleAbstractVM: std::fmt::Debug {
+    pub trait HLSLCompatibleAbstractVM: ScalarAbstractVM {
         /// Element = the unit that abstract VM instructions operate on.
         ///
         /// e.g. for DXBC and AMDIL instructions operate on vectors => TElementDataRef = a VectorDataRef.
         /// Must be convertible to an HLSL-esque representation
-        type TElementNameRef: HLSLCompatibleNameRef;
-    }
-    // TODO don't automatically implement this for anyone. We don't actually need it for HLSL-based analysis
-    impl<T> ScalarAbstractVM for T
-    where
-        T: HLSLCompatibleAbstractVM,
-    {
-        type TScalarDataRef = HLSLCompatibleScalarRef<T::TElementNameRef>;
+        type TElementNameRef: VMNameRef;
     }
 
     /// An action that can be represented as a set of HLSL-compatible outcomes.
@@ -153,11 +142,11 @@ pub mod compat {
 
     /// An outcome of an action that can be translated to an HLSL outcome by a [crate::abstract_machine::analysis::variable::VariableAbstractMachine].
     #[derive(Debug, Clone)]
-    pub enum HLSLCompatibleOutcome<TVM: HLSLCompatibleAbstractVM + ScalarAbstractVM> {
+    pub enum HLSLCompatibleOutcome<TVM: HLSLCompatibleAbstractVM> {
         // Declare that some named element exists, and optionally has a known literal value.
         Declaration {
             declspec: HLSLDeclarationSpec<TVM::TElementNameRef>,
-            literal_value: Option<TypedRef<[u64; 4]>>,
+            literal_value: Option<TypedVMRef<[u64; 4]>>,
         },
 
         // Declare that an output element has a new value, based on many input scalars.
@@ -166,8 +155,8 @@ pub mod compat {
             output_dataspec: HLSLDataRefSpec<TVM::TElementNameRef>,
             input_dataspecs: Vec<HLSLDataRefSpec<TVM::TElementNameRef>>,
             component_deps: Vec<(
-                TypedRef<HLSLCompatibleScalarRef<TVM::TElementNameRef>>,
-                Vec<TypedRef<HLSLCompatibleScalarRef<TVM::TElementNameRef>>>,
+                TypedVMRef<HLSLCompatibleScalarRef<TVM::TElementNameRef>>,
+                Vec<TypedVMRef<HLSLCompatibleScalarRef<TVM::TElementNameRef>>>,
             )>,
         },
     }

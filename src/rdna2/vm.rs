@@ -1,6 +1,6 @@
 use crate::ScalarOutcome;
 
-use crate::abstract_machine::{DataRef, ScalarAbstractVM};
+use crate::abstract_machine::{ScalarAbstractVM, VMDataRef, VMRef};
 
 #[derive(Debug)]
 pub enum RDNA2AbstractVM {}
@@ -48,7 +48,7 @@ pub enum RDNA2DataRef {
     /// e.g. output color, so we have a component index here.
     Output(RDNA2Output),
 }
-impl DataRef for RDNA2DataRef {
+impl VMRef for RDNA2DataRef {
     fn is_pure_input(&self) -> bool {
         match self {
             RDNA2DataRef::Literal(..) => true,
@@ -56,3 +56,4 @@ impl DataRef for RDNA2DataRef {
         }
     }
 }
+impl VMDataRef for RDNA2DataRef {}

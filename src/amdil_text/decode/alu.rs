@@ -1,7 +1,7 @@
 use crate::{
     abstract_machine::{
         hlsl::compat::{HLSLCompatibleAction, HLSLCompatibleOutcome},
-        DataKind, DataWidth, TypedRef,
+        DataKind, DataWidth, TypedVMRef,
     },
     amdil_text::{
         grammar,
@@ -121,7 +121,7 @@ impl ScalarAction<AMDILAbstractVM> for ALUInstruction {
             match (self.output_dep, self.dst.swizzle[i]) {
                 (OutputDep::PerComponent, Some(dst_comp)) => {
                     outcomes.push(ScalarOutcome::Dependency {
-                        output: TypedRef {
+                        output: TypedVMRef {
                             data: (self.dst.name.clone(), dst_comp).into(),
                             kind: self.data_kind,
                             width: DataWidth::E32,
@@ -133,7 +133,7 @@ impl ScalarAction<AMDILAbstractVM> for ALUInstruction {
                                 let src_comp = src.swizzle[i].expect(
                                     "src component which mapped to dst component wasn't available",
                                 );
-                                TypedRef {
+                                TypedVMRef {
                                     data: (src.name.clone(), src_comp).into(),
                                     kind: self.data_kind,
                                     width: DataWidth::E32,
@@ -143,7 +143,7 @@ impl ScalarAction<AMDILAbstractVM> for ALUInstruction {
                     })
                 }
                 (OutputDep::All, Some(dst_comp)) => outcomes.push(ScalarOutcome::Dependency {
-                    output: TypedRef {
+                    output: TypedVMRef {
                         data: (self.dst.name.clone(), dst_comp).into(),
                         kind: self.data_kind,
                         width: DataWidth::E32,
@@ -158,7 +158,7 @@ impl ScalarAction<AMDILAbstractVM> for ALUInstruction {
                                 // Get rid of None values from the source component
                                 .filter_map(|comp| *comp)
                                 // Map non-None source components -> TypedRef
-                                .map(|src_comp| TypedRef {
+                                .map(|src_comp| TypedVMRef {
                                     data: (src.name.clone(), src_comp).into(),
                                     kind: self.data_kind,
                                     width: DataWidth::E32,

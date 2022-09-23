@@ -11,18 +11,18 @@ use crate::abstract_machine::{
         HLSLVectorName,
     },
     vector::{MaskedSwizzle, VECTOR_COMPONENTS},
-    DataKind, ScalarAbstractVM,
+    DataKind,
 };
 
 #[derive(Debug)]
-struct VariableStore<TVM: HLSLCompatibleAbstractVM + ScalarAbstractVM> {
+struct VariableStore<TVM: HLSLCompatibleAbstractVM> {
     general_variables: HashMap<HLSLVectorName, HLSLVariable>,
     inputs: HashMap<HLSLVectorName, HLSLVariable>,
     outputs: HashMap<HLSLVectorName, HLSLVariable>,
     next_general_var_id: u64,
     _phantom: PhantomData<TVM>,
 }
-impl<TVM: HLSLCompatibleAbstractVM + ScalarAbstractVM> VariableStore<TVM> {
+impl<TVM: HLSLCompatibleAbstractVM> VariableStore<TVM> {
     pub fn new() -> Self {
         Self {
             general_variables: HashMap::new(),
@@ -182,7 +182,7 @@ impl<TVM: HLSLCompatibleAbstractVM + ScalarAbstractVM> VariableStore<TVM> {
 ///
 /// Maps each known scalar to a "scalar variable reference" - e.g. "at this point in the program the scalar ref r0.x is mapped to variable_0.y"
 #[derive(Debug)]
-pub struct VariableAbstractMachine<TVM: HLSLCompatibleAbstractVM + ScalarAbstractVM> {
+pub struct VariableAbstractMachine<TVM: HLSLCompatibleAbstractVM> {
     tick: u64,
     variables: VariableStore<TVM>,
     /// Mapping of the VM's scalar references to (Variable, VectorComponent)
