@@ -15,8 +15,8 @@ impl HLSLCompatibleAction<AMDILAbstractVM> for AMDILDeclaration {
         match self {
             AMDILDeclaration::NamedLiteral(name, value) => {
                 vec![HLSLCompatibleOutcome::Declaration {
-                    name: HLSLDeclarationSpec {
-                        base_name_ref: AMDILNameRef::NamedLiteral(name.clone()),
+                    declspec: HLSLDeclarationSpec {
+                        vm_name_ref: AMDILNameRef::NamedLiteral(name.clone()),
                         kind: DataKind::Hole,
                         n_components: 4,
                         decl_type: HLSLDeclarationSpecType::GenericRegister,
@@ -34,8 +34,8 @@ impl HLSLCompatibleAction<AMDILAbstractVM> for AMDILDeclaration {
                 len,
                 reg_type: _,
             } => vec![HLSLCompatibleOutcome::Declaration {
-                name: HLSLDeclarationSpec {
-                    base_name_ref: AMDILNameRef::NamedInputRegister(name.clone()),
+                declspec: HLSLDeclarationSpec {
+                    vm_name_ref: AMDILNameRef::NamedInputRegister(name.clone()),
                     kind: DataKind::Hole,
                     n_components: *len,
                     decl_type: HLSLDeclarationSpecType::ShaderInput(name.clone()),
@@ -48,8 +48,8 @@ impl HLSLCompatibleAction<AMDILAbstractVM> for AMDILDeclaration {
                 len,
                 reg_type: _,
             } => vec![HLSLCompatibleOutcome::Declaration {
-                name: HLSLDeclarationSpec {
-                    base_name_ref: AMDILNameRef::NamedOutputRegister(name.clone()),
+                declspec: HLSLDeclarationSpec {
+                    vm_name_ref: AMDILNameRef::NamedOutputRegister(name.clone()),
                     kind: DataKind::Hole,
                     n_components: *len,
                     decl_type: HLSLDeclarationSpecType::ShaderInput(name.clone()),
@@ -93,7 +93,7 @@ impl AMDILDataRef {
             AMDILNameRef::NamedOutputRegister(name) => HLSLDataRefType::ShaderOutput(name.clone()),
         };
         HLSLDataRefSpec {
-            base_name_ref: (self.name, self.swizzle),
+            vm_data_ref: (self.name, self.swizzle),
             ref_type,
             kind,
         }

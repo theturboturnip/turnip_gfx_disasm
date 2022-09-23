@@ -180,8 +180,8 @@ impl HLSLCompatibleAction<AMDILAbstractVM> for ALUInstruction {
         let comp_outcomes = Self::outcomes(&self);
         vec![HLSLCompatibleOutcome::Operation {
             opname: self.name.to_owned(),
-            output_elem: self.dst.clone().into_hlsl(self.data_kind),
-            input_elems: self
+            output_dataspec: self.dst.clone().into_hlsl(self.data_kind),
+            input_dataspecs: self
                 .srcs
                 .iter()
                 .map(|src| src.clone().into_hlsl(self.data_kind))

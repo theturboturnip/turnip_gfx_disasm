@@ -18,10 +18,11 @@ pub mod compat {
 
     #[derive(Debug, Clone)]
     pub struct HLSLDataRefSpec<TName: HLSLCompatibleNameRef> {
-        pub base_name_ref: (TName, MaskedSwizzle),
+        pub vm_data_ref: (TName, MaskedSwizzle),
         pub ref_type: HLSLDataRefType,
         pub kind: DataKind,
     }
+    // TODO move out of compat, rename to HLSLNameRef
     #[derive(Debug, Clone)]
     pub enum HLSLDataRefType {
         GenericRegister,
@@ -33,18 +34,18 @@ pub mod compat {
     impl<TName: HLSLCompatibleNameRef> ExpandsIntoHLSLComponents for HLSLDataRefSpec<TName> {
         type TName = TName;
         fn expand(&self) -> Vec<HLSLCompatibleScalarRef<TName>> {
-            self.base_name_ref
+            self.vm_data_ref
                 .1
                  .0
                 .iter()
-                .filter_map(|comp| comp.map(|comp| (self.base_name_ref.0.clone(), comp)))
+                .filter_map(|comp| comp.map(|comp| (self.vm_data_ref.0.clone(), comp)))
                 .collect()
         }
     }
 
     #[derive(Debug, Clone)]
     pub struct HLSLDeclarationSpec<TName: HLSLCompatibleNameRef> {
-        pub base_name_ref: TName,
+        pub vm_name_ref: TName,
         pub decl_type: HLSLDeclarationSpecType,
         pub n_components: u8,
         pub kind: DataKind,
@@ -64,7 +65,7 @@ pub mod compat {
         fn expand(&self) -> Vec<HLSLCompatibleScalarRef<TName>> {
             (0..self.n_components)
                 .into_iter()
-                .map(|i| (self.base_name_ref.clone(), VECTOR_COMPONENTS[i as usize]))
+                .map(|i| (self.vm_name_ref.clone(), VECTOR_COMPONENTS[i as usize]))
                 .collect()
         }
     }
@@ -103,15 +104,15 @@ pub mod compat {
     pub enum HLSLCompatibleOutcome<TVM: HLSLCompatibleAbstractVM + ScalarAbstractVM> {
         // Declare that some named element exists, and optionally has a known literal value.
         Declaration {
-            name: HLSLDeclarationSpec<TVM::TElementNameRef>,
+            declspec: HLSLDeclarationSpec<TVM::TElementNameRef>,
             literal_value: Option<TypedRef<[u64; 4]>>,
         },
 
         // Declare that an output element has a new value, based on many input scalars.
         Operation {
             opname: String,
-            output_elem: HLSLDataRefSpec<TVM::TElementNameRef>,
-            input_elems: Vec<HLSLDataRefSpec<TVM::TElementNameRef>>,
+            output_dataspec: HLSLDataRefSpec<TVM::TElementNameRef>,
+            input_dataspecs: Vec<HLSLDataRefSpec<TVM::TElementNameRef>>,
             component_deps: Vec<(
                 TypedRef<HLSLCompatibleScalarRef<TVM::TElementNameRef>>,
                 Vec<TypedRef<HLSLCompatibleScalarRef<TVM::TElementNameRef>>>,
@@ -120,6 +121,7 @@ pub mod compat {
     }
 }
 
+/// TODO rename to HLSLVectorName
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum HLSLVectorRef {
     GenericRegister(u64),
