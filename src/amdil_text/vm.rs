@@ -7,7 +7,7 @@
 
 use crate::abstract_machine::hlsl::compat::{HLSLCompatibleAbstractVM, HLSLCompatibleScalarRef};
 use crate::abstract_machine::vector::{MaskedSwizzle, VECTOR_COMPONENTS};
-use crate::abstract_machine::{DataWidth, ScalarAbstractVM, VMDataRef, VMNameRef};
+use crate::abstract_machine::{DataWidth, ScalarAbstractVM, VMDataRef, VMElementRef, VMNameRef};
 use crate::{ScalarAction, ScalarOutcome};
 
 use crate::abstract_machine::{DataKind, TypedVMRef, VMRef};
@@ -23,6 +23,7 @@ pub enum AMDILAbstractVM {}
 impl ScalarAbstractVM for AMDILAbstractVM {
     type Action = AMDILAction;
     type TScalarDataRef = HLSLCompatibleScalarRef<AMDILNameRef>;
+    type TElementDataRef = AMDILDataRef;
 }
 impl HLSLCompatibleAbstractVM for AMDILAbstractVM {
     type TElementNameRef = AMDILNameRef;
@@ -100,6 +101,21 @@ impl VMRef for AMDILDataRef {
     }
 }
 impl VMDataRef for AMDILDataRef {}
+impl VMElementRef<HLSLCompatibleScalarRef<AMDILNameRef>> for AMDILDataRef {
+    fn decompose(&self) -> Vec<HLSLCompatibleScalarRef<AMDILNameRef>> {
+        self.swizzle
+            .0
+            .iter()
+            .filter_map(|comp| match comp {
+                Some(comp) => Some(HLSLCompatibleScalarRef {
+                    vm_name_ref: self.name.clone(),
+                    comp: *comp,
+                }),
+                None => None,
+            })
+            .collect()
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum AMDILDeclaration {

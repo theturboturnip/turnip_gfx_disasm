@@ -1,6 +1,6 @@
 use crate::{ScalarAction, ScalarOutcome};
 
-use crate::abstract_machine::{ScalarAbstractVM, VMDataRef, VMRef};
+use crate::abstract_machine::{ScalarAbstractVM, VMDataRef, VMElementRef, VMRef};
 
 pub type RDNA2Action = Box<dyn ScalarAction<RDNA2AbstractVM>>;
 
@@ -9,6 +9,7 @@ pub enum RDNA2AbstractVM {}
 impl ScalarAbstractVM for RDNA2AbstractVM {
     type Action = RDNA2Action;
     type TScalarDataRef = RDNA2DataRef;
+    type TElementDataRef = RDNA2DataRef;
 }
 pub type RDNA2Outcome = ScalarOutcome<RDNA2AbstractVM>;
 
@@ -60,3 +61,8 @@ impl VMRef for RDNA2DataRef {
     }
 }
 impl VMDataRef for RDNA2DataRef {}
+impl VMElementRef<RDNA2DataRef> for RDNA2DataRef {
+    fn decompose(&self) -> Vec<RDNA2DataRef> {
+        vec![self.clone()]
+    }
+}

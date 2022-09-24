@@ -2,6 +2,7 @@ use std::hash::Hash;
 
 pub mod analysis;
 pub mod hlsl;
+pub mod instructions;
 pub mod vector;
 
 pub trait VMRef: Clone + PartialEq + Eq + Hash + std::fmt::Debug {
@@ -22,6 +23,11 @@ pub trait VMNameRef: VMRef {}
 ///
 /// For scalar machines, the same type may implement [VMNameRef] and [VMDataRef].
 pub trait VMDataRef: VMRef {}
+
+/// A VMDataRef that represents a VM's "element" - the main unit of computation for instructions.
+pub trait VMElementRef<TScalarDataRef>: VMDataRef {
+    fn decompose(&self) -> Vec<TScalarDataRef>;
+}
 
 /// The "kind" of a piece of data.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -64,6 +70,10 @@ pub struct TypedVMRef<TData: VMRef> {
 pub trait ScalarAbstractVM: std::fmt::Debug + Sized {
     type Action: ScalarAction<Self>;
     type TScalarDataRef: VMDataRef;
+    /// Element = the unit that abstract VM instructions operate on.
+    ///
+    /// e.g. for DXBC and AMDIL instructions operate on vectors => TElementDataRef = a VectorDataRef.
+    type TElementDataRef: VMElementRef<Self::TScalarDataRef>;
 }
 
 pub trait ScalarAction<TVM: ScalarAbstractVM> {
