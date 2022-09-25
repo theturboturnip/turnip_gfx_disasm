@@ -168,6 +168,23 @@ pub mod compat {
             inputs: Vec<TypedVMRef<HLSLCompatibleScalarRef<TVM::TElementNameRef>>>,
         },
     }
+
+    mod display {
+        use std::fmt::{Display, Formatter, Result};
+
+        use crate::VMNameRef;
+
+        use super::HLSLCompatibleScalarRef;
+
+        impl<T> Display for HLSLCompatibleScalarRef<T>
+        where
+            T: VMNameRef,
+        {
+            fn fmt(&self, f: &mut Formatter<'_>) -> Result {
+                write!(f, "ref {:?}.{:?}", self.vm_name_ref, self.comp)
+            }
+        }
+    }
 }
 
 /// An unswizzled vector available to operations in the HLSL virtual machine.
