@@ -16,3 +16,4 @@ num-derive = "0.3"
 clap = { version = "3.2.21", features = ["derive"] }
 nom = "7.1.1"
 phf = { version = "0.11.1", features = ["macros"] }
+lazy_static = "1.4.0"

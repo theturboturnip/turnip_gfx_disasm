@@ -4,7 +4,7 @@ use crate::abstract_machine::{ScalarAbstractVM, VMDataRef, VMElementRef, VMRef};
 
 pub type RDNA2Action = Box<dyn ScalarAction<RDNA2AbstractVM>>;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum RDNA2AbstractVM {}
 impl ScalarAbstractVM for RDNA2AbstractVM {
     type Action = RDNA2Action;

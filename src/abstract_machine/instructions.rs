@@ -11,8 +11,6 @@
 //! TODO should this be in crate::abstract_machine, or at the top level?
 //!
 
-use std::marker::PhantomData;
-
 use super::{DataKind, DataWidth, ScalarAbstractVM, TypedVMRef, VMElementRef};
 
 /// Trait for a type that manages a set of possible instructions
@@ -20,42 +18,50 @@ pub trait InstructionSet<TVM: ScalarAbstractVM>: Sized {
     /// How instructions are identified
     type InstructionID;
 
-    /// The type used to represent how instruction inputs/outputs relate to each other
-    type DepRelation: DependencyRelation<TVM>;
-
-    /// The type used to represent how instruction arguments are used
-    type ArgsSpec: ArgsSpec<TVM>;
+    /// The concrete type used to represent the specification for all instructions
+    type InstructionSpec: InstructionSpec<TVM>;
 
     /// Given an instruction ID, retreive the relevant specification if one exists
-    fn get_spec(&self, id: &Self::InstructionID) -> Option<InstructionSpec<TVM, Self>>;
+    fn get_spec(&self, id: &Self::InstructionID) -> Option<Self::InstructionSpec>;
 }
 
 /// The specification for an instruction - how arguments should be used and how inputs/outputs relate to each other.
 ///
 /// For convenience, exposes the functions contained in [ArgsSpec] and [DependencyRelation]
-pub struct InstructionSpec<TVM: ScalarAbstractVM, InstrSet: InstructionSet<TVM>> {
-    pub args_spec: InstrSet::ArgsSpec,
-    pub dep_relation: InstrSet::DepRelation,
-}
-impl<TVM: ScalarAbstractVM, InstrSet: InstructionSet<TVM>> InstructionSpec<TVM, InstrSet> {
-    pub fn sanitize_arguments(&self, args: Vec<TVM::TElementDataRef>) -> InstrArgs<TVM> {
-        self.args_spec.sanitize_arguments(args)
-    }
-    pub fn determine_dependencies(
+pub trait InstructionSpec<TVM: ScalarAbstractVM> {
+    /// [DependencyRelation::determine_dependencies]
+    fn determine_dependencies(
         &self,
-        args: InstrArgs<TVM>,
+        args: &InstrArgs<TVM>,
+    ) -> Vec<(
+        TypedVMRef<TVM::TScalarDataRef>,
+        Vec<TypedVMRef<TVM::TScalarDataRef>>,
+    )>;
+    /// [ArgsSpec::sanitize_arguments]
+    fn sanitize_arguments(&self, args: Vec<TVM::TElementDataRef>) -> InstrArgs<TVM>;
+}
+impl<TVM: ScalarAbstractVM, TArgsSpec: ArgsSpec<TVM>, TDepRelation: DependencyRelation<TVM>>
+    InstructionSpec<TVM> for (TArgsSpec, TDepRelation)
+{
+    fn sanitize_arguments(&self, args: Vec<TVM::TElementDataRef>) -> InstrArgs<TVM> {
+        self.0.sanitize_arguments(args)
+    }
+    fn determine_dependencies(
+        &self,
+        args: &InstrArgs<TVM>,
     ) -> Vec<(
         TypedVMRef<TVM::TScalarDataRef>,
         Vec<TypedVMRef<TVM::TScalarDataRef>>,
     )> {
-        self.dep_relation.determine_dependencies(args)
+        self.1.determine_dependencies(args)
     }
 }
 
 /// Struct holding the arguments to an instruction for a given VM
+#[derive(Debug, Clone)]
 pub struct InstrArgs<TVM: ScalarAbstractVM> {
-    outputs: Vec<TypedVMRef<TVM::TElementDataRef>>,
-    inputs: Vec<TypedVMRef<TVM::TElementDataRef>>,
+    pub outputs: Vec<TypedVMRef<TVM::TElementDataRef>>,
+    pub inputs: Vec<TypedVMRef<TVM::TElementDataRef>>,
 }
 
 /// Trait for types which can map the indivdual output scalars of an instruction to the input scalars that affect them.
@@ -64,7 +70,7 @@ pub trait DependencyRelation<TVM: ScalarAbstractVM> {
     ///     (output scalar, inputs affecting that output)
     fn determine_dependencies(
         &self,
-        args: InstrArgs<TVM>,
+        args: &InstrArgs<TVM>,
     ) -> Vec<(
         TypedVMRef<TVM::TScalarDataRef>,
         Vec<TypedVMRef<TVM::TScalarDataRef>>,
@@ -72,21 +78,28 @@ pub trait DependencyRelation<TVM: ScalarAbstractVM> {
 }
 
 /// Impl for [DependencyRelation] that defines simple relations
+#[derive(Debug, Clone, Copy)]
 pub enum SimpleDependencyRelation {
+    /// Each output's component is only affected by the corresponding input components
+    ///
+    /// e.g. `add r0.xyz r1.xyz r2.xyz` has dependencies `[r1.x, r2.x] -> r0.x`, `[r1.y, r2.y] -> r0.y`, `[r1.z, r2.z] -> r0.z`
     PerComponent,
+    /// Each output's component is affected by all input components
+    ///
+    /// e.g. `dp3_ieee r0.x, r1.xyz, r2.xyz` has dependency `[r1.xyz, r2.xyz] -> r0.x`
     AllToAll,
 }
 impl<TVM: ScalarAbstractVM> DependencyRelation<TVM> for SimpleDependencyRelation {
     fn determine_dependencies(
         &self,
-        args: InstrArgs<TVM>,
+        args: &InstrArgs<TVM>,
     ) -> Vec<(
         TypedVMRef<TVM::TScalarDataRef>,
         Vec<TypedVMRef<TVM::TScalarDataRef>>,
     )> {
         // for output in outputs
         //     for component in output
-        let expanded_outs = args.outputs.into_iter().map(|elem| {
+        let expanded_outs = args.outputs.iter().map(|elem| {
             let kind = elem.kind;
             let width = elem.width;
             elem.data
@@ -98,7 +111,7 @@ impl<TVM: ScalarAbstractVM> DependencyRelation<TVM> for SimpleDependencyRelation
                     width: width,
                 })
         });
-        let expanded_inputs = args.inputs.into_iter().map(|elem| {
+        let expanded_inputs = args.inputs.iter().map(|elem| {
             let kind = elem.kind;
             let width = elem.width;
             elem.data
@@ -160,19 +173,19 @@ pub trait ArgsSpec<TVM: ScalarAbstractVM> {
 }
 /// Implementation of [ArgsSpec] that takes a vector of args as [outputs... inputs...]
 /// and applies [DataKind]s and [DataWidth]s to create [TypedVMRef]s for each arg
-pub struct SimpleArgsSpec<TVM: ScalarAbstractVM> {
+#[derive(Debug, Clone)]
+pub struct SimpleArgsSpec {
     output_kinds: Vec<DataKind>,
     input_kinds: Vec<DataKind>,
     width: DataWidth,
-    _phantom: PhantomData<TVM>,
 }
-impl<TVM: ScalarAbstractVM> ArgsSpec<TVM> for SimpleArgsSpec<TVM> {
+impl<TVM: ScalarAbstractVM> ArgsSpec<TVM> for SimpleArgsSpec {
     fn sanitize_arguments(&self, args: Vec<TVM::TElementDataRef>) -> InstrArgs<TVM> {
         let (output_elems, input_elems) = args.split_at(self.output_kinds.len());
         assert_eq!(output_elems.len(), self.output_kinds.len());
         assert_eq!(input_elems.len(), self.input_kinds.len());
 
-        let outputs = output_elems
+        let outputs: Vec<_> = output_elems
             .into_iter()
             .zip(self.output_kinds.iter())
             .map(|(data, kind)| TypedVMRef {
@@ -183,9 +196,9 @@ impl<TVM: ScalarAbstractVM> ArgsSpec<TVM> for SimpleArgsSpec<TVM> {
             })
             .collect();
 
-        let inputs = input_elems
+        let inputs: Vec<_> = input_elems
             .into_iter()
-            .zip(self.output_kinds.iter())
+            .zip(self.input_kinds.iter())
             .map(|(data, kind)| TypedVMRef {
                 // TODO wish we didn't need to clone here :(
                 data: data.clone(),
@@ -193,6 +206,9 @@ impl<TVM: ScalarAbstractVM> ArgsSpec<TVM> for SimpleArgsSpec<TVM> {
                 width: self.width,
             })
             .collect();
+
+        assert_eq!(outputs.len(), self.output_kinds.len());
+        assert_eq!(inputs.len(), self.input_kinds.len());
 
         InstrArgs { outputs, inputs }
     }

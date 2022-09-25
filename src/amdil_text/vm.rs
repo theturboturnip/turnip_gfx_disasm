@@ -18,7 +18,7 @@ pub mod hlsl;
 pub type AMDILAction = super::decode::Instruction;
 
 /// Type for the AMDIL abstract VM. Implements [ScalarAbstractVM] and [HLSLCompatibleAbstractVM]
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum AMDILAbstractVM {}
 impl ScalarAbstractVM for AMDILAbstractVM {
     type Action = AMDILAction;
@@ -102,6 +102,9 @@ impl VMRef for AMDILDataRef {
 }
 impl VMDataRef for AMDILDataRef {}
 impl VMElementRef<HLSLCompatibleScalarRef<AMDILNameRef>> for AMDILDataRef {
+    /// Returns a list of the components that were actually used from self
+    ///
+    /// e.g. for r0.x_w_, (r0, x) and (r0, w) will be returned
     fn decompose(&self) -> Vec<HLSLCompatibleScalarRef<AMDILNameRef>> {
         self.swizzle
             .0

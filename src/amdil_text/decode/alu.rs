@@ -1,6 +1,12 @@
+use std::collections::HashMap;
+
 use crate::{
     abstract_machine::{
         hlsl::compat::{HLSLCompatibleAction, HLSLCompatibleOutcome},
+        instructions::{
+            ArgsSpec, DependencyRelation, InstrArgs, InstructionSpec, SimpleDependencyRelation,
+        },
+        vector::MaskedSwizzle,
         DataKind, DataWidth, TypedVMRef,
     },
     amdil_text::{
@@ -9,112 +15,163 @@ use crate::{
     },
     ScalarAction, ScalarOutcome,
 };
-use phf::phf_map;
+use lazy_static::lazy_static;
 
 use super::{decode_args, registers::arg_as_vector_data_ref, AMDILTextDecodeError};
 
 #[derive(Debug, Clone, Copy)]
 enum InputMask {
     /// Inherit the mask from the output
-    InheritFromOutput,
+    InheritFromFirstOutput,
     /// Truncate all vector masks to N components
     TruncateTo(u8),
-}
-impl InputMask {
-    fn apply(&self, output: &AMDILDataRef, input: AMDILDataRef) -> AMDILDataRef {
-        let swizzle = match self {
-            Self::InheritFromOutput => input.swizzle.masked_out(output.swizzle),
-            Self::TruncateTo(x) => input.swizzle.truncated(*x),
-        };
-        AMDILDataRef {
-            name: input.name,
-            swizzle,
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy)]
-pub enum OutputDep {
-    /// Each output's component is only affected by the corresponding input components
-    ///
-    /// e.g. `add r0.xyz r1.xyz r2.xyz` has dependencies `[r1.x, r2.x] -> r0.x`, `[r1.y, r2.y] -> r0.y`, `[r1.z, r2.z] -> r0.z`
-    PerComponent,
-    /// Each output's component is affected by all input components
-    ///
-    /// e.g. `dp3_ieee r0.x, r1.xyz, r2.xyz` has dependency `[r1.xyz, r2.xyz] -> r0.x`
-    All,
-}
-
-struct ALUInstructionDef {
-    n_in: usize,
-    input_mask: InputMask,
-    output_dep: OutputDep,
-    data_kind: DataKind,
 }
 
 #[derive(Debug, Clone)]
 pub struct ALUInstruction {
     name: &'static str,
-    dst: AMDILDataRef,
-    srcs: Vec<AMDILDataRef>,
-    output_dep: OutputDep,
-    data_kind: DataKind,
+    args: InstrArgs<AMDILAbstractVM>,
+    dep_relation: SimpleDependencyRelation,
 }
 
-const ALU_INSTR_DEFS: phf::Map<&'static str, ALUInstructionDef> = phf_map! {
-    "mov" => ALUInstructionDef{ n_in: 1, input_mask: InputMask::InheritFromOutput, output_dep: OutputDep::PerComponent, data_kind: DataKind::Hole },
-    "dp4_ieee" => ALUInstructionDef{ n_in: 2, input_mask: InputMask::TruncateTo(4), output_dep: OutputDep::All, data_kind: DataKind::Float },
-    "dp3_ieee" => ALUInstructionDef{ n_in: 2, input_mask: InputMask::TruncateTo(3), output_dep: OutputDep::All, data_kind: DataKind::Float },
-    "max_ieee" => ALUInstructionDef{ n_in: 2, input_mask: InputMask::InheritFromOutput, output_dep: OutputDep::PerComponent, data_kind: DataKind::Float },
-    "add" => ALUInstructionDef{ n_in: 2, input_mask: InputMask::InheritFromOutput, output_dep: OutputDep::PerComponent, data_kind: DataKind::Float },
-    // TODO this is horrifically inaccurate?
-    "sample" => ALUInstructionDef{n_in: 1, input_mask: InputMask::TruncateTo(2), output_dep: OutputDep::All, data_kind: DataKind::Float},
-    "lt" => ALUInstructionDef{n_in: 2, input_mask: InputMask::InheritFromOutput, output_dep: OutputDep::PerComponent, data_kind: DataKind::Float},
-    "ge" => ALUInstructionDef{n_in: 2, input_mask: InputMask::InheritFromOutput, output_dep: OutputDep::PerComponent, data_kind: DataKind::Float},
-    "div" => ALUInstructionDef{n_in: 2, input_mask: InputMask::InheritFromOutput, output_dep: OutputDep::PerComponent, data_kind: DataKind::Float},
-    // TODO allow different srcs to have different types
-    "cmov_logical" => ALUInstructionDef{n_in: 3, input_mask: InputMask::InheritFromOutput, output_dep: OutputDep::PerComponent, data_kind: DataKind::Hole},
-};
+#[derive(Debug, Clone)]
+struct ALUArgsSpec {
+    input_kinds: Vec<DataKind>,
+    input_mask: InputMask,
+    output_kinds: Vec<DataKind>,
+}
+impl ArgsSpec<AMDILAbstractVM> for ALUArgsSpec {
+    fn sanitize_arguments(&self, args: Vec<AMDILDataRef>) -> InstrArgs<AMDILAbstractVM> {
+        let (output_elems, input_elems) = args.split_at(self.output_kinds.len());
+        assert_eq!(output_elems.len(), self.output_kinds.len());
+        assert_eq!(input_elems.len(), self.input_kinds.len());
+
+        let mask_to_apply_to_input = match self.input_mask {
+            InputMask::InheritFromFirstOutput => output_elems[0].swizzle.copy_mask(),
+            InputMask::TruncateTo(n) => MaskedSwizzle::identity(n.into()),
+        };
+        const WIDTH: DataWidth = DataWidth::E32;
+
+        let outputs: Vec<_> = output_elems
+            .into_iter()
+            .zip(self.output_kinds.iter())
+            .map(|(data, kind)| TypedVMRef {
+                // TODO wish we didn't need to clone here :(
+                data: data.clone(),
+                kind: *kind,
+                width: WIDTH,
+            })
+            .collect();
+
+        let inputs: Vec<_> = input_elems
+            .into_iter()
+            .zip(self.input_kinds.iter())
+            .map(|(data, kind)| {
+                let swizzle = data.swizzle.masked_out(mask_to_apply_to_input);
+                TypedVMRef {
+                    // TODO wish we didn't need to clone here :(
+                    data: AMDILDataRef {
+                        name: data.name.clone(),
+                        swizzle,
+                    },
+                    kind: *kind,
+                    width: WIDTH,
+                }
+            })
+            .collect();
+
+        assert_eq!(outputs.len(), self.output_kinds.len());
+        assert_eq!(inputs.len(), self.input_kinds.len());
+
+        InstrArgs { outputs, inputs }
+    }
+}
+type ALUInstructionSet = HashMap<&'static str, (ALUArgsSpec, SimpleDependencyRelation)>;
+
+lazy_static! {
+    static ref FLOAT_ARITH: (ALUArgsSpec, SimpleDependencyRelation) = (
+        ALUArgsSpec {
+            input_kinds: vec![DataKind::Float, DataKind::Float],
+            input_mask: InputMask::InheritFromFirstOutput,
+            output_kinds: vec![DataKind::Float],
+        },
+        SimpleDependencyRelation::PerComponent,
+    );
+    static ref ALU_INSTR_DEFS: ALUInstructionSet = HashMap::from([
+        ("mov", (
+            ALUArgsSpec {
+                input_kinds: vec![DataKind::Hole],
+                input_mask: InputMask::InheritFromFirstOutput,
+                output_kinds: vec![DataKind::Hole]
+            },
+            SimpleDependencyRelation::PerComponent
+        )),
+        ("dp4_ieee", (
+            ALUArgsSpec {
+                input_kinds: vec![DataKind::Float, DataKind::Float],
+                input_mask: InputMask::TruncateTo(4),
+                output_kinds: vec![DataKind::Float],
+            },
+            SimpleDependencyRelation::AllToAll
+        )),
+        ("dp3_ieee", (
+            ALUArgsSpec {
+                input_kinds: vec![DataKind::Float, DataKind::Float],
+                input_mask: InputMask::TruncateTo(3),
+                output_kinds: vec![DataKind::Float],
+            },
+            SimpleDependencyRelation::AllToAll
+        )),
+        ("min_ieee", FLOAT_ARITH.clone()),
+        ("max_ieee", FLOAT_ARITH.clone()),
+        ("add", FLOAT_ARITH.clone()),
+        ("sub", FLOAT_ARITH.clone()),
+        ("lt", FLOAT_ARITH.clone()),
+        ("ge", FLOAT_ARITH.clone()),
+        ("div", FLOAT_ARITH.clone()),
+
+        ("cmov_logical", (
+            ALUArgsSpec {
+                // first input = integer "is zero"?
+                // second and third input could be anything, output kind could be anything
+                input_kinds: vec![DataKind::UnsignedInt, DataKind::Hole, DataKind::Hole],
+                input_mask: InputMask::TruncateTo(3),
+                output_kinds: vec![DataKind::Hole],
+            },
+            SimpleDependencyRelation::AllToAll
+        )),
+
+        ("sample", (
+            ALUArgsSpec {
+                // Coords (TODO texture is specified in a modifier - prob need to move sample out of this)
+                input_kinds: vec![DataKind::Float],
+                input_mask: InputMask::TruncateTo(2),
+                output_kinds: vec![DataKind::Float],
+            },
+            SimpleDependencyRelation::AllToAll
+        )),
+    ]);
+}
 
 pub fn decode_alu(
     g_instr: &grammar::Instruction,
 ) -> Result<Option<ALUInstruction>, AMDILTextDecodeError> {
     match (
-        ALU_INSTR_DEFS.get_entry(g_instr.instr.as_str()),
+        ALU_INSTR_DEFS.get_key_value(g_instr.instr.as_str()),
         decode_args(&g_instr.args).as_slice(),
     ) {
-        (Some((static_name, instr_def)), matchable_args) => {
+        (Some((static_name, instr_spec)), matchable_args) => {
             // Map matchable_args into VectorDataRefs
             let args: Result<Vec<AMDILDataRef>, AMDILTextDecodeError> =
                 matchable_args.iter().map(arg_as_vector_data_ref).collect();
 
-            // Take n_out destination items, n_in src items
-            let mut args = args?.into_iter();
-            // TODO error handling
-            let dst = args.by_ref().take(1).next().unwrap();
-
-            // Apply input mask preference
-            let input_mask = instr_def.input_mask;
-            let srcs: Vec<_> = args
-                .take(instr_def.n_in)
-                .map(|src| input_mask.apply(&dst, src))
-                .collect();
-
-            // if there aren't enough items, take() will just return how many there were - check we aren't missing any
-            if srcs.len() < instr_def.n_in {
-                return Err(AMDILTextDecodeError::Generic(format!(
-                    "Not enough arguments for '{}' - expected 1 dst and {} src, got {:?}",
-                    static_name, instr_def.n_in, matchable_args
-                )));
-            }
+            let args = instr_spec.sanitize_arguments(args?);
 
             // ok, produce the instruction
             Ok(Some(ALUInstruction {
                 name: *static_name,
-                dst,
-                srcs,
-                output_dep: instr_def.output_dep,
-                data_kind: instr_def.data_kind,
+                args,
+                dep_relation: instr_spec.1,
             }))
         }
         (None, _) => Ok(None),
@@ -123,86 +180,64 @@ pub fn decode_alu(
 
 impl ScalarAction<AMDILAbstractVM> for ALUInstruction {
     fn outcomes(&self) -> Vec<ScalarOutcome<AMDILAbstractVM>> {
-        let mut outcomes = vec![];
-        for i in 0..4 {
-            match (self.output_dep, self.dst.swizzle[i]) {
-                (OutputDep::PerComponent, Some(dst_comp)) => {
-                    outcomes.push(ScalarOutcome::Dependency {
-                        output: TypedVMRef {
-                            data: (self.dst.name.clone(), dst_comp).into(),
-                            kind: self.data_kind,
-                            width: DataWidth::E32,
-                        },
-                        inputs: self
-                            .srcs
-                            .iter()
-                            .map(|src| {
-                                let src_comp = src.swizzle[i].expect(
-                                    "src component which mapped to dst component wasn't available",
-                                );
-                                TypedVMRef {
-                                    data: (src.name.clone(), src_comp).into(),
-                                    kind: self.data_kind,
-                                    width: DataWidth::E32,
-                                }
-                            })
-                            .collect(),
-                    })
-                }
-                (OutputDep::All, Some(dst_comp)) => outcomes.push(ScalarOutcome::Dependency {
-                    output: TypedVMRef {
-                        data: (self.dst.name.clone(), dst_comp).into(),
-                        kind: self.data_kind,
-                        width: DataWidth::E32,
-                    },
-                    inputs: self
-                        .srcs
-                        .iter()
-                        .map(|src| {
-                            src.swizzle
-                                .0
-                                .iter()
-                                // Get rid of None values from the source component
-                                .filter_map(|comp| *comp)
-                                // Map non-None source components -> TypedRef
-                                .map(|src_comp| TypedVMRef {
-                                    data: (src.name.clone(), src_comp).into(),
-                                    kind: self.data_kind,
-                                    width: DataWidth::E32,
-                                })
-                            // Collect a set of TypedRefs for each input
-                        })
-                        // Flatten Iterator<Iterator<TypedRef>> into Iterator<TypedRef>
-                        .flatten()
-                        .collect(),
-                }),
-                (_, None) => {}
-            }
-        }
-        outcomes
+        self.dep_relation
+            .determine_dependencies(&self.args)
+            .into_iter()
+            .map(|(output, inputs)| ScalarOutcome::Dependency { output, inputs })
+            .collect()
     }
 }
 impl HLSLCompatibleAction<AMDILAbstractVM> for ALUInstruction {
     fn hlsl_outcomes(&self) -> Vec<HLSLCompatibleOutcome<AMDILAbstractVM>> {
         let comp_outcomes = Self::outcomes(&self);
-        vec![HLSLCompatibleOutcome::Operation {
-            opname: self.name.to_owned(),
-            output_dataspec: self.dst.clone().into_hlsl(self.data_kind),
-            input_dataspecs: self
-                .srcs
-                .iter()
-                .map(|src| src.clone().into_hlsl(self.data_kind))
-                .collect(),
-            component_deps: comp_outcomes
-                .into_iter()
-                .map(|out| match out {
-                    ScalarOutcome::Dependency {
-                        output: output_comps,
-                        inputs: inputs_comps,
-                    } => (output_comps, inputs_comps),
-                    _ => panic!("ALUInstruction::outcomes returned a not-dependency"),
-                })
-                .collect(),
-        }]
+        self.args
+            .outputs
+            .iter()
+            .map(|output| HLSLCompatibleOutcome::Operation {
+                opname: self.name.to_owned(),
+                output_dataspec: output.data.clone().into_hlsl(output.kind),
+                input_dataspecs: self
+                    .args
+                    .inputs
+                    .iter()
+                    .map(|src| src.data.clone().into_hlsl(src.kind))
+                    .collect(),
+                component_deps: comp_outcomes
+                    .iter()
+                    .filter_map(|out| match out {
+                        ScalarOutcome::Dependency {
+                            output: output_comp,
+                            inputs: inputs_comps,
+                        } => {
+                            if output_comp.data.vm_name_ref == output.data.name {
+                                Some((output_comp.clone(), inputs_comps.clone()))
+                            } else {
+                                None
+                            }
+                        }
+                        _ => panic!("ALUInstruction::outcomes returned a not-dependency"),
+                    })
+                    .collect(),
+            })
+            .collect()
+        // vec![HLSLCompatibleOutcome::Operation {
+        //     opname: self.name.to_owned(),
+        //     output_dataspec: self.dst.clone().into_hlsl(self.data_kind),
+        //     input_dataspecs: self
+        //         .srcs
+        //         .iter()
+        //         .map(|src| src.clone().into_hlsl(self.data_kind))
+        //         .collect(),
+        //     component_deps: comp_outcomes
+        //         .into_iter()
+        //         .map(|out| match out {
+        //             ScalarOutcome::Dependency {
+        //                 output: output_comps,
+        //                 inputs: inputs_comps,
+        //             }, (output_comps, inputs_comps),
+        //             _, panic!("ALUInstruction::outcomes returned a not-dependency"),
+        //         })
+        //         .collect(),
+        // }]
     }
 }
