@@ -1,9 +1,9 @@
-use crate::abstract_machine::{
+use crate::{
+    abstract_machine::{DataKind, DataWidth, TypedVMRef},
     hlsl::compat::{
         HLSLCompatibleAction, HLSLCompatibleOutcome, HLSLDataRefSpec, HLSLDeclarationSpec,
         HLSLDeclarationSpecType, HLSLNameRefType,
     },
-    DataKind, DataWidth, TypedVMRef,
 };
 
 use super::{AMDILAbstractVM, AMDILDataRef, AMDILDeclaration, AMDILNameRef};

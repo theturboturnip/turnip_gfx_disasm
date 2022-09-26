@@ -2,7 +2,6 @@ use std::hash::Hash;
 
 pub mod analysis;
 pub mod display;
-pub mod hlsl;
 pub mod instructions;
 pub mod vector;
 

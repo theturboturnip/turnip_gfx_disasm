@@ -1,7 +1,7 @@
 use std::{cell::RefCell, rc::Rc};
 
-use super::{
-    vector::{MaskedSwizzle, VectorComponent},
+use crate::{
+    abstract_machine::vector::{MaskedSwizzle, VectorComponent},
     DataKind,
 };
 

@@ -1,17 +1,17 @@
 use std::{cell::RefCell, collections::HashMap, marker::PhantomData, rc::Rc};
 
 use crate::abstract_machine::{
-    hlsl::{
-        compat::{
-            ExpandsIntoHLSLComponents, HLSLCompatibleAbstractVM, HLSLCompatibleAction,
-            HLSLCompatibleOutcome, HLSLCompatibleScalarRef, HLSLDataRefSpec, HLSLDeclarationSpec,
-            HLSLDeclarationSpecType, HLSLNameRefType,
-        },
-        HLSLOutcome, HLSLScalarDataRef, HLSLVariable, HLSLVariableInfo, HLSLVectorDataRef,
-        HLSLVectorName,
-    },
     vector::{MaskedSwizzle, VECTOR_COMPONENTS},
     DataKind,
+};
+use crate::hlsl::{
+    compat::{
+        ExpandsIntoHLSLComponents, HLSLCompatibleAbstractVM, HLSLCompatibleAction,
+        HLSLCompatibleOutcome, HLSLCompatibleScalarRef, HLSLDataRefSpec, HLSLDeclarationSpec,
+        HLSLDeclarationSpecType, HLSLNameRefType,
+    },
+    HLSLOutcome, HLSLScalarDataRef, HLSLVariable, HLSLVariableInfo, HLSLVectorDataRef,
+    HLSLVectorName,
 };
 
 #[derive(Debug)]

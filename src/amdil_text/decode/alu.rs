@@ -2,7 +2,6 @@ use std::collections::HashMap;
 
 use crate::{
     abstract_machine::{
-        hlsl::compat::{HLSLCompatibleAction, HLSLCompatibleOutcome},
         instructions::{
             ArgsSpec, DependencyRelation, InstrArgs, InstructionSpec, SimpleDependencyRelation,
         },
@@ -13,6 +12,7 @@ use crate::{
         grammar,
         vm::{AMDILAbstractVM, AMDILDataRef},
     },
+    hlsl::compat::{HLSLCompatibleAction, HLSLCompatibleOutcome},
     ScalarAction, ScalarOutcome,
 };
 use lazy_static::lazy_static;

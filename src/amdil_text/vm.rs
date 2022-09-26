@@ -5,9 +5,9 @@
 //! All data is represented as 4-component vectors.
 //! Inputs to instructions can be swizzled i.e. can have their components reordered or reused (v0.xyxx, v3.wzwx etc. are valid)
 
-use crate::abstract_machine::hlsl::compat::{HLSLCompatibleAbstractVM, HLSLCompatibleScalarRef};
 use crate::abstract_machine::vector::{MaskedSwizzle, VECTOR_COMPONENTS};
 use crate::abstract_machine::{DataWidth, ScalarAbstractVM, VMDataRef, VMElementRef, VMNameRef};
+use crate::hlsl::compat::{HLSLCompatibleAbstractVM, HLSLCompatibleScalarRef};
 use crate::{ScalarAction, ScalarOutcome};
 
 use crate::abstract_machine::{DataKind, TypedVMRef, VMRef};

@@ -1,8 +1,6 @@
 use crate::{
-    abstract_machine::{
-        hlsl::compat::{HLSLCompatibleAction, HLSLCompatibleOutcome},
-        vector::MaskedSwizzle,
-    },
+    abstract_machine::vector::MaskedSwizzle,
+    hlsl::compat::{HLSLCompatibleAction, HLSLCompatibleOutcome},
     DataKind, DataWidth, ScalarAction, ScalarOutcome, TypedVMRef,
 };
 
