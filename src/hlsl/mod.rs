@@ -7,6 +7,8 @@ use crate::{
 
 pub mod compat;
 mod display;
+pub mod syntax;
+pub mod types;
 
 /// An unswizzled vector available to operations in the HLSL virtual machine.
 /// See [HLSLVariableInfo].
