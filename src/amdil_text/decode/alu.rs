@@ -2,9 +2,7 @@ use std::collections::HashMap;
 
 use crate::{
     abstract_machine::{
-        instructions::{
-            ArgsSpec, DependencyRelation, InstrArgs, InstructionSpec, SimpleDependencyRelation,
-        },
+        instructions::{ArgsSpec, DependencyRelation, InstrArgs, SimpleDependencyRelation},
         vector::MaskedSwizzle,
         DataKind, DataWidth, TypedVMRef,
     },
@@ -12,7 +10,13 @@ use crate::{
         grammar,
         vm::{AMDILAbstractVM, AMDILDataRef},
     },
-    hlsl::compat::{HLSLCompatibleAction, HLSLCompatibleOutcome},
+    hlsl::{
+        compat::{HLSLCompatibleAction, HLSLCompatibleOutcome},
+        syntax::{
+            ArithmeticOp, FauxBooleanOp, HLSLOperator, NumericIntrinsic, SampleIntrinsic,
+            UnconcreteOpResult,
+        },
+    },
     ScalarAction, ScalarOutcome,
 };
 use lazy_static::lazy_static;
@@ -29,9 +33,9 @@ enum InputMask {
 
 #[derive(Debug, Clone)]
 pub struct ALUInstruction {
-    name: &'static str,
     args: InstrArgs<AMDILAbstractVM>,
     dep_relation: SimpleDependencyRelation,
+    op: HLSLOperator,
 }
 
 #[derive(Debug, Clone)]
@@ -86,17 +90,22 @@ impl ArgsSpec<AMDILAbstractVM> for ALUArgsSpec {
         InstrArgs { outputs, inputs }
     }
 }
-type ALUInstructionSet = HashMap<&'static str, (ALUArgsSpec, SimpleDependencyRelation)>;
+type ALUInstructionSet =
+    HashMap<&'static str, (ALUArgsSpec, SimpleDependencyRelation, HLSLOperator)>;
 
-lazy_static! {
-    static ref FLOAT_ARITH: (ALUArgsSpec, SimpleDependencyRelation) = (
+fn float_arith(op: ArithmeticOp) -> (ALUArgsSpec, SimpleDependencyRelation, HLSLOperator) {
+    (
         ALUArgsSpec {
             input_kinds: vec![DataKind::Float, DataKind::Float],
             input_mask: InputMask::InheritFromFirstOutput,
             output_kinds: vec![DataKind::Float],
         },
         SimpleDependencyRelation::PerComponent,
-    );
+        HLSLOperator::Arithmetic(op),
+    )
+}
+
+lazy_static! {
     static ref ALU_INSTR_DEFS: ALUInstructionSet = HashMap::from([
         ("mov", (
             ALUArgsSpec {
@@ -104,7 +113,8 @@ lazy_static! {
                 input_mask: InputMask::InheritFromFirstOutput,
                 output_kinds: vec![DataKind::Hole]
             },
-            SimpleDependencyRelation::PerComponent
+            SimpleDependencyRelation::PerComponent,
+            HLSLOperator::Assign,
         )),
         ("dp4_ieee", (
             ALUArgsSpec {
@@ -112,7 +122,8 @@ lazy_static! {
                 input_mask: InputMask::TruncateTo(4),
                 output_kinds: vec![DataKind::Float],
             },
-            SimpleDependencyRelation::AllToAll
+            SimpleDependencyRelation::AllToAll,
+            HLSLOperator::NumericI(NumericIntrinsic::Dot),
         )),
         ("dp3_ieee", (
             ALUArgsSpec {
@@ -120,15 +131,69 @@ lazy_static! {
                 input_mask: InputMask::TruncateTo(3),
                 output_kinds: vec![DataKind::Float],
             },
-            SimpleDependencyRelation::AllToAll
+            SimpleDependencyRelation::AllToAll,
+            HLSLOperator::NumericI(NumericIntrinsic::Dot),
         )),
-        ("min_ieee", FLOAT_ARITH.clone()),
-        ("max_ieee", FLOAT_ARITH.clone()),
-        ("add", FLOAT_ARITH.clone()),
-        ("sub", FLOAT_ARITH.clone()),
-        ("lt", FLOAT_ARITH.clone()),
-        ("ge", FLOAT_ARITH.clone()),
-        ("div", FLOAT_ARITH.clone()),
+        ("min_ieee", (
+            ALUArgsSpec {
+                input_kinds: vec![DataKind::Float, DataKind::Float],
+                input_mask: InputMask::InheritFromFirstOutput,
+                output_kinds: vec![DataKind::Float],
+            },
+            SimpleDependencyRelation::PerComponent,
+            HLSLOperator::NumericI(NumericIntrinsic::Min),
+        )),
+        ("max_ieee", (
+            ALUArgsSpec {
+                input_kinds: vec![DataKind::Float, DataKind::Float],
+                input_mask: InputMask::InheritFromFirstOutput,
+                output_kinds: vec![DataKind::Float],
+            },
+            SimpleDependencyRelation::PerComponent,
+            HLSLOperator::NumericI(NumericIntrinsic::Max),
+        )),
+
+        ("add", float_arith(ArithmeticOp::Plus)),
+        ("sub", float_arith(ArithmeticOp::Minus)),
+        ("mul", float_arith(ArithmeticOp::Times)),
+        ("div", float_arith(ArithmeticOp::Div)),
+
+        ("lt", (
+            ALUArgsSpec {
+                input_kinds: vec![DataKind::Float, DataKind::Float],
+                input_mask: InputMask::InheritFromFirstOutput,
+                output_kinds: vec![DataKind::Float],
+            },
+            SimpleDependencyRelation::PerComponent,
+            HLSLOperator::FauxBoolean(FauxBooleanOp::Lt),
+        )),
+        ("le", (
+            ALUArgsSpec {
+                input_kinds: vec![DataKind::Float, DataKind::Float],
+                input_mask: InputMask::InheritFromFirstOutput,
+                output_kinds: vec![DataKind::Float],
+            },
+            SimpleDependencyRelation::PerComponent,
+            HLSLOperator::FauxBoolean(FauxBooleanOp::Le),
+        )),
+        ("gt", (
+            ALUArgsSpec {
+                input_kinds: vec![DataKind::Float, DataKind::Float],
+                input_mask: InputMask::InheritFromFirstOutput,
+                output_kinds: vec![DataKind::Float],
+            },
+            SimpleDependencyRelation::PerComponent,
+            HLSLOperator::FauxBoolean(FauxBooleanOp::Gt),
+        )),
+        ("ge", (
+            ALUArgsSpec {
+                input_kinds: vec![DataKind::Float, DataKind::Float],
+                input_mask: InputMask::InheritFromFirstOutput,
+                output_kinds: vec![DataKind::Float],
+            },
+            SimpleDependencyRelation::PerComponent,
+            HLSLOperator::FauxBoolean(FauxBooleanOp::Ge),
+        )),
 
         ("cmov_logical", (
             ALUArgsSpec {
@@ -138,7 +203,8 @@ lazy_static! {
                 input_mask: InputMask::TruncateTo(3),
                 output_kinds: vec![DataKind::Hole],
             },
-            SimpleDependencyRelation::AllToAll
+            SimpleDependencyRelation::AllToAll,
+            HLSLOperator::FauxBoolean(FauxBooleanOp::Ternary)
         )),
 
         ("sample", (
@@ -148,7 +214,8 @@ lazy_static! {
                 input_mask: InputMask::TruncateTo(2),
                 output_kinds: vec![DataKind::Float],
             },
-            SimpleDependencyRelation::AllToAll
+            SimpleDependencyRelation::AllToAll,
+            HLSLOperator::SampleI(SampleIntrinsic::Tex2DFakeDoesntTakeTex)
         )),
     ]);
 }
@@ -160,18 +227,18 @@ pub fn decode_alu(
         ALU_INSTR_DEFS.get_key_value(g_instr.instr.as_str()),
         decode_args(&g_instr.args).as_slice(),
     ) {
-        (Some((static_name, instr_spec)), matchable_args) => {
+        (Some((_static_name, instr_spec)), matchable_args) => {
             // Map matchable_args into VectorDataRefs
             let args: Result<Vec<AMDILDataRef>, AMDILTextDecodeError> =
                 matchable_args.iter().map(arg_as_vector_data_ref).collect();
 
-            let args = instr_spec.sanitize_arguments(args?);
+            let args = instr_spec.0.sanitize_arguments(args?);
 
             // ok, produce the instruction
             Ok(Some(ALUInstruction {
-                name: *static_name,
                 args,
                 dep_relation: instr_spec.1,
+                op: instr_spec.2,
             }))
         }
         (None, _) => Ok(None),
@@ -194,14 +261,15 @@ impl HLSLCompatibleAction<AMDILAbstractVM> for ALUInstruction {
             .outputs
             .iter()
             .map(|output| HLSLCompatibleOutcome::Operation {
-                opname: self.name.to_owned(),
+                op: UnconcreteOpResult::new(
+                    self.op,
+                    self.args
+                        .inputs
+                        .iter()
+                        .map(|src| src.data.clone().into_hlsl(src.kind))
+                        .collect(),
+                ),
                 output_dataspec: output.data.clone().into_hlsl(output.kind),
-                input_dataspecs: self
-                    .args
-                    .inputs
-                    .iter()
-                    .map(|src| src.data.clone().into_hlsl(src.kind))
-                    .collect(),
                 component_deps: comp_outcomes
                     .iter()
                     .filter_map(|out| match out {

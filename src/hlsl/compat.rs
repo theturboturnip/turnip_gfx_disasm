@@ -6,6 +6,11 @@ use crate::{
     ScalarAction,
 };
 
+use super::{
+    syntax::{UnconcreteOpResult, UnconcreteOpTarget},
+    types::HLSLType,
+};
+
 /// An HLSL-compatible specification for a reference to a swizzled vector
 #[derive(Debug, Clone)]
 pub struct HLSLDataRefSpec<TName: VMNameRef> {
@@ -14,6 +19,12 @@ pub struct HLSLDataRefSpec<TName: VMNameRef> {
     pub swizzle: MaskedSwizzle,
     pub kind: DataKind,
 }
+impl<TName: VMNameRef> UnconcreteOpTarget for HLSLDataRefSpec<TName> {
+    fn unconcrete_type(&self) -> HLSLType {
+        self.kind.into()
+    }
+}
+
 /// The type of vector name an HLSL-compatible value will have
 #[derive(Debug, Clone)]
 pub enum HLSLNameRefType {
@@ -146,9 +157,8 @@ pub enum HLSLCompatibleOutcome<TVM: HLSLCompatibleAbstractVM> {
 
     /// Declare that an output element has a new value, based on many input scalars.
     Operation {
-        opname: String,
+        op: UnconcreteOpResult<HLSLDataRefSpec<TVM::TElementNameRef>>,
         output_dataspec: HLSLDataRefSpec<TVM::TElementNameRef>,
-        input_dataspecs: Vec<HLSLDataRefSpec<TVM::TElementNameRef>>,
         component_deps: Vec<(
             TypedVMRef<HLSLCompatibleScalarRef<TVM::TElementNameRef>>,
             Vec<TypedVMRef<HLSLCompatibleScalarRef<TVM::TElementNameRef>>>,

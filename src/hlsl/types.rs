@@ -1,5 +1,7 @@
 use bitflags::bitflags;
 
+use crate::DataKind;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum HLSLNumericType {
     Float,
@@ -83,14 +85,18 @@ impl HLSLType {
 
     pub fn intersect(&self, other: &HLSLType) -> Result<Self, TypeCoersionError> {
         match self {
-            Self::Concrete(_) => {
-                if self != other {
+            Self::Concrete(our_c) => {
+                let intersects = match other {
+                    HLSLType::Concrete(their_c) => our_c == their_c,
+                    HLSLType::Hole(mask) => mask.contains((*our_c).into()),
+                };
+                if intersects {
+                    Ok(*self)
+                } else {
                     Err(TypeCoersionError::IntersectionFail(
                         self.clone(),
                         other.clone(),
                     ))
-                } else {
-                    Ok(*self)
                 }
             }
             Self::Hole(mask) => {
@@ -109,6 +115,22 @@ impl HLSLType {
                         .map_or(Self::Hole(result), |concrete| Self::Concrete(concrete)))
                 }
             }
+        }
+    }
+}
+/// TODO REMOVE THIS!
+/// [DataKind] NEEDS TO BE OBSOLETED
+///
+/// Approximate converter for [DataKind] to [HLSLType] for convenience.
+/// Assumes all data is numeric unless [DataKind::Untyped] which is [HLSLConcreteType::Texture2D]
+impl From<DataKind> for HLSLType {
+    fn from(dk: DataKind) -> Self {
+        match dk {
+            DataKind::Float => HLSLNumericType::Float.into(),
+            DataKind::SignedInt => HLSLNumericType::SignedInt.into(),
+            DataKind::UnsignedInt => HLSLNumericType::UnsignedInt.into(),
+            DataKind::Untyped => HLSLConcreteType::Texture2D.into(),
+            DataKind::Hole => HLSLHoleTypeMask::NUMERIC.into(),
         }
     }
 }
@@ -135,23 +157,11 @@ impl From<HLSLNumericType> for HLSLOperandType {
     }
 }
 impl HLSLOperandType {
-    pub fn encompasses_operandtype(&self, other: &HLSLOperandType, holes: &[HLSLType]) -> bool {
-        let self_as_type = match self {
+    pub fn as_hlsltype(&self, holes: &[HLSLType]) -> HLSLType {
+        match self {
             Self::Concrete(c) => HLSLType::Concrete(*c),
             Self::Hole(idx) => holes[*idx],
-        };
-        let other_as_type = match other {
-            Self::Concrete(c) => HLSLType::Concrete(*c),
-            Self::Hole(idx) => holes[*idx],
-        };
-        self_as_type.encompasses(&other_as_type)
-    }
-    pub fn encompasses_type(&self, other: &HLSLType, holes: &[HLSLType]) -> bool {
-        let self_as_type = match self {
-            Self::Concrete(c) => HLSLType::Concrete(*c),
-            Self::Hole(idx) => holes[*idx],
-        };
-        self_as_type.encompasses(other)
+        }
     }
 
     pub fn concretize(&self, holes: &[HLSLConcreteType]) -> HLSLConcreteType {

@@ -5,6 +5,11 @@ use crate::{
     DataKind,
 };
 
+use self::{
+    syntax::{UnconcreteOpResult, UnconcreteOpTarget},
+    types::HLSLType,
+};
+
 pub mod compat;
 mod display;
 pub mod syntax;
@@ -37,6 +42,11 @@ pub enum HLSLVectorName {
 pub type HLSLScalarDataRef = (HLSLVariable, VectorComponent);
 /// A reference to a swizzled vector in the HLSL virtual machine
 pub type HLSLVectorDataRef = (HLSLVariable, MaskedSwizzle);
+impl UnconcreteOpTarget for HLSLVectorDataRef {
+    fn unconcrete_type(&self) -> HLSLType {
+        self.0.borrow().kind.into()
+    }
+}
 
 /// The outcome of an action in the HLSL virtual machine
 #[derive(Debug, Clone)]
@@ -51,8 +61,7 @@ pub enum HLSLOutcome {
     /// State that the output of an operation has been assigned to some components of a variable
     Operation {
         output_dataref: HLSLVectorDataRef,
-        opname: String,
-        input_datarefs: Vec<HLSLVectorDataRef>,
+        op: UnconcreteOpResult<HLSLVectorDataRef>,
         // Mapping of each individual scalar output to each individual scalar input
         scalar_deps: Vec<(HLSLScalarDataRef, Vec<HLSLScalarDataRef>)>,
     },

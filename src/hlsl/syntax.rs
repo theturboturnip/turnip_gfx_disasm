@@ -52,7 +52,7 @@ use super::types::{
 /// Trait implemented for HLSL operators and intrinsic functions which take 1..N inputs and output 1 value.
 ///
 /// Used to determine what data types are accepted as inputs and outputs.
-pub trait Operator: Sized + std::fmt::Debug {
+pub trait Operator: std::fmt::Debug {
     /// Return the "type-spec" for the operator - the set of input types and output type.
     /// These are not concretized, and may involve type holes.
     fn get_typespec(&self) -> OperatorTypeSpec;
@@ -88,7 +88,7 @@ impl OperatorTypeSpec {
         }
 
         if let Some(max_referenced_hole) = max_referenced_hole {
-            if max_referenced_hole != holes.len() {
+            if max_referenced_hole != holes.len() - 1 {
                 panic!("Mismatch in referenced holes - maximum referenced hole = {}, but {} are present: {:?}", max_referenced_hole, holes.len(), holes);
             }
         }
@@ -125,8 +125,54 @@ pub struct ConcreteOperatorTypes {
     output_type: HLSLConcreteType,
 }
 
+// TODO: FUCK WE NEED A SINGLE CATCH-ALL HLSLOperator ENUM
+// WE NEED TO BE ABLE TO STORE THEM CONSISTENTLY
+// AND IT MEANS WE DONT NEED THE RC BULLSHIT ANYMORE
+#[derive(Debug, Clone, Copy)]
+pub enum HLSLOperator {
+    Assign,
+    Unary(UnaryOp),
+    Arithmetic(ArithmeticOp),
+    BinaryArithmetic(BinaryArithmeticOp),
+    NumericCast(NumericCastTo),
+    SampleI(SampleIntrinsic),
+    NumericI(NumericIntrinsic),
+    FauxBoolean(FauxBooleanOp),
+}
+impl Operator for HLSLOperator {
+    fn get_typespec(&self) -> OperatorTypeSpec {
+        match self {
+            HLSLOperator::Assign => OperatorTypeSpec::new(
+                vec![HLSLOperandType::Hole(0)],
+                HLSLOperandType::Hole(0),
+                vec![HLSLHoleTypeMask::all().into()],
+            ),
+            HLSLOperator::Unary(x) => x.get_typespec(),
+            HLSLOperator::Arithmetic(x) => x.get_typespec(),
+            HLSLOperator::BinaryArithmetic(x) => x.get_typespec(),
+            HLSLOperator::NumericCast(x) => x.get_typespec(),
+            HLSLOperator::SampleI(x) => x.get_typespec(),
+            HLSLOperator::NumericI(x) => x.get_typespec(),
+            HLSLOperator::FauxBoolean(x) => x.get_typespec(),
+        }
+    }
+
+    fn n_inputs(&self) -> usize {
+        match self {
+            HLSLOperator::Assign => 1,
+            HLSLOperator::Unary(x) => x.n_inputs(),
+            HLSLOperator::Arithmetic(x) => x.n_inputs(),
+            HLSLOperator::BinaryArithmetic(x) => x.n_inputs(),
+            HLSLOperator::NumericCast(x) => x.n_inputs(),
+            HLSLOperator::SampleI(x) => x.n_inputs(),
+            HLSLOperator::NumericI(x) => x.n_inputs(),
+            HLSLOperator::FauxBoolean(x) => x.n_inputs(),
+        }
+    }
+}
+
 /// Unary operations that operate on a single value and return a single value
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub enum UnaryOp {
     /// Inverts each bit of X
     ///
@@ -145,9 +191,7 @@ impl Operator for UnaryOp {
     fn get_typespec(&self) -> OperatorTypeSpec {
         let hole = match self {
             UnaryOp::BinaryNot => HLSLHoleTypeMask::INTEGER,
-
             UnaryOp::Negate => HLSLHoleTypeMask::NUMERIC_FLOAT | HLSLHoleTypeMask::NUMERIC_SINT,
-
             UnaryOp::Plus => HLSLHoleTypeMask::NUMERIC,
         };
 
@@ -164,7 +208,7 @@ impl Operator for UnaryOp {
 }
 
 /// Integer/float arithmetic operations, which take two inputs X and Y and return one output.
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub enum ArithmeticOp {
     /// Adds X and Y
     ///
@@ -203,7 +247,7 @@ impl Operator for ArithmeticOp {
 }
 
 /// Binary/bitwise operations which take two inputs X and Y and return a single output.
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub enum BinaryArithmeticOp {
     LeftShift,
     RightShift,
@@ -246,7 +290,7 @@ impl Operator for BinaryArithmeticOp {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct NumericCastTo(pub HLSLNumericType);
 impl Operator for NumericCastTo {
     fn get_typespec(&self) -> OperatorTypeSpec {
@@ -263,9 +307,11 @@ impl Operator for NumericCastTo {
 }
 
 /// Texture sampling intrinsic functions, which take a texture argument and at least one other input to produce a single output.
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub enum SampleIntrinsic {
     Tex2D,
+    // Just exists for compatibility with current bad behaviour in AMDIL - TODO remove
+    Tex2DFakeDoesntTakeTex,
 }
 impl Operator for SampleIntrinsic {
     fn get_typespec(&self) -> OperatorTypeSpec {
@@ -278,12 +324,85 @@ impl Operator for SampleIntrinsic {
                 HLSLNumericType::Float.into(),
                 vec![],
             ),
+            Self::Tex2DFakeDoesntTakeTex => OperatorTypeSpec::new(
+                vec![HLSLNumericType::Float.into()],
+                HLSLNumericType::Float.into(),
+                vec![],
+            ),
         }
     }
 
     fn n_inputs(&self) -> usize {
         match self {
             Self::Tex2D => 2,
+            Self::Tex2DFakeDoesntTakeTex => 1,
+        }
+    }
+}
+
+/// Numeric intrinsic functions
+#[derive(Debug, Clone, Copy)]
+pub enum NumericIntrinsic {
+    Dot,
+    Min,
+    Max,
+}
+impl Operator for NumericIntrinsic {
+    fn get_typespec(&self) -> OperatorTypeSpec {
+        match self {
+            Self::Min | Self::Max | Self::Dot => OperatorTypeSpec::new(
+                vec![HLSLOperandType::Hole(0), HLSLOperandType::Hole(0)],
+                HLSLOperandType::Hole(0),
+                vec![HLSLHoleTypeMask::NUMERIC.into()],
+            ),
+        }
+    }
+
+    fn n_inputs(&self) -> usize {
+        match self {
+            Self::Min | Self::Max | Self::Dot => 2,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum FauxBooleanOp {
+    Lt,
+    Le,
+    Gt,
+    Ge,
+    Ternary,
+}
+impl Operator for FauxBooleanOp {
+    fn get_typespec(&self) -> OperatorTypeSpec {
+        match self {
+            Self::Lt | Self::Le | Self::Gt | Self::Ge => OperatorTypeSpec::new(
+                vec![HLSLOperandType::Hole(0), HLSLOperandType::Hole(0)],
+                HLSLOperandType::Hole(1),
+                vec![
+                    HLSLHoleTypeMask::NUMERIC.into(),
+                    HLSLHoleTypeMask::INTEGER.into(),
+                ],
+            ),
+            Self::Ternary => OperatorTypeSpec::new(
+                vec![
+                    HLSLOperandType::Hole(0),
+                    HLSLOperandType::Hole(1),
+                    HLSLOperandType::Hole(1),
+                ],
+                HLSLOperandType::Hole(1),
+                vec![
+                    HLSLHoleTypeMask::INTEGER.into(),
+                    HLSLHoleTypeMask::NUMERIC.into(),
+                ],
+            ),
+        }
+    }
+
+    fn n_inputs(&self) -> usize {
+        match self {
+            Self::Lt | Self::Le | Self::Gt | Self::Ge => 2,
+            Self::Ternary => 3,
         }
     }
 }
@@ -315,16 +434,17 @@ pub trait UnconcreteOpTarget: std::fmt::Debug {
 
 /// NOTE: TData may be an Rc<RefCell<Variable>>, which during the course of analysis may have its type refined.
 /// This means we don't store the
-pub struct UnconcreteOpResult<TOp: Operator, TData: UnconcreteOpTarget> {
-    /// The operation being performed
-    op: TOp,
+#[derive(Debug, Clone)]
+pub struct UnconcreteOpResult<TData: UnconcreteOpTarget> {
+    /// The operation being performed.
+    pub op: HLSLOperator,
     /// List of input values, which each have a (potentially not-concrete) type.
     ///
     /// Checked by the [new] constructor to have the same number of elements as `op.n_inputs()`.
-    inputs: Vec<TData>,
+    pub inputs: Vec<TData>,
 }
-impl<TOp: Operator, TData: UnconcreteOpTarget> UnconcreteOpResult<TOp, TData> {
-    pub fn new(op: TOp, inputs: Vec<TData>) -> Self {
+impl<TData: UnconcreteOpTarget> UnconcreteOpResult<TData> {
+    pub fn new(op: HLSLOperator, inputs: Vec<TData>) -> Self {
         if op.n_inputs() != inputs.len() {
             panic!(
                 "Op {:?} takes {} inputs but UnconcreteOpResult got {} ({:?})",
@@ -347,7 +467,10 @@ impl<TOp: Operator, TData: UnconcreteOpTarget> UnconcreteOpResult<TOp, TData> {
         for (input, input_typespec) in self.inputs.iter().zip(typespec.input_types.iter()) {
             let input_variable_type = input.unconcrete_type();
             // 1. check that the input_variable_type is compatible with the input_typespec
-            if !input_typespec.encompasses_type(&input_variable_type, &typespec.holes) {
+            if !input_variable_type
+                .intersect(&input_typespec.as_hlsltype(&typespec.holes))
+                .is_ok()
+            {
                 panic!("Value {:?} has unconcrete type {:?} that is incompatible with op {:?}'s typespec {:?}", input, input_variable_type, self.op, typespec)
             }
             // 2. for each non-concrete type i.e. type hole in the typespec, intersect it with the inputs that map to it
@@ -363,7 +486,9 @@ impl<TOp: Operator, TData: UnconcreteOpTarget> UnconcreteOpResult<TOp, TData> {
         if let Some(output_type) = &output_type {
             if !typespec
                 .output_type
-                .encompasses_type(&output_type, &typespec.holes)
+                .as_hlsltype(&typespec.holes)
+                .intersect(&output_type)
+                .is_ok()
             {
                 panic!("Output of {:?} has been assigned unconcrete type {:?} that is incompatible with typespec {:?}", self.op, output_type, typespec)
             }
@@ -386,14 +511,22 @@ impl<TOp: Operator, TData: UnconcreteOpTarget> UnconcreteOpResult<TOp, TData> {
         // Go back through and check the holes still work now that they've been changed
         for (input, input_typespec) in self.inputs.iter().zip(typespec.input_types.iter()) {
             let input_variable_type = input.unconcrete_type();
-            if !input_typespec.encompasses_type(&input_variable_type, &new_holes) {
+            // The type of the variable (e.g. Hole) may be more general than the newly reduced value
+            // That's fine, as long as the newly reduced value is within the original bounds
+            // Basically, check that this input variable could be treated as
+            if !input_variable_type
+                .intersect(&input_typespec.as_hlsltype(&typespec.holes))
+                .is_ok()
+            {
                 panic!("During hole resolution, value {:?} has unconcrete type {:?} that was made incompatible with op {:?}'s typespec {:?} (new holes {:?})", input, input_variable_type, self.op, input_typespec, new_holes)
             }
         }
         if let Some(output_type) = &output_type {
             if !typespec
                 .output_type
-                .encompasses_type(&output_type, &typespec.holes)
+                .as_hlsltype(&typespec.holes)
+                .intersect(&output_type)
+                .is_ok()
             {
                 panic!("During hole resolution, output of {:?} has unconcrete type {:?} that is incompatible with typespec {:?} and new holes {:?}", self.op, output_type, typespec, new_holes)
             }

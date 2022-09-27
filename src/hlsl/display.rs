@@ -42,20 +42,17 @@ impl std::fmt::Display for HLSLOutcome {
                 write!(f, ");")
             }
             Self::Operation {
-                output_dataref,
-                opname,
-                input_datarefs,
-                ..
+                output_dataref, op, ..
             } => {
                 {
                     let output_var = output_dataref.0.borrow();
                     write!(
                         f,
-                        "{}{} = {}(",
-                        output_var.vector_name, output_dataref.1, opname
+                        "{}{} = {:?}(",
+                        output_var.vector_name, output_dataref.1, op.op
                     )?;
                 }
-                for (refed_var, swizz) in input_datarefs {
+                for (refed_var, swizz) in &op.inputs {
                     let referenced_var = refed_var.borrow();
                     write!(f, "{}{}, ", referenced_var.vector_name, swizz)?;
                 }

@@ -1,9 +1,5 @@
 use std::{cell::RefCell, collections::HashMap, marker::PhantomData, rc::Rc};
 
-use crate::abstract_machine::{
-    vector::{MaskedSwizzle, VECTOR_COMPONENTS},
-    DataKind,
-};
 use crate::hlsl::{
     compat::{
         ExpandsIntoHLSLComponents, HLSLCompatibleAbstractVM, HLSLCompatibleAction,
@@ -12,6 +8,13 @@ use crate::hlsl::{
     },
     HLSLOutcome, HLSLScalarDataRef, HLSLVariable, HLSLVariableInfo, HLSLVectorDataRef,
     HLSLVectorName,
+};
+use crate::{
+    abstract_machine::{
+        vector::{MaskedSwizzle, VECTOR_COMPONENTS},
+        DataKind,
+    },
+    hlsl::syntax::UnconcreteOpResult,
 };
 
 #[derive(Debug)]
@@ -363,13 +366,13 @@ impl<TVM: HLSLCompatibleAbstractVM> VariableAbstractMachine<TVM> {
                     }
                 }
                 HLSLCompatibleOutcome::Operation {
-                    opname,
+                    op,
                     output_dataspec,
-                    input_dataspecs,
                     component_deps,
                 } => {
                     // Convert the input elements into variables
-                    let input_datarefs: Vec<HLSLVectorDataRef> = input_dataspecs
+                    let input_datarefs: Vec<HLSLVectorDataRef> = op
+                        .inputs
                         .into_iter()
                         .map(|elem| self.map_dataspec_to_dataref(&elem))
                         .collect();
@@ -420,8 +423,7 @@ impl<TVM: HLSLCompatibleAbstractVM> VariableAbstractMachine<TVM> {
 
                     self.add_outcome(HLSLOutcome::Operation {
                         output_dataref,
-                        opname,
-                        input_datarefs,
+                        op: UnconcreteOpResult::new(op.op, input_datarefs),
                         scalar_deps,
                     })
                 }
