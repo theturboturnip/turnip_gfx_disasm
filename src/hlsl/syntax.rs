@@ -410,7 +410,7 @@ impl Operator for FauxBooleanOp {
 
 pub trait UnconcreteOpTarget: std::fmt::Debug {}
 
-/// Data on an operation performed on a set of inputs, each of which may not have a concrete type.
+/// Data on an operation performed on a set of inputs producing an output, each of which may not have a concrete type.
 ///
 /// NOTE: TData may be an Rc<RefCell<Variable>>, which during the course of analysis may have its type refined.
 #[derive(Debug, Clone)]
@@ -421,9 +421,11 @@ pub struct UnconcreteOpResult<TData: UnconcreteOpTarget> {
     ///
     /// Checked by the [new] constructor to have the same number of elements as `op.n_inputs()`.
     pub inputs: Vec<TData>,
+    /// The name of the output value
+    pub output: TData,
 }
 impl<TData: UnconcreteOpTarget> UnconcreteOpResult<TData> {
-    pub fn new(op: HLSLOperator, inputs: Vec<TData>) -> Self {
+    pub fn new(op: HLSLOperator, inputs: Vec<TData>, output: TData) -> Self {
         if op.n_inputs() != inputs.len() {
             panic!(
                 "Op {:?} takes {} inputs but UnconcreteOpResult got {} ({:?})",
@@ -433,7 +435,7 @@ impl<TData: UnconcreteOpTarget> UnconcreteOpResult<TData> {
                 inputs
             );
         }
-        Self { op, inputs }
+        Self { op, inputs, output }
     }
 
     /*

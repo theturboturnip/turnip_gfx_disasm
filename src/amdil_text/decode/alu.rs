@@ -270,8 +270,8 @@ impl HLSLCompatibleAction<AMDILAbstractVM> for ALUInstruction {
                         .iter()
                         .map(|src| src.data.clone().into_hlsl(src.kind))
                         .collect(),
+                    output.data.clone().into_hlsl(output.kind),
                 ),
-                output_dataspec: output.data.clone().into_hlsl(output.kind),
                 component_deps: comp_outcomes
                     .iter()
                     .filter_map(|out| match out {

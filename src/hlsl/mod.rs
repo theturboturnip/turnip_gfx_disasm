@@ -53,7 +53,6 @@ pub enum HLSLOutcome {
     },
     /// State that the output of an operation has been assigned to some components of a variable
     Operation {
-        output_dataref: HLSLVectorDataRef,
         op: UnconcreteOpResult<HLSLVectorDataRef>,
         // Mapping of each individual scalar output to each individual scalar input
         scalar_deps: Vec<(HLSLScalarDataRef, Vec<HLSLScalarDataRef>)>,

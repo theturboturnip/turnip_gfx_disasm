@@ -153,8 +153,9 @@ pub enum HLSLCompatibleOutcome<TVM: HLSLCompatibleAbstractVM> {
 
     /// Declare that an output element has a new value, based on many input scalars.
     Operation {
+        // The actual operation, including the input scalars
         op: UnconcreteOpResult<HLSLDataRefSpec<TVM::TElementNameRef>>,
-        output_dataspec: HLSLDataRefSpec<TVM::TElementNameRef>,
+        // How each of the output scalars are related to the input scalars
         component_deps: Vec<(
             TypedVMRef<HLSLCompatibleScalarRef<TVM::TElementNameRef>>,
             Vec<TypedVMRef<HLSLCompatibleScalarRef<TVM::TElementNameRef>>>,

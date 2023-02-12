@@ -6,6 +6,7 @@ use crate::hlsl::{
         HLSLCompatibleOutcome, HLSLCompatibleScalarRef, HLSLDataRefSpec, HLSLDeclarationSpec,
         HLSLDeclarationSpecType, HLSLNameRefType,
     },
+    types::{HLSLOperandType, HLSLType},
     HLSLOutcome, HLSLScalarDataRef, HLSLVariable, HLSLVariableInfo, HLSLVectorDataRef,
     HLSLVectorName,
 };
@@ -199,7 +200,8 @@ impl<TVM: HLSLCompatibleAbstractVM> VariableAbstractMachine<TVM> {
         }
     }
 
-    /// Given a variable, and a VM reference to a swizzled vector, map those scalars to the variable
+    /// Given a variable, and a VM reference to a swizzled vector, map those scalars to the variable.
+    /// This is done so we can convert any scalars we see later into references to the variable.
     ///
     /// Components are taken in order
     /// e.g.
@@ -227,6 +229,7 @@ impl<TVM: HLSLCompatibleAbstractVM> VariableAbstractMachine<TVM> {
             .collect()
     }
 
+    /// Internal function used by map_dataspec_to_dataref
     fn add_and_map_new_variable_from_dataspec(
         &mut self,
         dataspec: &HLSLDataRefSpec<TVM::TElementNameRef>,
@@ -244,7 +247,7 @@ impl<TVM: HLSLCompatibleAbstractVM> VariableAbstractMachine<TVM> {
     /// 2) any component is forced to change kind
     /// 3) the element components do not combine to make a previously known variable
     ///
-    /// In all other cases, an existing variable is returned
+    /// In all other cases, a swizzle of an existing variable is returned
     fn map_dataspec_to_dataref(
         &mut self,
         dataspec: &HLSLDataRefSpec<TVM::TElementNameRef>,
@@ -360,11 +363,7 @@ impl<TVM: HLSLCompatibleAbstractVM> VariableAbstractMachine<TVM> {
                         }
                     }
                 }
-                HLSLCompatibleOutcome::Operation {
-                    op,
-                    output_dataspec,
-                    component_deps,
-                } => {
+                HLSLCompatibleOutcome::Operation { op, component_deps } => {
                     // Convert the input elements into variables
                     let input_datarefs: Vec<HLSLVectorDataRef> = op
                         .inputs
@@ -387,7 +386,7 @@ impl<TVM: HLSLCompatibleAbstractVM> VariableAbstractMachine<TVM> {
                     //     break;
                     // }
 
-                    let output_dataref = self.map_dataspec_to_dataref(&output_dataspec);
+                    let output_dataref = self.map_dataspec_to_dataref(&op.output);
 
                     // Gather an equivalent to component_deps where all inputs have been converted to Variable references
                     // Do this after converting the input elements themselves, because that might have created new variables and changed the scalar mapping
@@ -414,15 +413,9 @@ impl<TVM: HLSLCompatibleAbstractVM> VariableAbstractMachine<TVM> {
                         })
                         .collect();
 
-                    // TODO if we have a concretized type, try hole resolution in variables
+                    let op = UnconcreteOpResult::new(op.op, input_datarefs, output_dataref);
 
-                    let op = UnconcreteOpResult::new(op.op, input_datarefs);
-
-                    self.add_outcome(HLSLOutcome::Operation {
-                        output_dataref,
-                        op,
-                        scalar_deps,
-                    })
+                    self.add_outcome(HLSLOutcome::Operation { op, scalar_deps })
                 }
                 HLSLCompatibleOutcome::EarlyOut { inputs } => {
                     let scalar_input_vars: Vec<_> = inputs
