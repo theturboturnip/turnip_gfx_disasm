@@ -1,7 +1,7 @@
 use crate::{
     abstract_machine::{
         vector::{MaskedSwizzle, VectorComponent, VECTOR_COMPONENTS},
-        DataKind, ScalarAbstractVM, TypedVMRef, VMDataRef, VMNameRef, VMRef,
+        ScalarAbstractVM, TypedVMRef, VMDataRef, VMNameRef, VMRef,
     },
     ScalarAction,
 };
@@ -17,7 +17,7 @@ pub struct HLSLDataRefSpec<TName: VMNameRef> {
     pub vm_name_ref: TName,
     pub name_ref_type: HLSLNameRefType,
     pub swizzle: MaskedSwizzle,
-    pub kind: DataKind,
+    pub kind: HLSLType,
 }
 impl<TName: VMNameRef> UnconcreteOpTarget for HLSLDataRefSpec<TName> {
     fn unconcrete_type(&self) -> HLSLType {
@@ -41,7 +41,7 @@ pub struct HLSLDeclarationSpec<TName: VMNameRef> {
     pub vm_name_ref: TName,
     pub decl_type: HLSLDeclarationSpecType,
     pub n_components: u8,
-    pub kind: DataKind,
+    pub kind: HLSLType,
     pub name: String,
 }
 /// The type of vector name an HLSL-compatible declaration will have

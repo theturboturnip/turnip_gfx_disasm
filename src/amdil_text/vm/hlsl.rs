@@ -1,8 +1,11 @@
 use crate::{
-    abstract_machine::{DataKind, DataWidth, TypedVMRef},
-    hlsl::compat::{
-        HLSLCompatibleAction, HLSLCompatibleOutcome, HLSLDataRefSpec, HLSLDeclarationSpec,
-        HLSLDeclarationSpecType, HLSLNameRefType,
+    abstract_machine::{DataWidth, TypedVMRef},
+    hlsl::{
+        compat::{
+            HLSLCompatibleAction, HLSLCompatibleOutcome, HLSLDataRefSpec, HLSLDeclarationSpec,
+            HLSLDeclarationSpecType, HLSLNameRefType,
+        },
+        types::{HLSLHoleTypeMask, HLSLType},
     },
 };
 
@@ -15,14 +18,14 @@ impl HLSLCompatibleAction<AMDILAbstractVM> for AMDILDeclaration {
                 vec![HLSLCompatibleOutcome::Declaration {
                     declspec: HLSLDeclarationSpec {
                         vm_name_ref: AMDILNameRef::NamedLiteral(name.clone()),
-                        kind: DataKind::Hole,
+                        kind: HLSLHoleTypeMask::NUMERIC.into(),
                         n_components: 4,
                         decl_type: HLSLDeclarationSpecType::GenericRegister,
                         name: name.clone(),
                     },
                     literal_value: Some(TypedVMRef {
                         data: *value,
-                        kind: DataKind::Hole,
+                        kind: HLSLHoleTypeMask::NUMERIC.into(),
                         width: DataWidth::E32,
                     }),
                 }]
@@ -34,7 +37,7 @@ impl HLSLCompatibleAction<AMDILAbstractVM> for AMDILDeclaration {
             } => vec![HLSLCompatibleOutcome::Declaration {
                 declspec: HLSLDeclarationSpec {
                     vm_name_ref: AMDILNameRef::NamedInputRegister(name.clone()),
-                    kind: DataKind::Hole,
+                    kind: HLSLHoleTypeMask::NUMERIC.into(),
                     n_components: *len,
                     decl_type: HLSLDeclarationSpecType::ShaderInput(name.clone()),
                     name: name.clone(),
@@ -48,7 +51,7 @@ impl HLSLCompatibleAction<AMDILAbstractVM> for AMDILDeclaration {
             } => vec![HLSLCompatibleOutcome::Declaration {
                 declspec: HLSLDeclarationSpec {
                     vm_name_ref: AMDILNameRef::NamedOutputRegister(name.clone()),
-                    kind: DataKind::Hole,
+                    kind: HLSLHoleTypeMask::NUMERIC.into(),
                     n_components: *len,
                     decl_type: HLSLDeclarationSpecType::ShaderInput(name.clone()),
                     name: name.clone(),
@@ -77,7 +80,7 @@ impl HLSLCompatibleAction<AMDILAbstractVM> for AMDILDeclaration {
 }
 
 impl AMDILDataRef {
-    pub fn into_hlsl(self, kind: DataKind) -> HLSLDataRefSpec<AMDILNameRef> {
+    pub fn into_hlsl(self, kind: HLSLType) -> HLSLDataRefSpec<AMDILNameRef> {
         let ref_type = match &self.name {
             AMDILNameRef::Literal(data) => HLSLNameRefType::Literal(*data),
             AMDILNameRef::NamedBuffer { name, idx } => HLSLNameRefType::ArrayElement {

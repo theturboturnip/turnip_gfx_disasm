@@ -1,7 +1,10 @@
 use crate::{
     abstract_machine::vector::MaskedSwizzle,
-    hlsl::compat::{HLSLCompatibleAction, HLSLCompatibleOutcome},
-    DataKind, DataWidth, ScalarAction, ScalarOutcome, TypedVMRef,
+    hlsl::{
+        compat::{HLSLCompatibleAction, HLSLCompatibleOutcome},
+        types::HLSLHoleTypeMask,
+    },
+    DataWidth, ScalarAction, ScalarOutcome, TypedVMRef,
 };
 
 use self::registers::arg_as_vector_data_ref;
@@ -61,7 +64,7 @@ impl ScalarAction<AMDILAbstractVM> for Instruction {
                     .flatten()
                     .map(|comp_ref| TypedVMRef {
                         data: comp_ref.into(),
-                        kind: DataKind::Hole,
+                        kind: HLSLHoleTypeMask::NUMERIC.into(),
                         width: DataWidth::E32,
                     })
                     .collect();

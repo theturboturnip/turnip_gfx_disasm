@@ -1,15 +1,13 @@
 use bitflags::bitflags;
 
-use crate::DataKind;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum HLSLNumericType {
     Float,
     UnsignedInt,
     SignedInt,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum HLSLConcreteType {
     Numeric(HLSLNumericType),
     Texture2D,
@@ -22,7 +20,7 @@ impl From<HLSLNumericType> for HLSLConcreteType {
 
 /// A type for HLSL values.
 /// Equivalent to [HLSLOperandType] but holds a hole mask instead of a hold ID.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum HLSLType {
     Concrete(HLSLConcreteType),
     Hole(HLSLHoleTypeMask),
@@ -118,22 +116,6 @@ impl HLSLType {
         }
     }
 }
-/// TODO REMOVE THIS!
-/// [DataKind] NEEDS TO BE OBSOLETED
-///
-/// Approximate converter for [DataKind] to [HLSLType] for convenience.
-/// Assumes all data is numeric unless [DataKind::Untyped] which is [HLSLConcreteType::Texture2D]
-impl From<DataKind> for HLSLType {
-    fn from(dk: DataKind) -> Self {
-        match dk {
-            DataKind::Float => HLSLNumericType::Float.into(),
-            DataKind::SignedInt => HLSLNumericType::SignedInt.into(),
-            DataKind::UnsignedInt => HLSLNumericType::UnsignedInt.into(),
-            DataKind::Untyped => HLSLConcreteType::Texture2D.into(),
-            DataKind::Hole => HLSLHoleTypeMask::NUMERIC.into(),
-        }
-    }
-}
 
 /// A type for operands passed to [Operator]s.
 /// Equivalent to [HLSLType] but holds a hole ID instead of the actual hole mask.
@@ -141,7 +123,7 @@ impl From<DataKind> for HLSLType {
 /// [Operator]s need to keep track of type holes separately,
 /// because there may be correlations between different argument's type holes,
 /// so this enum uses zero-indexed IDs for correlated holes.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum HLSLOperandType {
     Concrete(HLSLConcreteType),
     Hole(usize),

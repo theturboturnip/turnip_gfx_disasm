@@ -1,18 +1,7 @@
 use std::fmt::{Display, Formatter, Result};
 
-use crate::{DataKind, DataWidth, TypedVMRef, VMRef};
+use crate::{DataWidth, TypedVMRef, VMRef};
 
-impl Display for DataKind {
-    fn fmt(&self, f: &mut Formatter) -> Result {
-        match self {
-            Self::Float => write!(f, "float"),
-            Self::UnsignedInt => write!(f, "uint"),
-            Self::SignedInt => write!(f, "int"),
-            Self::Hole => write!(f, "???"),
-            Self::Untyped => write!(f, "Untyped"),
-        }
-    }
-}
 impl<TData> Display for TypedVMRef<TData>
 where
     TData: VMRef + Display,

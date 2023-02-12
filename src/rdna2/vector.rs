@@ -2,7 +2,8 @@
 use bitutils::bits;
 
 use crate::{
-    abstract_machine::{DataKind, DataWidth, TypedVMRef},
+    abstract_machine::{DataWidth, TypedVMRef},
+    hlsl::types::HLSLHoleTypeMask,
     ScalarAction, ScalarOutcome,
 };
 
@@ -155,7 +156,8 @@ impl ScalarAction<RDNA2AbstractVM> for VOP {
                 extra,
             } => {
                 // TODO data kind and width
-                let kind = DataKind::Hole;
+                // While refactoring, I assumed these actions could only access numeric types. TODO check if that's the case
+                let kind = HLSLHoleTypeMask::NUMERIC.into();
                 let width = DataWidth::E64;
                 vec![ScalarOutcome::Dependency {
                     inputs: vec![TypedVMRef {
@@ -178,7 +180,8 @@ impl ScalarAction<RDNA2AbstractVM> for VOP {
                 extra,
             } => {
                 // TODO data kind and width
-                let kind = DataKind::Hole;
+                // While refactoring, I assumed these actions could only access numeric types. TODO check if that's the case
+                let kind = HLSLHoleTypeMask::NUMERIC.into();
                 let width = DataWidth::E64;
                 vec![ScalarOutcome::Dependency {
                     inputs: vec![

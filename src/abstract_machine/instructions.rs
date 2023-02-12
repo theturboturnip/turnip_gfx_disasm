@@ -1,7 +1,7 @@
 //! This module contains generic structures useful for defining and displaying large instruction sets.
 //!
 //! Each instruction has X inputs and Y outputs.
-//! Each input/output should have a kind, which may be a [DataKind::Hole],
+//! Each input/output should have a kind, which may be a [HLSLType::Hole],
 //! in which case the kind may be dynamically decided based on context
 //! (TODO: Allow Holes to be numbered, i.e. Hole(1) and Hole(2) are not necessarily the same type, for more complicated expressions?)
 //!
@@ -11,7 +11,9 @@
 //! TODO should this be in crate::abstract_machine, or at the top level?
 //!
 
-use super::{DataKind, DataWidth, ScalarAbstractVM, TypedVMRef, VMElementRef};
+use crate::hlsl::types::HLSLType;
+
+use super::{DataWidth, ScalarAbstractVM, TypedVMRef, VMElementRef};
 
 /// Trait for a type that manages a set of possible instructions
 pub trait InstructionSet<TVM: ScalarAbstractVM>: Sized {
@@ -172,11 +174,11 @@ pub trait ArgsSpec<TVM: ScalarAbstractVM> {
     fn sanitize_arguments(&self, args: Vec<TVM::TElementDataRef>) -> InstrArgs<TVM>;
 }
 /// Implementation of [ArgsSpec] that takes a vector of args as [outputs... inputs...]
-/// and applies [DataKind]s and [DataWidth]s to create [TypedVMRef]s for each arg
+/// and applies [HLSLType]s and [DataWidth]s to create [TypedVMRef]s for each arg
 #[derive(Debug, Clone)]
 pub struct SimpleArgsSpec {
-    output_kinds: Vec<DataKind>,
-    input_kinds: Vec<DataKind>,
+    output_kinds: Vec<HLSLType>,
+    input_kinds: Vec<HLSLType>,
     width: DataWidth,
 }
 impl<TVM: ScalarAbstractVM> ArgsSpec<TVM> for SimpleArgsSpec {

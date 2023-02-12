@@ -4,7 +4,8 @@ use std::convert::TryFrom;
 use bitutils::bits;
 
 use crate::{
-    abstract_machine::{DataKind, DataWidth, TypedVMRef},
+    abstract_machine::{DataWidth, TypedVMRef},
+    hlsl::types::HLSLHoleTypeMask,
     rdna2::vm::{RDNA2AbstractVM, RDNA2DataRef, RDNA2Outcome, RDNA2Output},
     ScalarAction, ScalarOutcome,
 };
@@ -118,12 +119,12 @@ impl ScalarAction<RDNA2AbstractVM> for EXPORT {
             deps.push(ScalarOutcome::Dependency {
                 inputs: vec![TypedVMRef {
                     data: RDNA2DataRef::GeneralPurposeRegister(possible_exports[i] as u64),
-                    kind: DataKind::Hole,
+                    kind: HLSLHoleTypeMask::NUMERIC.into(),
                     width,
                 }],
                 output: TypedVMRef {
                     data: RDNA2DataRef::Output(output_ref),
-                    kind: DataKind::Hole,
+                    kind: HLSLHoleTypeMask::NUMERIC.into(),
                     width,
                 },
             });

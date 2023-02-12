@@ -10,10 +10,7 @@ use crate::hlsl::{
     HLSLVectorName,
 };
 use crate::{
-    abstract_machine::{
-        vector::{MaskedSwizzle, VECTOR_COMPONENTS},
-        DataKind,
-    },
+    abstract_machine::vector::{MaskedSwizzle, VECTOR_COMPONENTS},
     hlsl::syntax::UnconcreteOpResult,
 };
 
@@ -58,8 +55,8 @@ impl<TVM: HLSLCompatibleAbstractVM> VariableStore<TVM> {
         let preexisting_variable = insert_in.insert(vector_ref.clone(), variable.clone());
         if let Some(x) = preexisting_variable {
             panic!(
-                "Inserting with key {:?} into VariableStore failed - already occupied by {:?}",
-                vector_ref, x
+                "Inserting variable {:?} with key {:?} into VariableStore failed - already occupied by {:?}",
+                variable, vector_ref, x
             )
         }
         variable
@@ -242,10 +239,9 @@ impl<TVM: HLSLCompatibleAbstractVM> VariableAbstractMachine<TVM> {
     /// Take a dataspec (reference to a swizzled VM vector) and convert it to a vector data reference, potentially creating a new variable if necessary.
     ///
     /// A new variable is created if:
-    /// This is true if:
     /// 1) the element name has not been registered before,
     ///       i.e. any component does not have a mapping in the current_scalar_names
-    /// 2) any component changes kind
+    /// 2) any component is forced to change kind
     /// 3) the element components do not combine to make a previously known variable
     ///
     /// In all other cases, an existing variable is returned
@@ -270,9 +266,8 @@ impl<TVM: HLSLCompatibleAbstractVM> VariableAbstractMachine<TVM> {
                 // 2) at least one component has a different type to it's previous usage
                 Some((old_var, _)) => {
                     let old_kind = { old_var.borrow().kind };
-                    old_kind != dataspec.kind
-                        && old_kind != DataKind::Hole
-                        && dataspec.kind != DataKind::Hole
+                    // If the new kind and the old kind don't intersect, we must have an error
+                    dataspec.kind.intersect(&old_kind).is_err()
                 }
             }
         }) {

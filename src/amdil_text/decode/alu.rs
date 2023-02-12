@@ -4,7 +4,7 @@ use crate::{
     abstract_machine::{
         instructions::{ArgsSpec, DependencyRelation, InstrArgs, SimpleDependencyRelation},
         vector::MaskedSwizzle,
-        DataKind, DataWidth, TypedVMRef,
+        DataWidth, TypedVMRef,
     },
     amdil_text::{
         grammar,
@@ -16,6 +16,7 @@ use crate::{
             ArithmeticOp, FauxBooleanOp, HLSLOperator, NumericIntrinsic, SampleIntrinsic,
             UnconcreteOpResult,
         },
+        types::{HLSLHoleTypeMask, HLSLNumericType, HLSLType},
     },
     ScalarAction, ScalarOutcome,
 };
@@ -38,11 +39,12 @@ pub struct ALUInstruction {
     op: HLSLOperator,
 }
 
+// TODO Should this use HLSLOperandType and have a separate hole vector? probably not - we don't need to encode the type dependency here
 #[derive(Debug, Clone)]
 struct ALUArgsSpec {
-    input_kinds: Vec<DataKind>,
+    input_kinds: Vec<HLSLType>,
     input_mask: InputMask,
-    output_kinds: Vec<DataKind>,
+    output_kinds: Vec<HLSLType>,
 }
 impl ArgsSpec<AMDILAbstractVM> for ALUArgsSpec {
     fn sanitize_arguments(&self, args: Vec<AMDILDataRef>) -> InstrArgs<AMDILAbstractVM> {
@@ -96,9 +98,9 @@ type ALUInstructionSet =
 fn float_arith(op: ArithmeticOp) -> (ALUArgsSpec, SimpleDependencyRelation, HLSLOperator) {
     (
         ALUArgsSpec {
-            input_kinds: vec![DataKind::Float, DataKind::Float],
+            input_kinds: vec![HLSLNumericType::Float.into(), HLSLNumericType::Float.into()],
             input_mask: InputMask::InheritFromFirstOutput,
-            output_kinds: vec![DataKind::Float],
+            output_kinds: vec![HLSLNumericType::Float.into()],
         },
         SimpleDependencyRelation::PerComponent,
         HLSLOperator::Arithmetic(op),
@@ -109,45 +111,45 @@ lazy_static! {
     static ref ALU_INSTR_DEFS: ALUInstructionSet = HashMap::from([
         ("mov", (
             ALUArgsSpec {
-                input_kinds: vec![DataKind::Hole],
+                input_kinds: vec![HLSLHoleTypeMask::all().into()],
                 input_mask: InputMask::InheritFromFirstOutput,
-                output_kinds: vec![DataKind::Hole]
+                output_kinds: vec![HLSLHoleTypeMask::all().into()]
             },
             SimpleDependencyRelation::PerComponent,
             HLSLOperator::Assign,
         )),
         ("dp4_ieee", (
             ALUArgsSpec {
-                input_kinds: vec![DataKind::Float, DataKind::Float],
+                input_kinds: vec![HLSLNumericType::Float.into(), HLSLNumericType::Float.into()],
                 input_mask: InputMask::TruncateTo(4),
-                output_kinds: vec![DataKind::Float],
+                output_kinds: vec![HLSLNumericType::Float.into()],
             },
             SimpleDependencyRelation::AllToAll,
             HLSLOperator::NumericI(NumericIntrinsic::Dot),
         )),
         ("dp3_ieee", (
             ALUArgsSpec {
-                input_kinds: vec![DataKind::Float, DataKind::Float],
+                input_kinds: vec![HLSLNumericType::Float.into(), HLSLNumericType::Float.into()],
                 input_mask: InputMask::TruncateTo(3),
-                output_kinds: vec![DataKind::Float],
+                output_kinds: vec![HLSLNumericType::Float.into()],
             },
             SimpleDependencyRelation::AllToAll,
             HLSLOperator::NumericI(NumericIntrinsic::Dot),
         )),
         ("min_ieee", (
             ALUArgsSpec {
-                input_kinds: vec![DataKind::Float, DataKind::Float],
+                input_kinds: vec![HLSLNumericType::Float.into(), HLSLNumericType::Float.into()],
                 input_mask: InputMask::InheritFromFirstOutput,
-                output_kinds: vec![DataKind::Float],
+                output_kinds: vec![HLSLNumericType::Float.into()],
             },
             SimpleDependencyRelation::PerComponent,
             HLSLOperator::NumericI(NumericIntrinsic::Min),
         )),
         ("max_ieee", (
             ALUArgsSpec {
-                input_kinds: vec![DataKind::Float, DataKind::Float],
+                input_kinds: vec![HLSLNumericType::Float.into(), HLSLNumericType::Float.into()],
                 input_mask: InputMask::InheritFromFirstOutput,
-                output_kinds: vec![DataKind::Float],
+                output_kinds: vec![HLSLNumericType::Float.into()],
             },
             SimpleDependencyRelation::PerComponent,
             HLSLOperator::NumericI(NumericIntrinsic::Max),
@@ -160,36 +162,36 @@ lazy_static! {
 
         ("lt", (
             ALUArgsSpec {
-                input_kinds: vec![DataKind::Float, DataKind::Float],
+                input_kinds: vec![HLSLNumericType::Float.into(), HLSLNumericType::Float.into()],
                 input_mask: InputMask::InheritFromFirstOutput,
-                output_kinds: vec![DataKind::Float],
+                output_kinds: vec![HLSLNumericType::Float.into()],
             },
             SimpleDependencyRelation::PerComponent,
             HLSLOperator::FauxBoolean(FauxBooleanOp::Lt),
         )),
         ("le", (
             ALUArgsSpec {
-                input_kinds: vec![DataKind::Float, DataKind::Float],
+                input_kinds: vec![HLSLNumericType::Float.into(), HLSLNumericType::Float.into()],
                 input_mask: InputMask::InheritFromFirstOutput,
-                output_kinds: vec![DataKind::Float],
+                output_kinds: vec![HLSLNumericType::Float.into()],
             },
             SimpleDependencyRelation::PerComponent,
             HLSLOperator::FauxBoolean(FauxBooleanOp::Le),
         )),
         ("gt", (
             ALUArgsSpec {
-                input_kinds: vec![DataKind::Float, DataKind::Float],
+                input_kinds: vec![HLSLNumericType::Float.into(), HLSLNumericType::Float.into()],
                 input_mask: InputMask::InheritFromFirstOutput,
-                output_kinds: vec![DataKind::Float],
+                output_kinds: vec![HLSLNumericType::Float.into()],
             },
             SimpleDependencyRelation::PerComponent,
             HLSLOperator::FauxBoolean(FauxBooleanOp::Gt),
         )),
         ("ge", (
             ALUArgsSpec {
-                input_kinds: vec![DataKind::Float, DataKind::Float],
+                input_kinds: vec![HLSLNumericType::Float.into(), HLSLNumericType::Float.into()],
                 input_mask: InputMask::InheritFromFirstOutput,
-                output_kinds: vec![DataKind::Float],
+                output_kinds: vec![HLSLNumericType::Float.into()],
             },
             SimpleDependencyRelation::PerComponent,
             HLSLOperator::FauxBoolean(FauxBooleanOp::Ge),
@@ -199,9 +201,9 @@ lazy_static! {
             ALUArgsSpec {
                 // first input = integer "is zero"?
                 // second and third input could be anything, output kind could be anything
-                input_kinds: vec![DataKind::UnsignedInt, DataKind::Hole, DataKind::Hole],
+                input_kinds: vec![HLSLNumericType::UnsignedInt.into(), HLSLHoleTypeMask::all().into(), HLSLHoleTypeMask::all().into()],
                 input_mask: InputMask::TruncateTo(3),
-                output_kinds: vec![DataKind::Hole],
+                output_kinds: vec![HLSLHoleTypeMask::all().into()],
             },
             SimpleDependencyRelation::AllToAll,
             HLSLOperator::FauxBoolean(FauxBooleanOp::Ternary)
@@ -210,9 +212,9 @@ lazy_static! {
         ("sample", (
             ALUArgsSpec {
                 // Coords (TODO texture is specified in a modifier - prob need to move sample out of this)
-                input_kinds: vec![DataKind::Float],
+                input_kinds: vec![HLSLNumericType::Float.into()],
                 input_mask: InputMask::TruncateTo(2),
-                output_kinds: vec![DataKind::Float],
+                output_kinds: vec![HLSLNumericType::Float.into()],
             },
             SimpleDependencyRelation::AllToAll,
             HLSLOperator::SampleI(SampleIntrinsic::Tex2DFakeDoesntTakeTex)

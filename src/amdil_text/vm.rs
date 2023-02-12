@@ -8,9 +8,10 @@
 use crate::abstract_machine::vector::{MaskedSwizzle, VECTOR_COMPONENTS};
 use crate::abstract_machine::{DataWidth, ScalarAbstractVM, VMDataRef, VMElementRef, VMNameRef};
 use crate::hlsl::compat::{HLSLCompatibleAbstractVM, HLSLCompatibleScalarRef};
+use crate::hlsl::types::HLSLHoleTypeMask;
 use crate::{ScalarAction, ScalarOutcome};
 
-use crate::abstract_machine::{DataKind, TypedVMRef, VMRef};
+use crate::abstract_machine::{TypedVMRef, VMRef};
 
 pub mod hlsl;
 
@@ -149,7 +150,7 @@ impl ScalarAction<AMDILAbstractVM> for AMDILDeclaration {
                     name: (AMDILNameRef::NamedLiteral(name.clone()), *comp).into(),
                     value: Some(TypedVMRef {
                         data: (AMDILNameRef::Literal(*value), *comp).into(),
-                        kind: DataKind::Hole,
+                        kind: HLSLHoleTypeMask::NUMERIC.into(),
                         width: DataWidth::E32,
                     }),
                 })

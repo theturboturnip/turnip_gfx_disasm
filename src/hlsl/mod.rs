@@ -1,9 +1,6 @@
 use std::{cell::RefCell, rc::Rc};
 
-use crate::{
-    abstract_machine::vector::{MaskedSwizzle, VectorComponent},
-    DataKind,
-};
+use crate::abstract_machine::vector::{MaskedSwizzle, VectorComponent};
 
 use self::{
     syntax::{UnconcreteOpResult, UnconcreteOpTarget},
@@ -23,7 +20,7 @@ pub type HLSLVariable = Rc<RefCell<HLSLVariableInfo>>;
 #[derive(Debug)]
 pub struct HLSLVariableInfo {
     pub vector_name: HLSLVectorName,
-    pub kind: DataKind,
+    pub kind: HLSLType,
     pub n_components: u8,
 }
 

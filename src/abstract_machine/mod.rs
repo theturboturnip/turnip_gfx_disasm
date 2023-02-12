@@ -1,5 +1,7 @@
 use std::hash::Hash;
 
+use crate::hlsl::types::HLSLType;
+
 pub mod analysis;
 pub mod display;
 pub mod instructions;
@@ -29,21 +31,6 @@ pub trait VMElementRef<TScalarDataRef>: VMDataRef {
     fn decompose(&self) -> Vec<TScalarDataRef>;
 }
 
-/// The "kind" of a piece of data.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum DataKind {
-    /// IEEE floating-point
-    Float,
-    /// Twos complement signed integer
-    SignedInt,
-    /// Unsigned integer
-    UnsignedInt,
-    /// Any other type, including potentially non-numeric types e.g. texture samplers
-    Untyped,
-    // A "type hole", where the type of this data could change based on context.
-    Hole,
-}
-
 /// The width in bits of a piece of data.
 ///
 /// In vector contexts, this refers to the width of a single scalar component.
@@ -56,11 +43,11 @@ pub enum DataWidth {
     E64,
 }
 
-/// A [VMRef] with extra type information - the [DataWidth] and [DataKind].
+/// A [VMRef] with extra type information - the [DataWidth] and [HLSLType].
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct TypedVMRef<TData: VMRef> {
     pub data: TData,
-    pub kind: DataKind,
+    pub kind: HLSLType,
     pub width: DataWidth,
 }
 
