@@ -19,11 +19,7 @@ pub struct HLSLDataRefSpec<TName: VMNameRef> {
     pub swizzle: MaskedSwizzle,
     pub kind: HLSLType,
 }
-impl<TName: VMNameRef> UnconcreteOpTarget for HLSLDataRefSpec<TName> {
-    fn unconcrete_type(&self) -> HLSLType {
-        self.kind.into()
-    }
-}
+impl<TName: VMNameRef> UnconcreteOpTarget for HLSLDataRefSpec<TName> {}
 
 /// The type of vector name an HLSL-compatible value will have
 #[derive(Debug, Clone)]

@@ -408,9 +408,7 @@ impl Operator for FauxBooleanOp {
     }
 }
 
-pub trait UnconcreteOpTarget: std::fmt::Debug {
-    fn unconcrete_type(&self) -> HLSLType;
-}
+pub trait UnconcreteOpTarget: std::fmt::Debug {}
 
 /// Data on an operation performed on a set of inputs, each of which may not have a concrete type.
 ///
@@ -435,13 +433,10 @@ impl<TData: UnconcreteOpTarget> UnconcreteOpResult<TData> {
                 inputs
             );
         }
-        // TODO better way to do this
-        let x = Self { op, inputs };
-        // Check that the types aren't completely batshit
-        x.get_current_typespec(None);
-        x
+        Self { op, inputs }
     }
 
+    /*
     pub fn get_current_typespec(&self, output_type: Option<HLSLType>) -> OperatorTypeSpec {
         let typespec = self.op.get_typespec();
         let mut new_holes = typespec.holes.clone();
@@ -513,4 +508,5 @@ impl<TData: UnconcreteOpTarget> UnconcreteOpResult<TData> {
         // TODO does the constructor need to do any more typechecking? I don't think so
         OperatorTypeSpec::new(typespec.input_types, typespec.output_type, new_holes)
     }
+    */
 }

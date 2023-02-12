@@ -39,11 +39,7 @@ pub enum HLSLVectorName {
 pub type HLSLScalarDataRef = (HLSLVariable, VectorComponent);
 /// A reference to a swizzled vector in the HLSL virtual machine
 pub type HLSLVectorDataRef = (HLSLVariable, MaskedSwizzle);
-impl UnconcreteOpTarget for HLSLVectorDataRef {
-    fn unconcrete_type(&self) -> HLSLType {
-        self.0.borrow().kind.into()
-    }
-}
+impl UnconcreteOpTarget for HLSLVectorDataRef {}
 
 /// The outcome of an action in the HLSL virtual machine
 #[derive(Debug, Clone)]
