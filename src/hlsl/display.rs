@@ -94,9 +94,9 @@ impl Display for HLSLConcreteType {
 }
 impl Display for HLSLType {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
-        match self {
-            Self::Concrete(c) => write!(f, "{}", c),
-            Self::Hole(mask) => write!(f, "{:?}", mask),
+        match self.try_concretize() {
+            Some(c) => write!(f, "{}", c),
+            None => write!(f, "{:?}", self),
         }
     }
 }

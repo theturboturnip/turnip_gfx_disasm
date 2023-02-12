@@ -266,8 +266,8 @@ impl<TVM: HLSLCompatibleAbstractVM> VariableAbstractMachine<TVM> {
                 // 2) at least one component has a different type to it's previous usage
                 Some((old_var, _)) => {
                     let old_kind = { old_var.borrow().kind };
-                    // If the new kind and the old kind don't intersect, we must have an error
-                    dataspec.kind.intersect(&old_kind).is_err()
+                    // If the new kind and the old kind don't intersect, must be a new variable
+                    dataspec.kind.intersection(old_kind).is_none()
                 }
             }
         }) {

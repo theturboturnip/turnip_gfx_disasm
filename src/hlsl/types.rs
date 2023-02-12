@@ -18,102 +18,39 @@ impl From<HLSLNumericType> for HLSLConcreteType {
     }
 }
 
-/// A type for HLSL values.
-/// Equivalent to [HLSLOperandType] but holds a hole mask instead of a hold ID.
+/// A type for HLSL values - an [HLSLTypeMask] with at least one bit set
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum HLSLType {
-    Concrete(HLSLConcreteType),
-    Hole(HLSLHoleTypeMask),
-}
-impl From<HLSLConcreteType> for HLSLType {
-    fn from(c: HLSLConcreteType) -> Self {
-        Self::Concrete(c)
+pub struct HLSLType(HLSLHoleTypeMask);
+impl HLSLType {
+    pub fn try_concretize(&self) -> Option<HLSLConcreteType> {
+        self.0.try_concretize()
     }
-}
-impl From<HLSLNumericType> for HLSLType {
-    fn from(num: HLSLNumericType) -> Self {
-        Self::Concrete(num.into())
+    /// Return an intersection of this and other, as long as that intersection has at least one bit set
+    pub fn intersection(self, other: Self) -> Option<Self> {
+        let i = self.0.intersection(other.0);
+        if i.is_empty() {
+            None
+        } else {
+            Some(Self(i))
+        }
     }
 }
 impl From<HLSLHoleTypeMask> for HLSLType {
-    fn from(mask: HLSLHoleTypeMask) -> Self {
-        Self::Hole(mask)
+    fn from(m: HLSLHoleTypeMask) -> Self {
+        if m.is_empty() {
+            panic!("From(empty mask) attempted");
+        }
+        Self(m)
     }
 }
-impl HLSLType {
-    pub fn encompasses(&self, other: &HLSLType) -> bool {
-        match self {
-            // If we're concrete, the other type has to match exactly
-            Self::Concrete(_) => self == other,
-            // If we're a hole of a specific type, our type must be a superset or equal to the other type
-            Self::Hole(our_mask) => {
-                let their_mask: HLSLHoleTypeMask = match other {
-                    Self::Concrete(c) => {
-                        // Convert their type into a mask which just holds that type
-                        (*c).into()
-                    }
-                    Self::Hole(their_mask) => {
-                        // Get the mask for that hole directly
-                        *their_mask
-                    }
-                };
-                our_mask.contains(their_mask)
-            }
-        }
+impl From<HLSLConcreteType> for HLSLType {
+    fn from(c: HLSLConcreteType) -> Self {
+        Self(c.into())
     }
-
-    /// If this is a type hole with a single valid possible type, concretize it to that type.
-    /// Returns *self for already-concrete types.
-    /// Returns *self for type holes with multiple possible types
-    pub fn concretize_single_mask(&self) -> Self {
-        match self {
-            Self::Concrete(_) => *self, // already concrete
-            Self::Hole(mask) => mask
-                .try_concretize()
-                .map_or(*self, |concrete| Self::Concrete(concrete)),
-        }
-    }
-
-    pub fn try_concretize(&self) -> Option<HLSLConcreteType> {
-        match self {
-            Self::Concrete(c) => Some(*c), // already concrete
-            Self::Hole(mask) => mask.try_concretize(),
-        }
-    }
-
-    pub fn intersect(&self, other: &HLSLType) -> Result<Self, TypeCoersionError> {
-        match self {
-            Self::Concrete(our_c) => {
-                let intersects = match other {
-                    HLSLType::Concrete(their_c) => our_c == their_c,
-                    HLSLType::Hole(mask) => mask.contains((*our_c).into()),
-                };
-                if intersects {
-                    Ok(*self)
-                } else {
-                    Err(TypeCoersionError::IntersectionFail(
-                        self.clone(),
-                        other.clone(),
-                    ))
-                }
-            }
-            Self::Hole(mask) => {
-                // Intersect our mask with theirs
-                let result = mask.intersection((*other).into());
-                if result.is_empty() {
-                    // Empty mask => no intersection
-                    Err(TypeCoersionError::IntersectionFail(
-                        self.clone(),
-                        other.clone(),
-                    ))
-                } else {
-                    // Try to concretize the mask, if it's concrete return the concrete type, else return the hole
-                    Ok(result
-                        .try_concretize()
-                        .map_or(Self::Hole(result), |concrete| Self::Concrete(concrete)))
-                }
-            }
-        }
+}
+impl From<HLSLNumericType> for HLSLType {
+    fn from(n: HLSLNumericType) -> Self {
+        Self(n.into())
     }
 }
 
@@ -141,7 +78,7 @@ impl From<HLSLNumericType> for HLSLOperandType {
 impl HLSLOperandType {
     pub fn as_hlsltype(&self, holes: &[HLSLType]) -> HLSLType {
         match self {
-            Self::Concrete(c) => HLSLType::Concrete(*c),
+            Self::Concrete(c) => (*c).into(),
             Self::Hole(idx) => holes[*idx],
         }
     }
@@ -182,14 +119,6 @@ impl From<HLSLConcreteType> for HLSLHoleTypeMask {
         }
     }
 }
-impl From<HLSLType> for HLSLHoleTypeMask {
-    fn from(t: HLSLType) -> Self {
-        match t {
-            HLSLType::Concrete(c) => c.into(),
-            HLSLType::Hole(mask) => mask,
-        }
-    }
-}
 impl HLSLHoleTypeMask {
     pub fn try_concretize(&self) -> Option<HLSLConcreteType> {
         match *self {
@@ -198,6 +127,15 @@ impl HLSLHoleTypeMask {
             HLSLHoleTypeMask::NUMERIC_UINT => Some(HLSLNumericType::UnsignedInt.into()),
             HLSLHoleTypeMask::TEXTURE2D => Some(HLSLConcreteType::Texture2D),
             _ => None,
+        }
+    }
+    /// Return an intersection of this and other, as long as that intersection has at least one bit set
+    pub fn valid_intersection(self, other: Self) -> Option<Self> {
+        let i = self.intersection(other);
+        if i.is_empty() {
+            None
+        } else {
+            Some(i)
         }
     }
 }

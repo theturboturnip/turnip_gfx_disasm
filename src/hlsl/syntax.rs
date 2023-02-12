@@ -448,9 +448,9 @@ impl<TData: UnconcreteOpTarget> UnconcreteOpResult<TData> {
         for (input, input_typespec) in self.inputs.iter().zip(typespec.input_types.iter()) {
             let input_variable_type = input.unconcrete_type();
             // 1. check that the input_variable_type is compatible with the input_typespec
-            if !input_variable_type
-                .intersect(&input_typespec.as_hlsltype(&typespec.holes))
-                .is_ok()
+            if input_variable_type
+                .intersection(input_typespec.as_hlsltype(&typespec.holes))
+                .is_none()
             {
                 panic!("Value {:?} has unconcrete type {:?} that is incompatible with op {:?}'s typespec {:?}", input, input_variable_type, self.op, typespec)
             }
@@ -458,18 +458,18 @@ impl<TData: UnconcreteOpTarget> UnconcreteOpResult<TData> {
             match input_typespec {
                 HLSLOperandType::Hole(idx) => {
                     new_holes[*idx] = new_holes[*idx]
-                        .intersect(&input_variable_type)
+                        .intersection(input_variable_type)
                         .expect("Intersection error during hole resolution :(");
                 }
                 _ => {}
             }
         }
-        if let Some(output_type) = &output_type {
-            if !typespec
+        if let Some(output_type) = output_type {
+            if typespec
                 .output_type
                 .as_hlsltype(&typespec.holes)
-                .intersect(&output_type)
-                .is_ok()
+                .intersection(output_type)
+                .is_none()
             {
                 panic!("Output of {:?} has been assigned unconcrete type {:?} that is incompatible with typespec {:?}", self.op, output_type, typespec)
             }
@@ -477,17 +477,14 @@ impl<TData: UnconcreteOpTarget> UnconcreteOpResult<TData> {
             match &typespec.output_type {
                 HLSLOperandType::Hole(idx) => {
                     new_holes[*idx] = new_holes[*idx]
-                        .intersect(&output_type)
+                        .intersection(output_type)
                         .expect("Intersection error during hole resolution :(");
                 }
                 _ => {}
             }
         }
 
-        new_holes
-            .iter_mut()
-            .map(|c| *c = c.concretize_single_mask())
-            .for_each(drop);
+        // The holes have now been modified, go back and check they're compatible with the inputs
 
         // Go back through and check the holes still work now that they've been changed
         for (input, input_typespec) in self.inputs.iter().zip(typespec.input_types.iter()) {
@@ -495,19 +492,19 @@ impl<TData: UnconcreteOpTarget> UnconcreteOpResult<TData> {
             // The type of the variable (e.g. Hole) may be more general than the newly reduced value
             // That's fine, as long as the newly reduced value is within the original bounds
             // Basically, check that this input variable could be treated as
-            if !input_variable_type
-                .intersect(&input_typespec.as_hlsltype(&typespec.holes))
-                .is_ok()
+            if input_variable_type
+                .intersection(input_typespec.as_hlsltype(&typespec.holes))
+                .is_none()
             {
                 panic!("During hole resolution, value {:?} has unconcrete type {:?} that was made incompatible with op {:?}'s typespec {:?} (new holes {:?})", input, input_variable_type, self.op, input_typespec, new_holes)
             }
         }
-        if let Some(output_type) = &output_type {
-            if !typespec
+        if let Some(output_type) = output_type {
+            if typespec
                 .output_type
                 .as_hlsltype(&typespec.holes)
-                .intersect(&output_type)
-                .is_ok()
+                .intersection(output_type)
+                .is_none()
             {
                 panic!("During hole resolution, output of {:?} has unconcrete type {:?} that is incompatible with typespec {:?} and new holes {:?}", self.op, output_type, typespec, new_holes)
             }
