@@ -164,7 +164,7 @@ lazy_static! {
             ALUArgsSpec {
                 input_kinds: vec![HLSLNumericType::Float.into(), HLSLNumericType::Float.into()],
                 input_mask: InputMask::InheritFromFirstOutput,
-                output_kinds: vec![HLSLNumericType::Float.into()],
+                output_kinds: vec![HLSLHoleTypeMask::INTEGER.into()],
             },
             SimpleDependencyRelation::PerComponent,
             HLSLOperator::FauxBoolean(FauxBooleanOp::Lt),
@@ -173,7 +173,7 @@ lazy_static! {
             ALUArgsSpec {
                 input_kinds: vec![HLSLNumericType::Float.into(), HLSLNumericType::Float.into()],
                 input_mask: InputMask::InheritFromFirstOutput,
-                output_kinds: vec![HLSLNumericType::Float.into()],
+                output_kinds: vec![HLSLHoleTypeMask::INTEGER.into()],
             },
             SimpleDependencyRelation::PerComponent,
             HLSLOperator::FauxBoolean(FauxBooleanOp::Le),
@@ -182,7 +182,7 @@ lazy_static! {
             ALUArgsSpec {
                 input_kinds: vec![HLSLNumericType::Float.into(), HLSLNumericType::Float.into()],
                 input_mask: InputMask::InheritFromFirstOutput,
-                output_kinds: vec![HLSLNumericType::Float.into()],
+                output_kinds: vec![HLSLHoleTypeMask::INTEGER.into()],
             },
             SimpleDependencyRelation::PerComponent,
             HLSLOperator::FauxBoolean(FauxBooleanOp::Gt),
@@ -191,7 +191,7 @@ lazy_static! {
             ALUArgsSpec {
                 input_kinds: vec![HLSLNumericType::Float.into(), HLSLNumericType::Float.into()],
                 input_mask: InputMask::InheritFromFirstOutput,
-                output_kinds: vec![HLSLNumericType::Float.into()],
+                output_kinds: vec![HLSLHoleTypeMask::INTEGER.into()],
             },
             SimpleDependencyRelation::PerComponent,
             HLSLOperator::FauxBoolean(FauxBooleanOp::Ge),
