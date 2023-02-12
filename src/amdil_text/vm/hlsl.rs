@@ -53,7 +53,7 @@ impl HLSLCompatibleAction<AMDILAbstractVM> for AMDILDeclaration {
                     vm_name_ref: AMDILNameRef::NamedOutputRegister(name.clone()),
                     kind: HLSLHoleTypeMask::NUMERIC.into(),
                     n_components: *len,
-                    decl_type: HLSLDeclarationSpecType::ShaderInput(name.clone()),
+                    decl_type: HLSLDeclarationSpecType::ShaderOutput(name.clone()),
                     name: name.clone(),
                 },
                 literal_value: None,

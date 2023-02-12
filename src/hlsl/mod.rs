@@ -9,7 +9,7 @@ use crate::{
 use self::{syntax::UnconcreteOpTarget, types::HLSLType};
 
 pub mod compat;
-mod display;
+pub mod display;
 pub mod syntax;
 pub mod types;
 pub mod vm;
@@ -39,7 +39,8 @@ pub enum HLSLVectorName {
 impl VMRef for HLSLVectorName {
     fn is_pure_input(&self) -> bool {
         match self {
-            Self::ShaderInput(_) | Self::Literal(_) | Self::ArrayElement { .. } => true,
+            Self::ShaderInput(_) | Self::Literal(_) => true,
+            Self::ArrayElement { of, .. } => of.is_pure_input(),
             _ => false,
         }
     }
