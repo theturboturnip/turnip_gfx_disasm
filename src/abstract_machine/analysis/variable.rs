@@ -5,21 +5,67 @@ use std::{
     rc::Rc,
 };
 
-use crate::hlsl::{
-    compat::{
-        ExpandsIntoHLSLComponents, HLSLCompatibleAbstractVM, HLSLCompatibleAction,
-        HLSLCompatibleOutcome, HLSLCompatibleScalarRef, HLSLDataRefSpec, HLSLDeclarationSpec,
-        HLSLDeclarationSpecType, HLSLNameRefType,
+use crate::{
+    abstract_machine::vector::VectorComponent,
+    hlsl::{
+        compat::{
+            ExpandsIntoHLSLComponents, HLSLCompatibleAbstractVM, HLSLCompatibleAction,
+            HLSLCompatibleOutcome, HLSLCompatibleScalarRef, HLSLDataRefSpec, HLSLDeclarationSpec,
+            HLSLDeclarationSpecType, HLSLNameRefType,
+        },
+        syntax::{Operator, UnconcreteOpTarget},
+        types::HLSLType,
+        vm::HLSLAction,
+        HLSLScalarDataRef, HLSLVector, HLSLVectorDataRef, HLSLVectorName,
     },
-    syntax::Operator,
-    types::{HLSLOperandType, HLSLType},
-    HLSLOutcome, HLSLScalarDataRef, HLSLVariable, HLSLVariableInfo, HLSLVectorDataRef,
-    HLSLVectorName,
 };
 use crate::{
     abstract_machine::vector::{MaskedSwizzle, VECTOR_COMPONENTS},
     hlsl::syntax::UnconcreteOpResult,
 };
+
+/// An unswizzled vector available to operations in the HLSL virtual machine.
+/// See [HLSLVariableInfo].
+///
+/// TODO HLSLVariable has a fixed lifetime (the lifetime of the variable store). We really don't need to Rc it, but we might want to RefCell it still
+pub type HLSLVariable = Rc<RefCell<HLSLVariableInfo>>;
+
+/// Metadata of [HLSLVariable] i.e. an unswizzled vector available to operations in the HLSL virtual machine
+#[derive(Debug)]
+pub struct HLSLVariableInfo {
+    pub vector_name: HLSLVectorName,
+    /// The index of the vector kind mask [HLSLType] in the global list of vector kinds.
+    ///
+    /// Indirection is used here because variables may be connected and have the same kind.
+    pub kind_idx: usize,
+    pub n_components: u8,
+}
+
+/// The outcome of an action in the HLSL virtual machine
+#[derive(Debug, Clone)]
+pub enum HLSLOutcome {
+    /// State that a new variable exists without setting its value
+    Declaration { new_var: HLSLVariable },
+    /// State that a new variable exists and has a given value taken directly from other variables
+    Definition {
+        new_var: HLSLVariable,
+        components: Vec<HLSLScalarVarRef>,
+    },
+    /// State that the output of an operation has been assigned to some components of a variable
+    Operation {
+        op: UnconcreteOpResult<HLSLVectorVarRef>,
+        // Mapping of each individual scalar output to each individual scalar input
+        scalar_deps: Vec<(HLSLScalarVarRef, Vec<HLSLScalarVarRef>)>,
+    },
+    /// State that the program flow may end early due to some vector components
+    EarlyOut { inputs: Vec<HLSLScalarVarRef> },
+}
+
+/// A reference to a single scalar in the HLSL virtual machine
+pub type HLSLScalarVarRef = (HLSLVariable, VectorComponent);
+/// A reference to a swizzled vector in the HLSL virtual machine
+pub type HLSLVectorVarRef = (HLSLVariable, MaskedSwizzle);
+impl UnconcreteOpTarget for HLSLVectorVarRef {}
 
 #[derive(Debug)]
 struct VariableStore<TVM: HLSLCompatibleAbstractVM> {
@@ -245,6 +291,21 @@ impl<TVM: HLSLCompatibleAbstractVM> VariableStore<TVM> {
         }
         Ok(Some(first_idx))
     }
+
+    fn concretize_var(&self, var: &HLSLVariable) -> HLSLVector {
+        let var = var.borrow();
+        HLSLVector {
+            vector_name: var.vector_name.clone(),
+            kind: self.kind_mask_vec[var.kind_idx],
+            n_components: var.n_components,
+        }
+    }
+    pub fn concretize_scalar_var_ref(&self, var: &HLSLScalarVarRef) -> HLSLScalarDataRef {
+        (self.concretize_var(&var.0), var.1)
+    }
+    pub fn concretize_vector_var_ref(&self, var: &HLSLVectorVarRef) -> HLSLVectorDataRef {
+        (self.concretize_var(&var.0), var.1)
+    }
 }
 
 /// The state of the abstract machine at a given "tick" throughout the program
@@ -255,7 +316,7 @@ pub struct VariableAbstractMachine<TVM: HLSLCompatibleAbstractVM> {
     tick: u64,
     variables: VariableStore<TVM>,
     /// Mapping of the VM's scalar references to (Variable, VectorComponent)
-    current_scalar_names: HashMap<HLSLCompatibleScalarRef<TVM::TElementNameRef>, HLSLScalarDataRef>,
+    current_scalar_names: HashMap<HLSLCompatibleScalarRef<TVM::TElementNameRef>, HLSLScalarVarRef>,
     actions: Vec<(u64, HLSLOutcome)>,
 }
 impl<TVM: HLSLCompatibleAbstractVM> VariableAbstractMachine<TVM> {
@@ -320,7 +381,7 @@ impl<TVM: HLSLCompatibleAbstractVM> VariableAbstractMachine<TVM> {
     fn map_dataspec_to_dataref(
         &mut self,
         dataspec: &HLSLDataRefSpec<TVM::TElementNameRef>,
-    ) -> HLSLVectorDataRef {
+    ) -> HLSLVectorVarRef {
         // TODO ONLY REMAP NAMES FOR GENERAL REGISTERS
 
         let scalar_comps = dataspec.expand();
@@ -350,7 +411,7 @@ impl<TVM: HLSLCompatibleAbstractVM> VariableAbstractMachine<TVM> {
             });
             (variable, MaskedSwizzle::identity(expected_number_of_comps))
         } else {
-            let scalar_comps_as_vars: Vec<HLSLScalarDataRef> = scalar_comps_as_vars
+            let scalar_comps_as_vars: Vec<HLSLScalarVarRef> = scalar_comps_as_vars
                 .into_iter()
                 .map(|name| name.unwrap().clone())
                 .collect();
@@ -434,7 +495,7 @@ impl<TVM: HLSLCompatibleAbstractVM> VariableAbstractMachine<TVM> {
 
                     // Convert the input elements into variables
                     let basic_op_input_types = typespec.get_basic_input_types();
-                    let input_datarefs: Vec<HLSLVectorDataRef> = op
+                    let input_datarefs: Vec<HLSLVectorVarRef> = op
                         .inputs
                         .into_iter()
                         .enumerate()
@@ -540,7 +601,49 @@ impl<TVM: HLSLCompatibleAbstractVM> VariableAbstractMachine<TVM> {
         }
         self.tick += 1;
     }
-    pub fn actions(&self) -> &Vec<(u64, HLSLOutcome)> {
-        &self.actions
+
+    pub fn actions(&self) -> Vec<HLSLAction> {
+        self.actions
+            .iter()
+            .filter_map(|(_, outcome)| match outcome {
+                HLSLOutcome::Declaration { .. } => None,
+                HLSLOutcome::Definition {
+                    new_var,
+                    components,
+                } => Some(HLSLAction::Definition {
+                    new_var: self.variables.concretize_var(new_var),
+                    components: components
+                        .iter()
+                        .map(|s| self.variables.concretize_scalar_var_ref(s))
+                        .collect(),
+                }),
+                HLSLOutcome::Operation { op, scalar_deps } => Some(HLSLAction::Operation {
+                    op: op.op,
+                    inputs: op
+                        .inputs
+                        .iter()
+                        .map(|v| self.variables.concretize_vector_var_ref(v))
+                        .collect(),
+                    output: self.variables.concretize_vector_var_ref(&op.output),
+                    scalar_deps: scalar_deps
+                        .iter()
+                        .map(|(a, bs)| {
+                            (
+                                self.variables.concretize_scalar_var_ref(a),
+                                bs.iter()
+                                    .map(|s| self.variables.concretize_scalar_var_ref(s))
+                                    .collect(),
+                            )
+                        })
+                        .collect(),
+                }),
+                HLSLOutcome::EarlyOut { inputs } => Some(HLSLAction::EarlyOut {
+                    inputs: inputs
+                        .iter()
+                        .map(|var| self.variables.concretize_scalar_var_ref(&var))
+                        .collect(),
+                }),
+            })
+            .collect()
     }
 }

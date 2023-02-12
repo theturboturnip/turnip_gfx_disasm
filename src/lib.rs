@@ -21,7 +21,7 @@
 //! Current virtual machines:
 //! - [amdil_text::vm::AMDILAbstractVM] - AMDIL text-based disassembly language, very similar to DXBC, very incomplete
 //! - [rdna2::vm::RDNA2AbstractVM] - RDNA2 binary language, scalar based, very incomplete
-//! - [hlsl::HLSLAbstractVM] (coming soon!) - HLSL, currently only supported via translation from other backends.
+//! - [hlsl::vm::HLSLAbstractVM] - HLSL, currently only supported via translation from other backends.
 
 #[macro_use]
 extern crate num_derive;

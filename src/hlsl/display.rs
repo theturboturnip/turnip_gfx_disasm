@@ -1,8 +1,10 @@
 use std::fmt::{Display, Formatter};
 
+use crate::abstract_machine::analysis::variable::HLSLOutcome;
+
 use super::{
     types::{HLSLConcreteType, HLSLNumericType, HLSLType},
-    HLSLOutcome, HLSLVectorName,
+    HLSLVectorName,
 };
 
 impl std::fmt::Display for HLSLVectorName {

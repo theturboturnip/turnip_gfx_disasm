@@ -1,30 +1,29 @@
-use std::{cell::RefCell, rc::Rc};
-
-use crate::abstract_machine::vector::{MaskedSwizzle, VectorComponent};
-
-use self::{
-    syntax::{UnconcreteOpResult, UnconcreteOpTarget},
-    types::{HLSLOperandType, HLSLType},
+use crate::{
+    abstract_machine::{
+        vector::{MaskedSwizzle, VectorComponent},
+        VMElementRef,
+    },
+    VMDataRef, VMNameRef, VMRef,
 };
+
+use self::{syntax::UnconcreteOpTarget, types::HLSLType};
 
 pub mod compat;
 mod display;
 pub mod syntax;
 pub mod types;
+pub mod vm;
 
-/// An unswizzled vector available to operations in the HLSL virtual machine.
-/// See [HLSLVariableInfo].
-pub type HLSLVariable = Rc<RefCell<HLSLVariableInfo>>;
-
-/// Metadata of [HLSLVariable] i.e. an unswizzled vector available to operations in the HLSL virtual machine
-#[derive(Debug)]
-pub struct HLSLVariableInfo {
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct HLSLVector {
     pub vector_name: HLSLVectorName,
-    /// The index of the vector kind mask [HLSLType] in the global list of vector kinds.
-    ///
-    /// Indirection is used here because variables may be connected and have the same kind.
-    pub kind_idx: usize,
+    pub kind: HLSLType,
     pub n_components: u8,
+}
+impl HLSLVector {
+    pub fn identity_swizzle(&self) -> MaskedSwizzle {
+        MaskedSwizzle::identity(self.n_components as usize)
+    }
 }
 
 /// The name of an unswizzled vector in the HLSL virtual machine
@@ -37,29 +36,43 @@ pub enum HLSLVectorName {
     // TODO read/write permissions for ArrayElement?
     ArrayElement { of: Box<Self>, idx: u64 },
 }
+impl VMRef for HLSLVectorName {
+    fn is_pure_input(&self) -> bool {
+        match self {
+            Self::ShaderInput(_) | Self::Literal(_) | Self::ArrayElement { .. } => true,
+            _ => false,
+        }
+    }
+}
+impl VMNameRef for HLSLVectorName {}
 
 /// A reference to a single scalar in the HLSL virtual machine
-pub type HLSLScalarDataRef = (HLSLVariable, VectorComponent);
-/// A reference to a swizzled vector in the HLSL virtual machine
-pub type HLSLVectorDataRef = (HLSLVariable, MaskedSwizzle);
-impl UnconcreteOpTarget for HLSLVectorDataRef {}
-
-/// The outcome of an action in the HLSL virtual machine
-#[derive(Debug, Clone)]
-pub enum HLSLOutcome {
-    /// State that a new variable exists without setting its value
-    Declaration { new_var: HLSLVariable },
-    /// State that a new variable exists and has a given value taken directly from other variables
-    Definition {
-        new_var: HLSLVariable,
-        components: Vec<HLSLScalarDataRef>,
-    },
-    /// State that the output of an operation has been assigned to some components of a variable
-    Operation {
-        op: UnconcreteOpResult<HLSLVectorDataRef>,
-        // Mapping of each individual scalar output to each individual scalar input
-        scalar_deps: Vec<(HLSLScalarDataRef, Vec<HLSLScalarDataRef>)>,
-    },
-    /// State that the program flow may end early due to some vector components
-    EarlyOut { inputs: Vec<HLSLScalarDataRef> },
+pub type HLSLScalarDataRef = (HLSLVector, VectorComponent);
+impl VMRef for HLSLScalarDataRef {
+    fn is_pure_input(&self) -> bool {
+        self.0.vector_name.is_pure_input()
+    }
 }
+impl VMDataRef for HLSLScalarDataRef {}
+
+/// A reference to a swizzled vector in the HLSL virtual machine
+pub type HLSLVectorDataRef = (HLSLVector, MaskedSwizzle);
+impl VMRef for HLSLVectorDataRef {
+    fn is_pure_input(&self) -> bool {
+        self.0.vector_name.is_pure_input()
+    }
+}
+impl VMDataRef for HLSLVectorDataRef {}
+impl VMElementRef<HLSLScalarDataRef> for HLSLVectorDataRef {
+    fn decompose(&self) -> Vec<HLSLScalarDataRef> {
+        self.1
+             .0
+            .iter()
+            .filter_map(|comp| match comp {
+                Some(comp) => Some((self.0.clone(), *comp)),
+                None => None,
+            })
+            .collect()
+    }
+}
+impl UnconcreteOpTarget for HLSLVectorDataRef {}
