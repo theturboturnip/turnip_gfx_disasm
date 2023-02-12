@@ -1,4 +1,9 @@
-use super::{HLSLOutcome, HLSLVectorName};
+use std::fmt::{Display, Formatter};
+
+use super::{
+    types::{HLSLConcreteType, HLSLNumericType, HLSLType},
+    HLSLOutcome, HLSLVectorName,
+};
 
 impl std::fmt::Display for HLSLVectorName {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
@@ -66,6 +71,32 @@ impl std::fmt::Display for HLSLOutcome {
                 }
                 write!(f, ");")
             }
+        }
+    }
+}
+
+impl Display for HLSLNumericType {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+        match self {
+            Self::Float => write!(f, "float"),
+            Self::UnsignedInt => write!(f, "uint"),
+            Self::SignedInt => write!(f, "int"),
+        }
+    }
+}
+impl Display for HLSLConcreteType {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+        match self {
+            Self::Numeric(n) => write!(f, "{}", n),
+            Self::Texture2D => write!(f, "texture2D"),
+        }
+    }
+}
+impl Display for HLSLType {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+        match self {
+            Self::Concrete(c) => write!(f, "{}", c),
+            Self::Hole(mask) => write!(f, "{:?}", mask),
         }
     }
 }
