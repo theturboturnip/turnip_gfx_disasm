@@ -416,9 +416,11 @@ impl<TVM: HLSLCompatibleAbstractVM> VariableAbstractMachine<TVM> {
 
                     // TODO if we have a concretized type, try hole resolution in variables
 
+                    let op = UnconcreteOpResult::new(op.op, input_datarefs);
+
                     self.add_outcome(HLSLOutcome::Operation {
                         output_dataref,
-                        op: UnconcreteOpResult::new(op.op, input_datarefs),
+                        op,
                         scalar_deps,
                     })
                 }

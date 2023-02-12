@@ -75,6 +75,7 @@ impl OperatorTypeSpec {
         output_type: HLSLOperandType,
         holes: Vec<HLSLType>,
     ) -> Self {
+        // Sanity check - make sure the maximum hole ID referenced in any HLSLOperandType::Hole(id) == the number of elements in `holes`
         let mut max_referenced_hole = None;
         for input in input_types.iter() {
             if let HLSLOperandType::Hole(id) = input {
@@ -407,33 +408,13 @@ impl Operator for FauxBooleanOp {
     }
 }
 
-// pub trait OperatorTarget: std::fmt::Debug {
-//     fn hlsl_type(&self) -> HLSLOperandType;
-// }
-// #[derive(Debug)]
-// pub struct Operated<const N_IN: usize, T: Operator> {
-//     op: T,
-//     inputs: [Box<dyn OperatorTarget>; N_IN],
-//     output_hlsl_type: HLSLOperandType,
-// }
-// impl<const N_IN: usize, T: Operator> Operated<N_IN, T> {
-//     /// TODO function that takes an operation and a set of inputs, determines what kinds the holes are, and returns Self if it all works out
-//     pub fn new_checked(op: T, inputs: [Box<dyn OperatorTarget>; N_IN]) -> Self {
-//         todo!()
-//     }
-// }
-// impl<const N_IN: usize, T: Operator> OperatorTarget for Operated<N_IN, T> {
-//     fn hlsl_type(&self) -> HLSLOperandType {
-//         self.output_hlsl_type
-//     }
-// }
-
 pub trait UnconcreteOpTarget: std::fmt::Debug {
     fn unconcrete_type(&self) -> HLSLType;
 }
 
+/// Data on an operation performed on a set of inputs, each of which may not have a concrete type.
+///
 /// NOTE: TData may be an Rc<RefCell<Variable>>, which during the course of analysis may have its type refined.
-/// This means we don't store the
 #[derive(Debug, Clone)]
 pub struct UnconcreteOpResult<TData: UnconcreteOpTarget> {
     /// The operation being performed.
