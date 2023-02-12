@@ -99,6 +99,28 @@ impl OperatorTypeSpec {
         }
     }
 
+    /// Return a vector of HLSLType masks corresponding to the input arguments.
+    /// Does not consider the actual types of the other arguments or do any type coercion logic.
+    pub fn get_basic_input_types(&self) -> Vec<HLSLType> {
+        self.input_types()
+            .iter()
+            .map(|t| -> HLSLType {
+                match t {
+                    HLSLOperandType::Concrete(c) => (*c).into(),
+                    HLSLOperandType::Hole(h) => self.holes[*h],
+                }
+            })
+            .collect()
+    }
+
+    /// [get_basic_input_types] but for the output type.
+    pub fn get_basic_output_type(&self) -> HLSLType {
+        match self.output_type() {
+            HLSLOperandType::Concrete(c) => (*c).into(),
+            HLSLOperandType::Hole(h) => self.holes[*h],
+        }
+    }
+
     /// Return a vector of reverse type mappings.
     ///
     /// Each element in the returned vector is either

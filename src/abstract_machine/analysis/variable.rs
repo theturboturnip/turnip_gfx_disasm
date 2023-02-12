@@ -432,11 +432,21 @@ impl<TVM: HLSLCompatibleAbstractVM> VariableAbstractMachine<TVM> {
                     }
                 }
                 HLSLCompatibleOutcome::Operation { op, component_deps } => {
+                    let typespec = op.op.get_typespec();
+
                     // Convert the input elements into variables
+                    let basic_op_input_types = typespec.get_basic_input_types();
                     let input_datarefs: Vec<HLSLVectorDataRef> = op
                         .inputs
                         .into_iter()
-                        .map(|elem| self.map_dataspec_to_dataref(&elem))
+                        .enumerate()
+                        .map(|(i, mut elem)| {
+                            elem.kind = elem
+                                .kind
+                                .intersection(basic_op_input_types[i])
+                                .expect("Declared type of input element doesn't match usage");
+                            self.map_dataspec_to_dataref(&elem)
+                        })
                         .collect();
 
                     // Create a new variable for the output
@@ -454,11 +464,15 @@ impl<TVM: HLSLCompatibleAbstractVM> VariableAbstractMachine<TVM> {
                     //     break;
                     // }
 
-                    let output_dataref = self.map_dataspec_to_dataref(&op.output);
+                    let mut output = op.output;
+                    output.kind = output
+                        .kind
+                        .intersection(typespec.get_basic_output_type())
+                        .expect("Declared type of input element doesn't match usage");
+                    let output_dataref = self.map_dataspec_to_dataref(&output);
 
                     // Apply the type constraints from this operation
-                    for (type_constraint, constrained_operand_is) in
-                        op.op.get_typespec().get_type_constraints()
+                    for (type_constraint, constrained_operand_is) in typespec.get_type_constraints()
                     {
                         let constrained_operand_refs =
                             constrained_operand_is.into_iter().map(|i| {
