@@ -382,12 +382,10 @@ impl<TVM: HLSLCompatibleAbstractVM> VariableAbstractMachine<TVM> {
     }
 
     fn add_outcome(&mut self, outcome: HLSLOutcome) {
-        println!("\t{}", outcome);
         self.actions.push((self.tick, outcome))
     }
 
     pub fn accum_action(&mut self, action: &dyn HLSLCompatibleAction<TVM>) {
-        println!("tick {: >3}:", self.tick);
         for outcome in action.hlsl_outcomes() {
             match outcome {
                 HLSLCompatibleOutcome::Declaration {
@@ -541,5 +539,8 @@ impl<TVM: HLSLCompatibleAbstractVM> VariableAbstractMachine<TVM> {
             }
         }
         self.tick += 1;
+    }
+    pub fn actions(&self) -> &Vec<(u64, HLSLOutcome)> {
+        &self.actions
     }
 }
