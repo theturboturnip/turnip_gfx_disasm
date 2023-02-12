@@ -64,8 +64,8 @@ pub trait Operator: std::fmt::Debug {
 /// The "typespec" for an operator - the input and output types that it accepts, and the accepted types for any referenced type holes.
 #[derive(Debug)]
 pub struct OperatorTypeSpec {
-    input_types: Vec<HLSLOperandType>,
-    output_type: HLSLOperandType,
+    // The final element of operand_types is the
+    operand_types: Vec<HLSLOperandType>,
     holes: Vec<HLSLType>,
 }
 impl OperatorTypeSpec {
@@ -75,17 +75,16 @@ impl OperatorTypeSpec {
         output_type: HLSLOperandType,
         holes: Vec<HLSLType>,
     ) -> Self {
+        let mut operand_types = input_types;
+        operand_types.push(output_type);
+
         // Sanity check - make sure the maximum hole ID referenced in any HLSLOperandType::Hole(id) == the number of elements in `holes`
         let mut max_referenced_hole = None;
-        for input in input_types.iter() {
-            if let HLSLOperandType::Hole(id) = input {
+        for operand in operand_types.iter() {
+            if let HLSLOperandType::Hole(id) = operand {
                 max_referenced_hole =
                     Some(max_referenced_hole.map_or(*id, |max_hole_id| max(max_hole_id, *id)));
             }
-        }
-        if let HLSLOperandType::Hole(id) = output_type {
-            max_referenced_hole =
-                Some(max_referenced_hole.map_or(id, |max_hole_id| max(max_hole_id, id)));
         }
 
         if let Some(max_referenced_hole) = max_referenced_hole {
@@ -95,35 +94,37 @@ impl OperatorTypeSpec {
         }
 
         OperatorTypeSpec {
-            input_types,
-            output_type,
+            operand_types,
             holes,
         }
     }
 
-    /// If all holes represent a single type, return a [ConcreteOperatorTypes] with all of the types concretized
-    pub fn try_concretize(&self) -> Option<ConcreteOperatorTypes> {
-        let concrete_holes: Option<Vec<HLSLConcreteType>> =
-            self.holes.iter().map(|h| h.try_concretize()).collect();
-        concrete_holes.map(|holes| {
-            let input_types = self
-                .input_types
-                .iter()
-                .map(|t| t.concretize(&holes))
-                .collect();
-            let output_type = self.output_type.concretize(&holes);
-            ConcreteOperatorTypes {
-                input_types,
-                output_type,
+    /// Return a vector of reverse type mappings.
+    ///
+    /// Each element in the returned vector is either
+    /// - (concrete HLSLType, [operand index]) or
+    /// - (hole HLSLType, [operands associated with hole])
+    ///
+    /// The second type implies all of the operands should have the same hole type.
+    pub fn get_type_constraints(&self) -> Vec<(HLSLType, Vec<usize>)> {
+        // Create hole mappings at the same indices HLSLOperandType::Hole will refer to
+        let mut mappings: Vec<_> = self.holes.iter().map(|t| (*t, vec![])).collect();
+        for (i, t) in self.operand_types.iter().enumerate() {
+            match t {
+                HLSLOperandType::Hole(h) => mappings[*h].1.push(i),
+                HLSLOperandType::Concrete(c) => mappings.push(((*c).into(), vec![i])),
             }
-        })
-    }
-}
+        }
 
-/// Equivalent to [OperatorTypeSpec], but all types are concrete
-pub struct ConcreteOperatorTypes {
-    input_types: Vec<HLSLConcreteType>,
-    output_type: HLSLConcreteType,
+        mappings
+    }
+
+    pub fn input_types(&self) -> &[HLSLOperandType] {
+        &self.operand_types[0..(self.operand_types.len() - 1)]
+    }
+    pub fn output_type(&self) -> &HLSLOperandType {
+        self.operand_types.last().unwrap()
+    }
 }
 
 // TODO: FUCK WE NEED A SINGLE CATCH-ALL HLSLOperator ENUM
@@ -196,11 +197,11 @@ impl Operator for UnaryOp {
             UnaryOp::Plus => HLSLHoleTypeMask::NUMERIC,
         };
 
-        OperatorTypeSpec {
-            input_types: vec![HLSLOperandType::Hole(0)],
-            output_type: HLSLOperandType::Hole(0),
-            holes: vec![hole.into()],
-        }
+        OperatorTypeSpec::new(
+            vec![HLSLOperandType::Hole(0)],
+            HLSLOperandType::Hole(0),
+            vec![hole.into()],
+        )
     }
 
     fn n_inputs(&self) -> usize {

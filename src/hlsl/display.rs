@@ -26,7 +26,11 @@ impl std::fmt::Display for HLSLOutcome {
         match self {
             Self::Declaration { new_var } => {
                 let var = new_var.borrow();
-                write!(f, "{:?}{} {};", var.kind, var.n_components, var.vector_name)
+                write!(
+                    f,
+                    "{:?} {} {};",
+                    var.kind_idx, var.n_components, var.vector_name
+                )
             }
             Self::Definition {
                 new_var,
@@ -36,8 +40,12 @@ impl std::fmt::Display for HLSLOutcome {
                     let var = new_var.borrow();
                     write!(
                         f,
-                        "{:?}{} {} = {:?}{}(",
-                        var.kind, var.n_components, var.vector_name, var.kind, var.n_components
+                        "{:?} {} {} = {:?} {}(",
+                        var.kind_idx,
+                        var.n_components,
+                        var.vector_name,
+                        var.kind_idx,
+                        var.n_components
                     )?;
                 }
                 for (refed_var, comp) in components {

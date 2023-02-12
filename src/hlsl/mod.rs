@@ -4,7 +4,7 @@ use crate::abstract_machine::vector::{MaskedSwizzle, VectorComponent};
 
 use self::{
     syntax::{UnconcreteOpResult, UnconcreteOpTarget},
-    types::HLSLType,
+    types::{HLSLOperandType, HLSLType},
 };
 
 pub mod compat;
@@ -20,7 +20,10 @@ pub type HLSLVariable = Rc<RefCell<HLSLVariableInfo>>;
 #[derive(Debug)]
 pub struct HLSLVariableInfo {
     pub vector_name: HLSLVectorName,
-    pub kind: HLSLType,
+    /// The index of the vector kind mask [HLSLType] in the global list of vector kinds.
+    ///
+    /// Indirection is used here because variables may be connected and have the same kind.
+    pub kind_idx: usize,
     pub n_components: u8,
 }
 
