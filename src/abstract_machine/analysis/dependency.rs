@@ -50,7 +50,9 @@ impl<TVM: ScalarAbstractVM> ScalarDependencies<TVM> {
                     name,
                     value: Some(value),
                 } => {
-                    self.dependents.insert(name, [value].into());
+                    let mut resolved_inputs = HashSet::new();
+                    self.resolve_input_on(&mut resolved_inputs, &value);
+                    self.dependents.insert(name, resolved_inputs);
                 }
                 ScalarOutcome::Dependency { output, inputs } => {
                     if output.data.is_pure_input() {
