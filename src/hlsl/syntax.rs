@@ -152,7 +152,7 @@ impl OperatorTypeSpec {
 // TODO: FUCK WE NEED A SINGLE CATCH-ALL HLSLOperator ENUM
 // WE NEED TO BE ABLE TO STORE THEM CONSISTENTLY
 // AND IT MEANS WE DONT NEED THE RC BULLSHIT ANYMORE
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum HLSLOperator {
     Assign,
     Unary(UnaryOp),
@@ -196,7 +196,7 @@ impl Operator for HLSLOperator {
 }
 
 /// Unary operations that operate on a single value and return a single value
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum UnaryOp {
     /// Inverts each bit of X
     ///
@@ -232,7 +232,7 @@ impl Operator for UnaryOp {
 }
 
 /// Integer/float arithmetic operations, which take two inputs X and Y and return one output.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ArithmeticOp {
     /// Adds X and Y
     ///
@@ -271,7 +271,7 @@ impl Operator for ArithmeticOp {
 }
 
 /// Binary/bitwise operations which take two inputs X and Y and return a single output.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BinaryArithmeticOp {
     LeftShift,
     RightShift,
@@ -314,7 +314,7 @@ impl Operator for BinaryArithmeticOp {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct NumericCastTo(pub HLSLNumericType);
 impl Operator for NumericCastTo {
     fn get_typespec(&self) -> OperatorTypeSpec {
@@ -331,7 +331,7 @@ impl Operator for NumericCastTo {
 }
 
 /// Texture sampling intrinsic functions, which take a texture argument and at least one other input to produce a single output.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SampleIntrinsic {
     Tex2D,
     // Just exists for compatibility with current bad behaviour in AMDIL - TODO remove
@@ -365,7 +365,7 @@ impl Operator for SampleIntrinsic {
 }
 
 /// Numeric intrinsic functions
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NumericIntrinsic {
     Dot,
     Min,
@@ -389,7 +389,7 @@ impl Operator for NumericIntrinsic {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FauxBooleanOp {
     Lt,
     Le,
