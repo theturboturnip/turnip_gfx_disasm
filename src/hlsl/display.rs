@@ -40,7 +40,7 @@ impl std::fmt::Display for DWrap<&HLSLScalarDataRef> {
                 _ => write!(f, "({})0x{:x}", v.kind, val),
             };
         }
-        write!(f, "{}.", v.vector_name)?;
+        write!(f, "({}){}.", v.kind, v.vector_name)?;
         match c {
             VectorComponent::X => write!(f, "x"),
             VectorComponent::Y => write!(f, "y"),
@@ -83,7 +83,11 @@ impl std::fmt::Display for HLSLAction {
                 op, output, inputs, ..
             } => {
                 {
-                    write!(f, "{}{} = {:?}(", output.0.vector_name, output.1, op)?;
+                    write!(
+                        f,
+                        "{} {}{} = {:?}(",
+                        output.0.kind, output.0.vector_name, output.1, op
+                    )?;
                 }
                 for i in inputs {
                     write!(f, "{}, ", DWrap(i))?;
@@ -120,9 +124,13 @@ impl Display for HLSLConcreteType {
 }
 impl Display for HLSLType {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
-        match self.try_concretize() {
-            Some(c) => write!(f, "{}", c),
-            None => write!(f, "{:?}", self),
+        match self.mask() {
+            HLSLHoleTypeMask::NUMERIC_FLOAT => write!(f, "float"),
+            HLSLHoleTypeMask::NUMERIC_SINT => write!(f, "int"),
+            HLSLHoleTypeMask::NUMERIC_UINT => write!(f, "uint"),
+            HLSLHoleTypeMask::NUMERIC => write!(f, "num?"),
+            HLSLHoleTypeMask::INTEGER => write!(f, "u?int"),
+            _ => write!(f, "{:?}", self),
         }
     }
 }
