@@ -3,7 +3,7 @@ use std::fmt::{Display, Formatter};
 use crate::abstract_machine::vector::VectorComponent;
 
 use super::{
-    types::{HLSLConcreteType, HLSLNumericType, HLSLType},
+    types::{HLSLConcreteType, HLSLHoleTypeMask, HLSLNumericType, HLSLType},
     vm::HLSLAction,
     HLSLScalarDataRef, HLSLVectorDataRef, HLSLVectorName,
 };
@@ -31,7 +31,14 @@ impl std::fmt::Display for DWrap<&HLSLScalarDataRef> {
         let (v, c) = &self.0;
         if let HLSLVectorName::Literal(vals) = v.vector_name {
             let val: u64 = vals[c.into_index()];
-            return write!(f, "({})0x{:x}", v.kind, val);
+            return match v.kind.mask() {
+                HLSLHoleTypeMask::NUMERIC_FLOAT => write!(f, "{}f", f32::from_bits(val as u32)),
+                HLSLHoleTypeMask::NUMERIC_SINT => write!(f, "{}", val),
+                HLSLHoleTypeMask::NUMERIC_UINT => write!(f, "{}u", val),
+                HLSLHoleTypeMask::NUMERIC => write!(f, "(num?)0x{:x}", val),
+                HLSLHoleTypeMask::INTEGER => write!(f, "(u?int)0x{:x}", val),
+                _ => write!(f, "({})0x{:x}", v.kind, val),
+            };
         }
         write!(f, "{}.", v.vector_name)?;
         match c {

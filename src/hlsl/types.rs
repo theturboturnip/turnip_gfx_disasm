@@ -34,6 +34,9 @@ impl HLSLType {
             Some(Self(i))
         }
     }
+    pub fn mask(&self) -> HLSLHoleTypeMask {
+        self.0
+    }
 }
 impl From<HLSLHoleTypeMask> for HLSLType {
     fn from(m: HLSLHoleTypeMask) -> Self {
