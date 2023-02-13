@@ -6,6 +6,7 @@ use super::{
 };
 
 /// The type of Action held by Programs for the [HLSLAbstractVM]
+#[derive(Debug)]
 pub enum HLSLAction {
     /// State that a new variable exists and has a given value taken directly from other variables
     Definition {

@@ -30,7 +30,7 @@ impl<TVM: ScalarAbstractVM> ScalarDependencies<TVM> {
             if let Some(input_dependents) = self.dependents.get(&input.data) {
                 resolved_inputs.extend(input_dependents.iter().cloned());
             } else {
-                println!("Weird! Someone is using a non-initialized non-pure input {:?}. Treating as pure", input);
+                println!("Weird! Someone is using a non-initialized non-pure input {:?}. Treating as pure", input.data);
                 resolved_inputs.insert(input.clone());
             }
         }
@@ -60,8 +60,6 @@ impl<TVM: ScalarAbstractVM> ScalarDependencies<TVM> {
                         );
                         continue;
                     }
-
-                    // TODO introduce logic for kind/width coercion, store keys as ValueRef
 
                     // TODO Resolve NamedLiteral to Literal for vectors?
 
