@@ -429,6 +429,24 @@ impl<TVM: HLSLCompatibleAbstractVM> VariableAbstractMachine<TVM> {
                 // 3) not all components map to the same old vector variable
                 // make a new variable that doesn't depend on any previous values
                 let variable = self.add_and_map_new_variable_from_dataspec(dataspec);
+
+                // Link the types of this new variable to the types of the variables it's made out of
+                let mut composite_variables: Vec<_> = scalar_comps_as_vars
+                    .iter()
+                    .map(|(v, _)| v.clone())
+                    .collect();
+                composite_variables.push(variable.clone());
+                match self.variables.constrain_var_types(
+                    composite_variables.clone().into_iter(),
+                    dataspec.kind,
+                ){
+                    Ok(()) => {}
+                    Err(bad_combo) => panic!(
+                        "Tried to merge incompatible constraints {:?} when creating variable {:?} from composites {:?}",
+                        bad_combo, variable, composite_variables
+                    ),
+                }
+
                 self.add_outcome(HLSLOutcome::Definition {
                     new_var: variable.clone(),
                     components: scalar_comps_as_vars.into_iter().collect(),
