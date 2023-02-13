@@ -378,9 +378,13 @@ impl<TVM: HLSLCompatibleAbstractVM> VariableAbstractMachine<TVM> {
     /// 3) the element components do not combine to make a previously known variable
     ///
     /// In all other cases, a swizzle of an existing variable is returned.
+    ///
+    /// When mapping the output of an operation it is generally wise to always create a new variable, unless that output is to a "special" register.
+    /// Setting the second argument to true will force a new variable to be created if the original is a [HLSLNameRefType::GenericRegister]
     fn map_dataspec_to_dataref(
         &mut self,
         dataspec: &HLSLDataRefSpec<TVM::TElementNameRef>,
+        force_new_general_purpose_var: bool,
     ) -> HLSLVectorVarRef {
         // TODO ONLY REMAP NAMES FOR GENERAL REGISTERS
 
@@ -392,18 +396,21 @@ impl<TVM: HLSLCompatibleAbstractVM> VariableAbstractMachine<TVM> {
             .collect();
 
         // Check for the 1) and 2) cases
-        if scalar_comps_as_vars.iter().any(|name| {
-            match name {
-                // 1) at least one component has not been registered before.
-                None => true,
-                // 2) at least one component has a different type to it's previous usage
-                Some((old_var, _)) => {
-                    let old_kind = self.variables.get_variable_kind(old_var);
-                    // If the new kind and the old kind don't intersect, must be a new variable
-                    dataspec.kind.intersection(old_kind).is_none()
+        if (dataspec.name_ref_type == HLSLNameRefType::GenericRegister
+            && force_new_general_purpose_var)
+            || scalar_comps_as_vars.iter().any(|name| {
+                match name {
+                    // 1) at least one component has not been registered before.
+                    None => true,
+                    // 2) at least one component has a different type to it's previous usage
+                    Some((old_var, _)) => {
+                        let old_kind = self.variables.get_variable_kind(old_var);
+                        // If the new kind and the old kind don't intersect, must be a new variable
+                        dataspec.kind.intersection(old_kind).is_none()
+                    }
                 }
-            }
-        }) {
+            })
+        {
             // make a new variable that doesn't depend on any previous values
             let variable = self.add_and_map_new_variable_from_dataspec(&dataspec);
             self.add_outcome(HLSLOutcome::Declaration {
@@ -513,7 +520,7 @@ impl<TVM: HLSLCompatibleAbstractVM> VariableAbstractMachine<TVM> {
                                 .kind
                                 .intersection(basic_op_input_types[i])
                                 .expect("Declared type of input element doesn't match usage");
-                            self.map_dataspec_to_dataref(&elem)
+                            self.map_dataspec_to_dataref(&elem, false)
                         })
                         .collect();
 
@@ -558,7 +565,7 @@ impl<TVM: HLSLCompatibleAbstractVM> VariableAbstractMachine<TVM> {
                         .kind
                         .intersection(typespec.get_basic_output_type())
                         .expect("Declared type of input element doesn't match usage");
-                    let output_dataref = self.map_dataspec_to_dataref(&output);
+                    let output_dataref = self.map_dataspec_to_dataref(&output, true);
 
                     // Apply the type constraints from this operation
                     for (type_constraint, constrained_operand_is) in typespec.get_type_constraints()
