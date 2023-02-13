@@ -37,7 +37,7 @@ impl HLSLCompatibleAction<AMDILAbstractVM> for AMDILDeclaration {
             } => vec![HLSLCompatibleOutcome::Declaration {
                 declspec: HLSLDeclarationSpec {
                     vm_name_ref: AMDILNameRef::NamedInputRegister(name.clone()),
-                    kind: HLSLHoleTypeMask::NUMERIC.into(),
+                    kind: HLSLHoleTypeMask::NUMERIC_FLOAT.into(),
                     n_components: *len,
                     decl_type: HLSLDeclarationSpecType::ShaderInput(name.clone()),
                     name: name.clone(),
@@ -51,7 +51,7 @@ impl HLSLCompatibleAction<AMDILAbstractVM> for AMDILDeclaration {
             } => vec![HLSLCompatibleOutcome::Declaration {
                 declspec: HLSLDeclarationSpec {
                     vm_name_ref: AMDILNameRef::NamedOutputRegister(name.clone()),
-                    kind: HLSLHoleTypeMask::NUMERIC.into(),
+                    kind: HLSLHoleTypeMask::NUMERIC_FLOAT.into(),
                     n_components: *len,
                     decl_type: HLSLDeclarationSpecType::ShaderOutput(name.clone()),
                     name: name.clone(),
