@@ -112,6 +112,7 @@ impl<TVM: HLSLCompatibleAbstractVM> VariableStore<TVM> {
             kind_idx,
             n_components,
         }));
+        self.all_variables.push(variable.clone());
         let insert_in = match vector_ref {
             HLSLVectorName::ShaderInput(_) | HLSLVectorName::ArrayElement { .. } => {
                 // TODO ASSUMING ARRAYELEMENTS ARE READ-ONLY!
@@ -132,7 +133,6 @@ impl<TVM: HLSLCompatibleAbstractVM> VariableStore<TVM> {
                 variable, vector_ref, x
             )
         }
-        self.all_variables.push(variable.clone());
         variable
     }
 
@@ -475,11 +475,20 @@ impl<TVM: HLSLCompatibleAbstractVM> VariableAbstractMachine<TVM> {
                             });
                         }
                         Some(literal_val) => {
+                            // Create a new literal """variable"""
                             let literal = self.variables.add_new_variable_from_info(
                                 HLSLVectorName::Literal(literal_val.data),
                                 literal_val.kind,
                                 n_components,
                             );
+                            // Hook up the type of the literal to the type of the variable we're assigning it to
+                            self.variables
+                                .constrain_var_types(
+                                    [var.clone(), literal.clone()].into_iter(),
+                                    literal_val.kind,
+                                )
+                                .expect("Constraining the types of a literal to a variable with the same type should always succeed");
+                            // Assign the literal to the variable
                             self.add_outcome(HLSLOutcome::Definition {
                                 new_var: var.clone(),
                                 components: (0..n_components)
