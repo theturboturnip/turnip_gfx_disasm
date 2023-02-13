@@ -32,7 +32,7 @@ impl std::fmt::Display for DWrap<&HLSLScalarDataRef> {
         if let HLSLVectorName::Literal(vals) = v.vector_name {
             let val: u64 = vals[c.into_index()];
             return match v.kind.mask() {
-                HLSLHoleTypeMask::NUMERIC_FLOAT => write!(f, "{}f", f32::from_bits(val as u32)),
+                HLSLHoleTypeMask::NUMERIC_FLOAT => write!(f, "{:?}f", f32::from_bits(val as u32)),
                 HLSLHoleTypeMask::NUMERIC_SINT => write!(f, "{}", val),
                 HLSLHoleTypeMask::NUMERIC_UINT => write!(f, "{}u", val),
                 HLSLHoleTypeMask::NUMERIC => write!(f, "(num?)0x{:x}", val),
