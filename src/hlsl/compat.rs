@@ -22,7 +22,7 @@ pub struct HLSLDataRefSpec<TName: VMNameRef> {
 impl<TName: VMNameRef> UnconcreteOpTarget for HLSLDataRefSpec<TName> {}
 
 /// The type of vector name an HLSL-compatible value will have
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum HLSLNameRefType {
     GenericRegister,
     ShaderInput(String),
