@@ -1,11 +1,14 @@
 use std::fmt::{Display, Formatter};
 
-use crate::abstract_machine::analysis::variable::HLSLOutcome;
+use crate::abstract_machine::vector::VectorComponent;
 
 use super::{
     types::{HLSLConcreteType, HLSLNumericType, HLSLType},
-    HLSLVectorName,
+    vm::HLSLAction,
+    HLSLScalarDataRef, HLSLVectorDataRef, HLSLVectorName,
 };
+
+pub struct DWrap<T>(pub T);
 
 impl std::fmt::Display for HLSLVectorName {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
@@ -23,59 +26,67 @@ impl std::fmt::Display for HLSLVectorName {
     }
 }
 
-impl std::fmt::Display for HLSLOutcome {
+impl std::fmt::Display for DWrap<&HLSLScalarDataRef> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        let (v, c) = &self.0;
+        if let HLSLVectorName::Literal(vals) = v.vector_name {
+            let val: u64 = vals[c.into_index()];
+            return write!(f, "({})0x{:x}", v.kind, val);
+        }
+        write!(f, "{}.", v.vector_name)?;
+        match c {
+            VectorComponent::X => write!(f, "x"),
+            VectorComponent::Y => write!(f, "y"),
+            VectorComponent::Z => write!(f, "z"),
+            VectorComponent::W => write!(f, "w"),
+        }
+    }
+}
+impl std::fmt::Display for DWrap<&HLSLVectorDataRef> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        let (v, cs) = &self.0;
+        write!(f, "{}{}", v.vector_name, cs)
+    }
+}
+
+impl std::fmt::Display for HLSLAction {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
-            Self::Declaration { new_var } => {
-                let var = new_var.borrow();
-                write!(
-                    f,
-                    "{:?} {} {};",
-                    var.kind_idx, var.n_components, var.vector_name
-                )
-            }
             Self::Definition {
                 new_var,
                 components,
             } => {
                 {
-                    let var = new_var.borrow();
                     write!(
                         f,
-                        "{:?} {} {} = {:?} {}(",
-                        var.kind_idx,
-                        var.n_components,
-                        var.vector_name,
-                        var.kind_idx,
-                        var.n_components
+                        "{}{} {} = {}{}(",
+                        new_var.kind,
+                        new_var.n_components,
+                        new_var.vector_name,
+                        new_var.kind,
+                        new_var.n_components
                     )?;
                 }
-                for (refed_var, comp) in components {
-                    let referenced_var = refed_var.borrow();
-                    write!(f, "{}.{:?}, ", referenced_var.vector_name, *comp)?;
+                for comp in components {
+                    write!(f, "{}, ", DWrap(comp))?;
                 }
                 write!(f, ");")
             }
-            Self::Operation { op, .. } => {
+            Self::Operation {
+                op, output, inputs, ..
+            } => {
                 {
-                    let output_var = op.output.0.borrow();
-                    write!(
-                        f,
-                        "{}{} = {:?}(",
-                        output_var.vector_name, op.output.1, op.op
-                    )?;
+                    write!(f, "{}{} = {:?}(", output.0.vector_name, output.1, op)?;
                 }
-                for (refed_var, swizz) in &op.inputs {
-                    let referenced_var = refed_var.borrow();
-                    write!(f, "{}{}, ", referenced_var.vector_name, swizz)?;
+                for i in inputs {
+                    write!(f, "{}, ", DWrap(i))?;
                 }
                 write!(f, ");")
             }
             Self::EarlyOut { inputs } => {
                 write!(f, "early_out_based_on(")?;
-                for (refed_var, comp) in inputs {
-                    let referenced_var = refed_var.borrow();
-                    write!(f, "{}.{:?}, ", referenced_var.vector_name, *comp)?;
+                for i in inputs {
+                    write!(f, "{}, ", DWrap(i))?;
                 }
                 write!(f, ");")
             }

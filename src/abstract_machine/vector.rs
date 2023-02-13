@@ -15,6 +15,16 @@ pub const VECTOR_COMPONENTS: [VectorComponent; 4] = [
     VectorComponent::Z,
     VectorComponent::W,
 ];
+impl VectorComponent {
+    pub fn into_index(self) -> usize {
+        match self {
+            VectorComponent::X => 0,
+            VectorComponent::Y => 1,
+            VectorComponent::Z => 2,
+            VectorComponent::W => 3,
+        }
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct MaskedSwizzle(pub [Option<VectorComponent>; 4]);
