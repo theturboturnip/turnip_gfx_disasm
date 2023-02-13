@@ -508,6 +508,27 @@ impl<TVM: HLSLCompatibleAbstractVM> VariableAbstractMachine<TVM> {
                         })
                         .collect();
 
+                    // Remap the INPUT of the scalar dependencies only, now the variables exist.
+                    // Do this now, before the output variable has been created, because that might change the mapping.
+                    // In particular if the output variable reuses scalars from the input this will output a self-self dependency
+                    let scalar_deps_with_remapped_input: Vec<_> = component_deps
+                        .into_iter()
+                        .map(|(scalar_output, scalar_inputs)| {
+                            let scalar_input_vars: Vec<_> = scalar_inputs
+                                .into_iter()
+                                .map(|input| {
+                                    if let Some(as_var) = self.current_scalar_names.get(&input.data)
+                                    {
+                                        (*as_var).clone()
+                                    } else {
+                                        panic!("Undeclared/uninitialized item used: {:?}", input)
+                                    }
+                                })
+                                .collect();
+                            (scalar_output, scalar_input_vars)
+                        })
+                        .collect();
+
                     // Create a new variable for the output
 
                     // TODO apply an extra rule:
@@ -553,22 +574,10 @@ impl<TVM: HLSLCompatibleAbstractVM> VariableAbstractMachine<TVM> {
                         }
                     }
 
-                    // Gather an equivalent to component_deps where all inputs have been converted to Variable references
-                    // Do this after converting the input elements themselves, because that might have created new variables and changed the scalar mapping
-                    let scalar_deps: Vec<_> = component_deps
+                    // Remap the OUTPUTs of the scalar dependencies
+                    let scalar_deps: Vec<_> = scalar_deps_with_remapped_input
                         .into_iter()
-                        .map(|(scalar_output, scalar_inputs)| {
-                            let scalar_input_vars: Vec<_> = scalar_inputs
-                                .into_iter()
-                                .map(|input| {
-                                    if let Some(as_var) = self.current_scalar_names.get(&input.data)
-                                    {
-                                        (*as_var).clone()
-                                    } else {
-                                        panic!("Undeclared/uninitialized item used: {:?}", input)
-                                    }
-                                })
-                                .collect();
+                        .map(|(scalar_output, scalar_input_vars)| {
                             let scalar_output_var = self
                                 .current_scalar_names
                                 .get(&scalar_output.data)
