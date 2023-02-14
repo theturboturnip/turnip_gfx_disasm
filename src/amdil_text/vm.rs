@@ -43,6 +43,7 @@ pub enum AMDILNameRef {
 impl VMRef for AMDILNameRef {
     fn is_pure_input(&self) -> bool {
         match self {
+            Self::Texture(_) => true, // Assuming textures are read only
             Self::Literal(..) => true,
             Self::NamedLiteral(..) => false, // Named literals always map to real literals in AMDIL
             Self::NamedInputRegister(..) => true,

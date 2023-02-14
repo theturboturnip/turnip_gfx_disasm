@@ -40,7 +40,7 @@ pub enum HLSLVectorName {
 impl VMRef for HLSLVectorName {
     fn is_pure_input(&self) -> bool {
         match self {
-            Self::ShaderInput(_) | Self::Literal(_) => true,
+            Self::ShaderInput(_) | Self::Literal(_) | Self::Texture(_) => true, // assuming textures are read-only
             Self::ArrayElement { of, .. } => of.is_pure_input(),
             _ => false,
         }
