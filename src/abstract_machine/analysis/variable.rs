@@ -147,6 +147,7 @@ impl<TVM: HLSLCompatibleAbstractVM> VariableStore<TVM> {
                 self.next_general_var_id += 1;
                 HLSLVectorName::GenericRegister(id)
             }
+            HLSLDeclarationSpecType::Texture(id) => HLSLVectorName::Texture(id),
             HLSLDeclarationSpecType::ShaderInput(name) => HLSLVectorName::ShaderInput(name),
             HLSLDeclarationSpecType::ShaderOutput(name) => HLSLVectorName::ShaderOutput(name),
             // HLSLDeclarationSpecType::Array { of, len } => {

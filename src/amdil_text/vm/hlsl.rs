@@ -5,7 +5,7 @@ use crate::{
             HLSLCompatibleAction, HLSLCompatibleOutcome, HLSLDataRefSpec, HLSLDeclarationSpec,
             HLSLDeclarationSpecType, HLSLNameRefType,
         },
-        types::{HLSLHoleTypeMask, HLSLType},
+        types::{HLSLConcreteType, HLSLHoleTypeMask, HLSLType},
     },
 };
 
@@ -14,6 +14,16 @@ use super::{AMDILAbstractVM, AMDILDataRef, AMDILDeclaration, AMDILNameRef};
 impl HLSLCompatibleAction<AMDILAbstractVM> for AMDILDeclaration {
     fn hlsl_outcomes(&self) -> Vec<HLSLCompatibleOutcome<AMDILAbstractVM>> {
         match self {
+            AMDILDeclaration::TextureResource(id) => vec![HLSLCompatibleOutcome::Declaration {
+                declspec: HLSLDeclarationSpec {
+                    vm_name_ref: AMDILNameRef::Texture(*id),
+                    kind: HLSLConcreteType::Texture2D.into(),
+                    n_components: 1,
+                    decl_type: HLSLDeclarationSpecType::Texture(*id),
+                    name: format!("tex{:>03}", id),
+                },
+                literal_value: None,
+            }],
             AMDILDeclaration::NamedLiteral(name, value) => {
                 vec![HLSLCompatibleOutcome::Declaration {
                     declspec: HLSLDeclarationSpec {

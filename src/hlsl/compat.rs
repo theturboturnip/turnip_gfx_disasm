@@ -45,6 +45,7 @@ pub struct HLSLDeclarationSpec<TName: VMNameRef> {
 #[derive(Debug, Clone)]
 pub enum HLSLDeclarationSpecType {
     GenericRegister,
+    Texture(u64),
     ShaderInput(String),
     ShaderOutput(String),
     // TODO re-enable array declarations once we re-work the HLSLCompatibleOutcome::Declaration enum, which is currently very single-variable-specific.
