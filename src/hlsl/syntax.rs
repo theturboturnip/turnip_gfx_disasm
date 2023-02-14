@@ -334,8 +334,6 @@ impl Operator for NumericCastTo {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SampleIntrinsic {
     Tex2D,
-    // Just exists for compatibility with current bad behaviour in AMDIL - TODO remove
-    Tex2DFakeDoesntTakeTex,
 }
 impl Operator for SampleIntrinsic {
     fn get_typespec(&self) -> OperatorTypeSpec {
@@ -348,18 +346,12 @@ impl Operator for SampleIntrinsic {
                 HLSLNumericType::Float.into(),
                 vec![],
             ),
-            Self::Tex2DFakeDoesntTakeTex => OperatorTypeSpec::new(
-                vec![HLSLNumericType::Float.into()],
-                HLSLNumericType::Float.into(),
-                vec![],
-            ),
         }
     }
 
     fn n_inputs(&self) -> usize {
         match self {
             Self::Tex2D => 2,
-            Self::Tex2DFakeDoesntTakeTex => 1,
         }
     }
 }

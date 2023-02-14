@@ -8,7 +8,7 @@ use crate::{
     },
     amdil_text::{
         grammar,
-        vm::{AMDILAbstractVM, AMDILDataRef},
+        vm::{AMDILAbstractVM, AMDILDataRef, AMDILNameRef},
     },
     hlsl::{
         compat::{HLSLCompatibleAction, HLSLCompatibleOutcome},
@@ -16,13 +16,15 @@ use crate::{
             ArithmeticOp, FauxBooleanOp, HLSLOperator, NumericIntrinsic, SampleIntrinsic,
             UnconcreteOpResult,
         },
-        types::{HLSLHoleTypeMask, HLSLNumericType, HLSLType},
+        types::{HLSLConcreteType, HLSLHoleTypeMask, HLSLNumericType, HLSLType},
     },
     ScalarAction, ScalarOutcome,
 };
 use lazy_static::lazy_static;
 
-use super::{decode_args, registers::arg_as_vector_data_ref, AMDILTextDecodeError};
+use super::{
+    decode_args, decode_instr_mods, registers::arg_as_vector_data_ref, AMDILTextDecodeError,
+};
 
 #[derive(Debug, Clone, Copy)]
 enum InputMask {
@@ -208,26 +210,51 @@ lazy_static! {
             SimpleDependencyRelation::AllToAll,
             HLSLOperator::FauxBoolean(FauxBooleanOp::Ternary)
         )),
-
-        ("sample", (
-            ALUArgsSpec {
-                // Coords (TODO texture is specified in a modifier - prob need to move sample out of this)
-                input_kinds: vec![HLSLNumericType::Float.into()],
-                input_mask: InputMask::TruncateTo(2),
-                output_kinds: vec![HLSLNumericType::Float.into()],
-            },
-            SimpleDependencyRelation::AllToAll,
-            HLSLOperator::SampleI(SampleIntrinsic::Tex2DFakeDoesntTakeTex)
-        )),
     ]);
 }
 
 pub fn decode_alu(
     g_instr: &grammar::Instruction,
 ) -> Result<Option<ALUInstruction>, AMDILTextDecodeError> {
+    let matchable_args = decode_args(&g_instr.args);
+    match (
+        g_instr.instr.as_str(),
+        &decode_instr_mods(&g_instr.instr_mods)[..],
+        &matchable_args,
+    ) {
+        ("sample", [("resource", tex_id), ("sampler", _sampler_id)], matchable_args) => {
+            let args: Result<Vec<AMDILDataRef>, AMDILTextDecodeError> =
+                matchable_args.iter().map(arg_as_vector_data_ref).collect();
+            let mut args = args?;
+            // Insert the argument at index 1 (index 0 = the output)
+            args.insert(
+                1,
+                AMDILDataRef {
+                    name: AMDILNameRef::Texture(tex_id.parse().unwrap()),
+                    swizzle: MaskedSwizzle::identity(1),
+                },
+            );
+
+            let arg_spec = ALUArgsSpec {
+                input_kinds: vec![
+                    HLSLConcreteType::Texture2D.into(),
+                    HLSLNumericType::Float.into(),
+                ],
+                input_mask: InputMask::TruncateTo(2),
+                output_kinds: vec![HLSLNumericType::Float.into()],
+            };
+
+            return Ok(Some(ALUInstruction {
+                args: arg_spec.sanitize_arguments(args),
+                dep_relation: SimpleDependencyRelation::AllToAll,
+                op: HLSLOperator::SampleI(SampleIntrinsic::Tex2D),
+            }));
+        }
+        _ => {}
+    };
     match (
         ALU_INSTR_DEFS.get_key_value(g_instr.instr.as_str()),
-        decode_args(&g_instr.args).as_slice(),
+        matchable_args,
     ) {
         (Some((_static_name, instr_spec)), matchable_args) => {
             // Map matchable_args into VectorDataRefs
