@@ -60,6 +60,13 @@ impl std::fmt::Display for DWrap<&HLSLVectorDataRef> {
 impl std::fmt::Display for HLSLAction {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
+            Self::Declaration { new_var } => {
+                write!(
+                    f,
+                    "{}{} {};",
+                    new_var.kind, new_var.n_components, new_var.vector_name
+                )
+            }
             Self::Definition {
                 new_var,
                 components,
@@ -67,12 +74,8 @@ impl std::fmt::Display for HLSLAction {
                 {
                     write!(
                         f,
-                        "{}{} {} = {}{}(",
-                        new_var.kind,
-                        new_var.n_components,
-                        new_var.vector_name,
-                        new_var.kind,
-                        new_var.n_components
+                        "{} = {}{}(",
+                        new_var.vector_name, new_var.kind, new_var.n_components
                     )?;
                 }
                 for comp in components {

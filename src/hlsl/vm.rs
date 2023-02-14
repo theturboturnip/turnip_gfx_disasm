@@ -8,6 +8,8 @@ use super::{
 /// The type of Action held by Programs for the [HLSLAbstractVM]
 #[derive(Debug)]
 pub enum HLSLAction {
+    /// State that a new variable exists but has no value yet
+    Declaration { new_var: HLSLVector },
     /// State that a new variable exists and has a given value taken directly from other variables
     Definition {
         new_var: HLSLVector,
@@ -45,6 +47,18 @@ impl HLSLCompatibleAbstractVM for HLSLAbstractVM {
 impl ScalarAction<HLSLAbstractVM> for HLSLAction {
     fn outcomes(&self) -> Vec<ScalarOutcome<HLSLAbstractVM>> {
         match self {
+            HLSLAction::Declaration { new_var } => new_var
+                .identity_swizzle()
+                .0
+                .iter()
+                .filter_map(|comp| match comp {
+                    Some(comp) => Some(ScalarOutcome::Declaration {
+                        name: (new_var.clone(), *comp),
+                        value: None,
+                    }),
+                    None => None,
+                })
+                .collect(),
             HLSLAction::Definition {
                 new_var,
                 components,

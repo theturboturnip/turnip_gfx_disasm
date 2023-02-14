@@ -652,19 +652,21 @@ impl<TVM: HLSLCompatibleAbstractVM> VariableAbstractMachine<TVM> {
     pub fn actions(&self) -> Vec<HLSLAction> {
         self.actions
             .iter()
-            .filter_map(|(_, outcome)| match outcome {
-                HLSLOutcome::Declaration { .. } => None,
+            .map(|(_, outcome)| match outcome {
+                HLSLOutcome::Declaration { new_var } => HLSLAction::Declaration {
+                    new_var: self.variables.concretize_var(new_var),
+                },
                 HLSLOutcome::Definition {
                     new_var,
                     components,
-                } => Some(HLSLAction::Definition {
+                } => HLSLAction::Definition {
                     new_var: self.variables.concretize_var(new_var),
                     components: components
                         .iter()
                         .map(|s| self.variables.concretize_scalar_var_ref(s))
                         .collect(),
-                }),
-                HLSLOutcome::Operation { op, scalar_deps } => Some(HLSLAction::Operation {
+                },
+                HLSLOutcome::Operation { op, scalar_deps } => HLSLAction::Operation {
                     op: op.op,
                     inputs: op
                         .inputs
@@ -683,13 +685,13 @@ impl<TVM: HLSLCompatibleAbstractVM> VariableAbstractMachine<TVM> {
                             )
                         })
                         .collect(),
-                }),
-                HLSLOutcome::EarlyOut { inputs } => Some(HLSLAction::EarlyOut {
+                },
+                HLSLOutcome::EarlyOut { inputs } => HLSLAction::EarlyOut {
                     inputs: inputs
                         .iter()
                         .map(|var| self.variables.concretize_scalar_var_ref(&var))
                         .collect(),
-                }),
+                },
             })
             .collect()
     }
