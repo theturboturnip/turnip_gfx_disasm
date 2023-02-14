@@ -87,11 +87,7 @@ impl std::fmt::Display for HLSLAction {
                 op, output, inputs, ..
             } => {
                 {
-                    write!(
-                        f,
-                        "{} {}{} = {:?}(",
-                        output.0.kind, output.0.vector_name, output.1, op
-                    )?;
+                    write!(f, "{}{} = {:?}(", output.0.vector_name, output.1, op)?;
                 }
                 for i in inputs {
                     write!(f, "{}, ", DWrap(i))?;
