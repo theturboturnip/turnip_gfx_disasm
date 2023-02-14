@@ -134,6 +134,23 @@ pub fn decode_args(args: &Vec<grammar::Arg>) -> Vec<MatchableArg> {
         .collect()
 }
 
+#[derive(Debug, Clone)]
+pub enum MatchableInstrMod<'a> {
+    Name(&'a str),
+    NameValue(&'a str, &'a str),
+}
+pub fn decode_instr_mods<'a>(mods: &'a Vec<grammar::InstrMod>) -> Vec<MatchableInstrMod<'a>> {
+    mods.iter()
+        .map(|g_mod| {
+            if g_mod.value.is_empty() {
+                MatchableInstrMod::Name(g_mod.name.as_str())
+            } else {
+                MatchableInstrMod::NameValue(g_mod.name.as_str(), g_mod.value.as_str())
+            }
+        })
+        .collect()
+}
+
 pub fn decode_instruction(
     g_instr: grammar::Instruction,
 ) -> Result<Instruction, AMDILTextDecodeError> {
@@ -242,7 +259,20 @@ fn decode_declare(g_instr: &grammar::Instruction) -> Result<Instruction, AMDILTe
             [*x, *y, *z, *w],
         )),
         ("dcl_global_flags", [..]) => Instruction::DontCare(g_instr.clone()),
-        _ => Instruction::Unknown(g_instr.clone()),
+        _ => match decode_instr_mods(&g_instr.instr_mods)[..] {
+            [
+                MatchableInstrMod::Name("resource"),
+                MatchableInstrMod::NameValue("id", id),
+                MatchableInstrMod::NameValue("type", "2d"),
+                MatchableInstrMod::NameValue("fmtx", "float"),
+                MatchableInstrMod::NameValue("fmty", "float"),
+                MatchableInstrMod::NameValue("fmtz", "float"),
+                MatchableInstrMod::NameValue("fmtw", "float"), // dummy comment to force formatting
+            ] => {
+                Instruction::Decl(AMDILDeclaration::TextureResource(id.parse().unwrap()))
+            }
+            _ => Instruction::Unknown(g_instr.clone()),
+        },
     };
 
     Ok(instr)

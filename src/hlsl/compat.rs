@@ -25,6 +25,7 @@ impl<TName: VMNameRef> UnconcreteOpTarget for HLSLDataRefSpec<TName> {}
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum HLSLNameRefType {
     GenericRegister,
+    Texture(u64),
     ShaderInput(String),
     ShaderOutput(String),
     Literal([u64; 4]),

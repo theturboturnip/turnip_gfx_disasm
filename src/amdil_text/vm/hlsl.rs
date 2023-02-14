@@ -82,6 +82,7 @@ impl HLSLCompatibleAction<AMDILAbstractVM> for AMDILDeclaration {
 impl AMDILDataRef {
     pub fn into_hlsl(self, kind: HLSLType) -> HLSLDataRefSpec<AMDILNameRef> {
         let ref_type = match &self.name {
+            AMDILNameRef::Texture(id) => HLSLNameRefType::Texture(*id),
             AMDILNameRef::Literal(data) => HLSLNameRefType::Literal(*data),
             AMDILNameRef::NamedBuffer { name, idx } => HLSLNameRefType::ArrayElement {
                 of: Box::new(HLSLNameRefType::ShaderInput(name.clone())),

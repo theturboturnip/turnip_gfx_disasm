@@ -29,6 +29,7 @@ impl HLSLVector {
 /// The name of an unswizzled vector in the HLSL virtual machine
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum HLSLVectorName {
+    Texture(u64),
     GenericRegister(u64),
     ShaderInput(String),
     ShaderOutput(String),

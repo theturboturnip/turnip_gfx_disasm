@@ -14,6 +14,7 @@ impl std::fmt::Display for HLSLVectorName {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         // TODO have a formatter that takes type into account
         match self {
+            Self::Texture(id) => write!(f, "tex{:0>3}", id),
             Self::GenericRegister(id) => write!(f, "var{:0>3}", id),
             Self::Literal(data) => write!(
                 f,

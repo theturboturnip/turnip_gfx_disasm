@@ -5,7 +5,7 @@
 //! All data is represented as 4-component vectors.
 //! Inputs to instructions can be swizzled i.e. can have their components reordered or reused (v0.xyxx, v3.wzwx etc. are valid)
 
-use crate::abstract_machine::vector::{MaskedSwizzle, VECTOR_COMPONENTS};
+use crate::abstract_machine::vector::{MaskedSwizzle, VectorComponent, VECTOR_COMPONENTS};
 use crate::abstract_machine::{DataWidth, ScalarAbstractVM, VMDataRef, VMElementRef, VMNameRef};
 use crate::hlsl::compat::{HLSLCompatibleAbstractVM, HLSLCompatibleScalarRef};
 use crate::hlsl::types::HLSLHoleTypeMask;
@@ -38,6 +38,7 @@ pub enum AMDILNameRef {
     NamedBuffer { name: String, idx: u64 },
     NamedInputRegister(String),
     NamedOutputRegister(String),
+    Texture(u64),
 }
 impl VMRef for AMDILNameRef {
     fn is_pure_input(&self) -> bool {
@@ -123,6 +124,7 @@ impl VMElementRef<HLSLCompatibleScalarRef<AMDILNameRef>> for AMDILDataRef {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum AMDILDeclaration {
+    TextureResource(u64),
     NamedLiteral(String, [u64; 4]),
     NamedBuffer {
         name: String,
@@ -144,6 +146,10 @@ pub enum AMDILDeclaration {
 impl ScalarAction<AMDILAbstractVM> for AMDILDeclaration {
     fn outcomes(&self) -> Vec<crate::ScalarOutcome<AMDILAbstractVM>> {
         match self {
+            AMDILDeclaration::TextureResource(id) => vec![ScalarOutcome::Declaration {
+                name: (AMDILNameRef::Texture(*id), VectorComponent::X).into(),
+                value: None,
+            }],
             AMDILDeclaration::NamedLiteral(name, value) => VECTOR_COMPONENTS
                 .iter()
                 .map(|comp| ScalarOutcome::Declaration {

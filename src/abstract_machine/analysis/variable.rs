@@ -114,8 +114,11 @@ impl<TVM: HLSLCompatibleAbstractVM> VariableStore<TVM> {
         }));
         self.all_variables.push(variable.clone());
         let insert_in = match vector_ref {
-            HLSLVectorName::ShaderInput(_) | HLSLVectorName::ArrayElement { .. } => {
+            HLSLVectorName::ShaderInput(_)
+            | HLSLVectorName::ArrayElement { .. }
+            | HLSLVectorName::Texture(_) => {
                 // TODO ASSUMING ARRAYELEMENTS ARE READ-ONLY!
+                // TODO ASSUMING TEXTURES ARE READ-ONLY!
                 &mut self.inputs
             }
             HLSLVectorName::ShaderOutput(_) => &mut self.outputs,
@@ -208,6 +211,7 @@ impl<TVM: HLSLCompatibleAbstractVM> VariableStore<TVM> {
     /// Separate from [variable_info_for_dataspec] because it needs to be recursive for arrays.
     fn vector_name_for_datareftype(&mut self, name_ref_type: HLSLNameRefType) -> HLSLVectorName {
         match name_ref_type {
+            HLSLNameRefType::Texture(id) => HLSLVectorName::Texture(id),
             HLSLNameRefType::GenericRegister => {
                 let id = self.next_general_var_id;
                 self.next_general_var_id += 1;
