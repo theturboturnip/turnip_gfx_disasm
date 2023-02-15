@@ -13,10 +13,10 @@
 
 use crate::hlsl::types::HLSLType;
 
-use super::{DataWidth, ScalarAbstractVM, TypedVMRef, VMElementRef};
+use super::{vector::VectorComponent, AbstractVM, DataWidth, TypedVMRef, VMVectorDataRef};
 
 /// Trait for a type that manages a set of possible instructions
-pub trait InstructionSet<TVM: ScalarAbstractVM>: Sized {
+pub trait InstructionSet<TVM: AbstractVM>: Sized {
     /// How instructions are identified
     type InstructionID;
 
@@ -30,53 +30,44 @@ pub trait InstructionSet<TVM: ScalarAbstractVM>: Sized {
 /// The specification for an instruction - how arguments should be used and how inputs/outputs relate to each other.
 ///
 /// For convenience, exposes the functions contained in [ArgsSpec] and [DependencyRelation]
-pub trait InstructionSpec<TVM: ScalarAbstractVM> {
+pub trait InstructionSpec<TVM: AbstractVM> {
     /// [DependencyRelation::determine_dependencies]
     fn determine_dependencies(
         &self,
         args: &InstrArgs<TVM>,
-    ) -> Vec<(
-        TypedVMRef<TVM::TScalarDataRef>,
-        Vec<TypedVMRef<TVM::TScalarDataRef>>,
-    )>;
+    ) -> Vec<((usize, VectorComponent), Vec<(usize, VectorComponent)>)>;
     /// [ArgsSpec::sanitize_arguments]
-    fn sanitize_arguments(&self, args: Vec<TVM::TElementDataRef>) -> InstrArgs<TVM>;
+    fn sanitize_arguments(&self, args: Vec<TVM::TVectorDataRef>) -> InstrArgs<TVM>;
 }
-impl<TVM: ScalarAbstractVM, TArgsSpec: ArgsSpec<TVM>, TDepRelation: DependencyRelation<TVM>>
+impl<TVM: AbstractVM, TArgsSpec: ArgsSpec<TVM>, TDepRelation: DependencyRelation<TVM>>
     InstructionSpec<TVM> for (TArgsSpec, TDepRelation)
 {
-    fn sanitize_arguments(&self, args: Vec<TVM::TElementDataRef>) -> InstrArgs<TVM> {
+    fn sanitize_arguments(&self, args: Vec<TVM::TVectorDataRef>) -> InstrArgs<TVM> {
         self.0.sanitize_arguments(args)
     }
     fn determine_dependencies(
         &self,
         args: &InstrArgs<TVM>,
-    ) -> Vec<(
-        TypedVMRef<TVM::TScalarDataRef>,
-        Vec<TypedVMRef<TVM::TScalarDataRef>>,
-    )> {
+    ) -> Vec<((usize, VectorComponent), Vec<(usize, VectorComponent)>)> {
         self.1.determine_dependencies(args)
     }
 }
 
 /// Struct holding the arguments to an instruction for a given VM
 #[derive(Debug, Clone)]
-pub struct InstrArgs<TVM: ScalarAbstractVM> {
-    pub outputs: Vec<TypedVMRef<TVM::TElementDataRef>>,
-    pub inputs: Vec<TypedVMRef<TVM::TElementDataRef>>,
+pub struct InstrArgs<TVM: AbstractVM> {
+    pub outputs: Vec<TypedVMRef<TVM::TVectorDataRef>>,
+    pub inputs: Vec<TypedVMRef<TVM::TVectorDataRef>>,
 }
 
 /// Trait for types which can map the indivdual output scalars of an instruction to the input scalars that affect them.
-pub trait DependencyRelation<TVM: ScalarAbstractVM> {
+pub trait DependencyRelation<TVM: AbstractVM> {
     /// Given a set of input and output elements, return a vector of mappings:
     ///     (output scalar, inputs affecting that output)
     fn determine_dependencies(
         &self,
         args: &InstrArgs<TVM>,
-    ) -> Vec<(
-        TypedVMRef<TVM::TScalarDataRef>,
-        Vec<TypedVMRef<TVM::TScalarDataRef>>,
-    )>;
+    ) -> Vec<((usize, VectorComponent), Vec<(usize, VectorComponent)>)>;
 }
 
 /// Impl for [DependencyRelation] that defines simple relations
@@ -91,39 +82,24 @@ pub enum SimpleDependencyRelation {
     /// e.g. `dp3_ieee r0.x, r1.xyz, r2.xyz` has dependency `[r1.xyz, r2.xyz] -> r0.x`
     AllToAll,
 }
-impl<TVM: ScalarAbstractVM> DependencyRelation<TVM> for SimpleDependencyRelation {
+impl<TVM: AbstractVM> DependencyRelation<TVM> for SimpleDependencyRelation {
     fn determine_dependencies(
         &self,
         args: &InstrArgs<TVM>,
-    ) -> Vec<(
-        TypedVMRef<TVM::TScalarDataRef>,
-        Vec<TypedVMRef<TVM::TScalarDataRef>>,
-    )> {
+    ) -> Vec<((usize, VectorComponent), Vec<(usize, VectorComponent)>)> {
         // for output in outputs
         //     for component in output
-        let expanded_outs = args.outputs.iter().map(|elem| {
-            let kind = elem.kind;
-            let width = elem.width;
+        let expanded_outs = args.outputs.iter().enumerate().map(|(i, elem)| {
             elem.data
                 .decompose()
                 .into_iter()
-                .map(move |scalar| TypedVMRef {
-                    data: scalar,
-                    kind: kind,
-                    width: width,
-                })
+                .map(move |(_, comp)| (i, comp))
         });
-        let expanded_inputs = args.inputs.iter().map(|elem| {
-            let kind = elem.kind;
-            let width = elem.width;
+        let expanded_inputs = args.inputs.iter().enumerate().map(|(i, elem)| {
             elem.data
                 .decompose()
                 .into_iter()
-                .map(move |scalar| TypedVMRef {
-                    data: scalar,
-                    kind: kind,
-                    width: width,
-                })
+                .map(move |(_, comp)| (i, comp))
         });
         match self {
             Self::AllToAll => {
@@ -167,11 +143,11 @@ impl<TVM: ScalarAbstractVM> DependencyRelation<TVM> for SimpleDependencyRelation
     }
 }
 
-pub trait ArgsSpec<TVM: ScalarAbstractVM> {
+pub trait ArgsSpec<TVM: AbstractVM> {
     /// Given a set of arguments to an instruction, split them into (outputs, inputs) and clean them up
     ///
     /// TODO Result<> type, probably just use anyhow
-    fn sanitize_arguments(&self, args: Vec<TVM::TElementDataRef>) -> InstrArgs<TVM>;
+    fn sanitize_arguments(&self, args: Vec<TVM::TVectorDataRef>) -> InstrArgs<TVM>;
 }
 /// Implementation of [ArgsSpec] that takes a vector of args as [outputs... inputs...]
 /// and applies [HLSLType]s and [DataWidth]s to create [TypedVMRef]s for each arg
@@ -181,8 +157,8 @@ pub struct SimpleArgsSpec {
     input_kinds: Vec<HLSLType>,
     width: DataWidth,
 }
-impl<TVM: ScalarAbstractVM> ArgsSpec<TVM> for SimpleArgsSpec {
-    fn sanitize_arguments(&self, args: Vec<TVM::TElementDataRef>) -> InstrArgs<TVM> {
+impl<TVM: AbstractVM> ArgsSpec<TVM> for SimpleArgsSpec {
+    fn sanitize_arguments(&self, args: Vec<TVM::TVectorDataRef>) -> InstrArgs<TVM> {
         let (output_elems, input_elems) = args.split_at(self.output_kinds.len());
         assert_eq!(output_elems.len(), self.output_kinds.len());
         assert_eq!(input_elems.len(), self.input_kinds.len());

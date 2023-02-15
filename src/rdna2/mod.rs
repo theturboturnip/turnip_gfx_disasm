@@ -13,7 +13,7 @@ pub use crate::rdna2::vm::RDNA2Action;
 use crate::{
     rdna2::opcodes::SOPP_Opcode,
     rdna2::vm::{RDNA2AbstractVM, RDNA2Outcome},
-    Decoder, Program, ScalarAction,
+    Action, Decoder, Program,
 };
 
 mod opcodes;
@@ -124,7 +124,7 @@ impl Decodable for Instruction {
         }
     }
 }
-impl ScalarAction<RDNA2AbstractVM> for Instruction {
+impl Action<RDNA2AbstractVM> for Instruction {
     fn outcomes(&self) -> Vec<RDNA2Outcome> {
         match self {
             Self::ScalarALU(instr) => instr.outcomes(),
@@ -156,7 +156,7 @@ impl<'a> RDNA2Decoder<'a> {
 }
 impl<'a> Decoder<RDNA2AbstractVM> for RDNA2Decoder<'a> {
     type Input = &'a [u8];
-    type ScalarProgram = RDNA2Program;
+    type Program = RDNA2Program;
     type Err = RDNA2DecodeError;
 
     fn decode(&self, mut data: Self::Input) -> Result<RDNA2Program, RDNA2DecodeError> {
@@ -166,7 +166,7 @@ impl<'a> Decoder<RDNA2AbstractVM> for RDNA2Decoder<'a> {
             println!("{:?}", instr);
             for dep in instr.outcomes() {
                 match dep {
-                    crate::ScalarOutcome::Dependency { output, inputs } => {
+                    crate::Outcome::Dependency { output, inputs } => {
                         println!("\t{:?} -> {:?}", inputs, output)
                     }
                     _ => println!("\t{:?}", dep),

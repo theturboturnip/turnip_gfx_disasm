@@ -1,16 +1,18 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::{
-    abstract_machine::{ScalarAbstractVM, TypedVMRef, VMRef},
-    ScalarAction, ScalarOutcome,
+    abstract_machine::{vector::VectorComponent, AbstractVM, TypedVMRef, VMRef, VMScalarDataRef},
+    Action, Outcome,
 };
 
+pub type ScalarDataRef<TVM: AbstractVM> = VMScalarDataRef<TVM::TVectorNameRef>;
+
 /// Dependency solver for scalar-based abstract VMs
-pub struct ScalarDependencies<TVM: ScalarAbstractVM> {
-    discard_dependencies: HashSet<TypedVMRef<TVM::TScalarDataRef>>,
-    dependents: HashMap<TVM::TScalarDataRef, HashSet<TypedVMRef<TVM::TScalarDataRef>>>,
+pub struct ScalarDependencies<TVM: AbstractVM> {
+    discard_dependencies: HashSet<TypedVMRef<ScalarDataRef<TVM>>>,
+    dependents: HashMap<ScalarDataRef<TVM>, HashSet<TypedVMRef<ScalarDataRef<TVM>>>>,
 }
-impl<TVM: ScalarAbstractVM> ScalarDependencies<TVM> {
+impl<TVM: AbstractVM> ScalarDependencies<TVM> {
     pub fn new() -> Self {
         Self {
             dependents: HashMap::new(),
@@ -20,8 +22,8 @@ impl<TVM: ScalarAbstractVM> ScalarDependencies<TVM> {
 
     fn resolve_input_on(
         &self,
-        resolved_inputs: &mut HashSet<TypedVMRef<TVM::TScalarDataRef>>,
-        input: &TypedVMRef<TVM::TScalarDataRef>,
+        resolved_inputs: &mut HashSet<TypedVMRef<ScalarDataRef<TVM>>>,
+        input: &TypedVMRef<ScalarDataRef<TVM>>,
     ) {
         if input.data.is_pure_input() {
             // Pure inputs are not resolved into their dependencies
@@ -40,13 +42,13 @@ impl<TVM: ScalarAbstractVM> ScalarDependencies<TVM> {
     ///
     /// e.g. if the action introduces a dependency of GeneralPurposeRegister(1) onto Output(o),
     /// set `self.dependents[Output(o)]` to the contents of `self.dependents[GeneralPurposeRegister(1)]`
-    pub fn accum_action(&mut self, action: &dyn ScalarAction<TVM>) {
+    pub fn accum_action(&mut self, action: &dyn Action<TVM>) {
         for dep in action.outcomes() {
             match dep {
-                ScalarOutcome::Declaration { value: None, .. } => {
+                Outcome::Declaration { value: None, .. } => {
                     // Irrelevant because no values are being assigned
                 }
-                ScalarOutcome::Declaration {
+                Outcome::Declaration {
                     name,
                     value: Some(value),
                 } => {
@@ -54,7 +56,7 @@ impl<TVM: ScalarAbstractVM> ScalarDependencies<TVM> {
                     self.resolve_input_on(&mut resolved_inputs, &value);
                     self.dependents.insert(name, resolved_inputs);
                 }
-                ScalarOutcome::Dependency { output, inputs } => {
+                Outcome::Dependency { output, inputs } => {
                     if output.data.is_pure_input() {
                         println!(
                             "Weird! Someone is writing to a pure input. Ignoring dependency {:?} -> {:?}",
@@ -74,7 +76,7 @@ impl<TVM: ScalarAbstractVM> ScalarDependencies<TVM> {
                     }
                     self.dependents.insert(output.data, resolved_inputs);
                 }
-                ScalarOutcome::EarlyOut { inputs } => {
+                Outcome::EarlyOut { inputs } => {
                     let mut resolved_inputs = HashSet::new();
                     for input in inputs {
                         self.resolve_input_on(&mut resolved_inputs, &input);
@@ -87,7 +89,7 @@ impl<TVM: ScalarAbstractVM> ScalarDependencies<TVM> {
 
     pub fn dependents(
         &self,
-    ) -> &HashMap<TVM::TScalarDataRef, HashSet<TypedVMRef<TVM::TScalarDataRef>>> {
+    ) -> &HashMap<ScalarDataRef<TVM>, HashSet<TypedVMRef<ScalarDataRef<TVM>>>> {
         &self.dependents
     }
 }

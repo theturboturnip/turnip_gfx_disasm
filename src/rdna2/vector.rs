@@ -4,7 +4,7 @@ use bitutils::bits;
 use crate::{
     abstract_machine::{DataWidth, TypedVMRef},
     hlsl::types::HLSLHoleTypeMask,
-    ScalarAction, ScalarOutcome,
+    Action, Outcome,
 };
 
 use super::{
@@ -146,7 +146,7 @@ impl Decodable for VOP {
         }
     }
 }
-impl ScalarAction<RDNA2AbstractVM> for VOP {
+impl Action<RDNA2AbstractVM> for VOP {
     fn outcomes(&self) -> Vec<RDNA2Outcome> {
         match self {
             Self::VOP1 {
@@ -159,14 +159,14 @@ impl ScalarAction<RDNA2AbstractVM> for VOP {
                 // While refactoring, I assumed these actions could only access numeric types. TODO check if that's the case
                 let kind = HLSLHoleTypeMask::NUMERIC.into();
                 let width = DataWidth::E64;
-                vec![ScalarOutcome::Dependency {
+                vec![Outcome::Dependency {
                     inputs: vec![TypedVMRef {
-                        data: VOP::operand_to_dataref(*SRC0, *extra),
+                        data: VOP::operand_to_dataref(*SRC0, *extra).into(),
                         kind,
                         width,
                     }],
                     output: TypedVMRef {
-                        data: RDNA2DataRef::GeneralPurposeRegister(*VDST as u64),
+                        data: RDNA2DataRef::GeneralPurposeRegister(*VDST as u64).into(),
                         kind,
                         width,
                     },
@@ -183,21 +183,21 @@ impl ScalarAction<RDNA2AbstractVM> for VOP {
                 // While refactoring, I assumed these actions could only access numeric types. TODO check if that's the case
                 let kind = HLSLHoleTypeMask::NUMERIC.into();
                 let width = DataWidth::E64;
-                vec![ScalarOutcome::Dependency {
+                vec![Outcome::Dependency {
                     inputs: vec![
                         TypedVMRef {
-                            data: VOP::operand_to_dataref(*SRC0, *extra),
+                            data: VOP::operand_to_dataref(*SRC0, *extra).into(),
                             kind,
                             width,
                         },
                         TypedVMRef {
-                            data: RDNA2DataRef::GeneralPurposeRegister(*VSRC1 as u64),
+                            data: RDNA2DataRef::GeneralPurposeRegister(*VSRC1 as u64).into(),
                             kind,
                             width,
                         },
                     ],
                     output: TypedVMRef {
-                        data: RDNA2DataRef::GeneralPurposeRegister(*VDST as u64),
+                        data: RDNA2DataRef::GeneralPurposeRegister(*VDST as u64).into(),
                         kind,
                         width,
                     },
@@ -358,7 +358,7 @@ impl Decodable for VOP3 {
         }
     }
 }
-impl ScalarAction<RDNA2AbstractVM> for VOP3 {
+impl Action<RDNA2AbstractVM> for VOP3 {
     fn outcomes(&self) -> Vec<RDNA2Outcome> {
         todo!()
     }

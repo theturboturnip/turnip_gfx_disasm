@@ -7,7 +7,7 @@ use crate::{
     abstract_machine::{DataWidth, TypedVMRef},
     hlsl::types::HLSLHoleTypeMask,
     rdna2::vm::{RDNA2AbstractVM, RDNA2DataRef, RDNA2Outcome, RDNA2Output},
-    ScalarAction, ScalarOutcome,
+    Action, Outcome,
 };
 
 use super::{utils::extract_u32, Decodable, RDNA2DecodeError};
@@ -68,7 +68,7 @@ impl Decodable for EXPORT {
         }
     }
 }
-impl ScalarAction<RDNA2AbstractVM> for EXPORT {
+impl Action<RDNA2AbstractVM> for EXPORT {
     fn outcomes(&self) -> Vec<RDNA2Outcome> {
         let mut deps = vec![];
         let possible_exports = if self.COMPR {
@@ -116,14 +116,14 @@ impl ScalarAction<RDNA2AbstractVM> for EXPORT {
                 DataWidth::E32
             };
 
-            deps.push(ScalarOutcome::Dependency {
+            deps.push(Outcome::Dependency {
                 inputs: vec![TypedVMRef {
-                    data: RDNA2DataRef::GeneralPurposeRegister(possible_exports[i] as u64),
+                    data: RDNA2DataRef::GeneralPurposeRegister(possible_exports[i] as u64).into(),
                     kind: HLSLHoleTypeMask::NUMERIC.into(),
                     width,
                 }],
                 output: TypedVMRef {
-                    data: RDNA2DataRef::Output(output_ref),
+                    data: RDNA2DataRef::Output(output_ref).into(),
                     kind: HLSLHoleTypeMask::NUMERIC.into(),
                     width,
                 },

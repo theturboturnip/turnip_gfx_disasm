@@ -1,12 +1,12 @@
 //! The crate allows the parsing and analysis of many shader languages, by representing each language as an abstract virtual machine.
 //!
-//! Each language backend should at least create an implementation of [ScalarAbstractVM], and create a [Decoder] which decodes
-//! shader text (be it binary or character-based) into [Program] returning a set of [ScalarAction]s.
-//! Usually, each instruction in the original language should map to a single [ScalarAction], but this isn't required.
+//! Each language backend should at least create an implementation of [AbstractVM], and create a [Decoder] which decodes
+//! shader text (be it binary or character-based) into [Program] returning a set of [Action]s.
+//! Usually, each instruction in the original language should map to a single [Action], but this isn't required.
 //!
-//! Each [ScalarAction] has a set of [ScalarOutcome]s.
-//! These outcomes could be a [ScalarOutcome::Declaration] that some scalar value exists,
-//! or a set of [ScalarOutcome::Dependency]s from sets of input scalar values to output scalar values.
+//! Each [Action] has a set of [Outcome]s.
+//! These outcomes could be a [Outcome::Declaration] that some scalar value exists,
+//! or a set of [Outcome::Dependency]s from sets of input scalar values to output scalar values.
 //!
 //! The aforementioned scalar values are represented with types implementing [VMDataRef] (a reference to a known piece of data inside the abstract VM),
 //! and in some cases with [TypedVMRef]s enclosing them for extra metadata.
@@ -32,6 +32,6 @@ pub mod hlsl;
 pub mod rdna2;
 
 pub use abstract_machine::{
-    DataWidth, Decoder, Program, ScalarAbstractVM, ScalarAction, ScalarOutcome, TypedVMRef,
-    VMDataRef, VMNameRef, VMRef,
+    AbstractVM, Action, DataWidth, Decoder, Outcome, Program, TypedVMRef, VMRef, VMVectorDataRef,
+    VMVectorNameRef,
 };

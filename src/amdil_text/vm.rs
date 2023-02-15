@@ -6,10 +6,12 @@
 //! Inputs to instructions can be swizzled i.e. can have their components reordered or reused (v0.xyxx, v3.wzwx etc. are valid)
 
 use crate::abstract_machine::vector::{MaskedSwizzle, VectorComponent, VECTOR_COMPONENTS};
-use crate::abstract_machine::{DataWidth, ScalarAbstractVM, VMDataRef, VMElementRef, VMNameRef};
-use crate::hlsl::compat::{HLSLCompatibleAbstractVM, HLSLCompatibleScalarRef};
+use crate::abstract_machine::{
+    AbstractVM, DataWidth, VMScalarDataRef, VMVectorDataRef, VMVectorNameRef,
+};
+use crate::hlsl::compat::HLSLCompatibleAbstractVM;
 use crate::hlsl::types::HLSLHoleTypeMask;
-use crate::{ScalarAction, ScalarOutcome};
+use crate::{Action, Outcome};
 
 use crate::abstract_machine::{TypedVMRef, VMRef};
 
@@ -21,14 +23,12 @@ pub type AMDILAction = super::decode::Instruction;
 /// Type for the AMDIL abstract VM. Implements [ScalarAbstractVM] and [HLSLCompatibleAbstractVM]
 #[derive(Debug, Clone)]
 pub enum AMDILAbstractVM {}
-impl ScalarAbstractVM for AMDILAbstractVM {
+impl AbstractVM for AMDILAbstractVM {
     type Action = AMDILAction;
-    type TScalarDataRef = HLSLCompatibleScalarRef<AMDILNameRef>;
-    type TElementDataRef = AMDILDataRef;
+    type TVectorNameRef = AMDILNameRef;
+    type TVectorDataRef = AMDILDataRef;
 }
-impl HLSLCompatibleAbstractVM for AMDILAbstractVM {
-    type TElementNameRef = AMDILNameRef;
-}
+impl HLSLCompatibleAbstractVM for AMDILAbstractVM {}
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum AMDILNameRef {
@@ -53,7 +53,7 @@ impl VMRef for AMDILNameRef {
         }
     }
 }
-impl VMNameRef for AMDILNameRef {}
+impl VMVectorNameRef for AMDILNameRef {}
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct AMDILDataRef {
@@ -103,23 +103,23 @@ impl VMRef for AMDILDataRef {
         self.name.is_pure_input()
     }
 }
-impl VMDataRef for AMDILDataRef {}
-impl VMElementRef<HLSLCompatibleScalarRef<AMDILNameRef>> for AMDILDataRef {
+impl VMVectorDataRef<AMDILNameRef> for AMDILDataRef {
     /// Returns a list of the components that were actually used from self
     ///
     /// e.g. for r0.x_w_, (r0, x) and (r0, w) will be returned
-    fn decompose(&self) -> Vec<HLSLCompatibleScalarRef<AMDILNameRef>> {
+    fn decompose(&self) -> Vec<VMScalarDataRef<AMDILNameRef>> {
         self.swizzle
             .0
             .iter()
             .filter_map(|comp| match comp {
-                Some(comp) => Some(HLSLCompatibleScalarRef {
-                    vm_name_ref: self.name.clone(),
-                    comp: *comp,
-                }),
+                Some(comp) => Some((self.name.clone(), *comp)),
                 None => None,
             })
             .collect()
+    }
+
+    fn name(&self) -> &AMDILNameRef {
+        &self.name
     }
 }
 
@@ -144,16 +144,16 @@ pub enum AMDILDeclaration {
         reg_type: String,
     },
 }
-impl ScalarAction<AMDILAbstractVM> for AMDILDeclaration {
-    fn outcomes(&self) -> Vec<crate::ScalarOutcome<AMDILAbstractVM>> {
+impl Action<AMDILAbstractVM> for AMDILDeclaration {
+    fn outcomes(&self) -> Vec<crate::Outcome<AMDILAbstractVM>> {
         match self {
-            AMDILDeclaration::TextureResource(id) => vec![ScalarOutcome::Declaration {
+            AMDILDeclaration::TextureResource(id) => vec![Outcome::Declaration {
                 name: (AMDILNameRef::Texture(*id), VectorComponent::X).into(),
                 value: None,
             }],
             AMDILDeclaration::NamedLiteral(name, value) => VECTOR_COMPONENTS
                 .iter()
-                .map(|comp| ScalarOutcome::Declaration {
+                .map(|comp| Outcome::Declaration {
                     name: (AMDILNameRef::NamedLiteral(name.clone()), *comp).into(),
                     value: Some(TypedVMRef {
                         data: (AMDILNameRef::Literal(*value), *comp).into(),
@@ -173,7 +173,7 @@ impl ScalarAction<AMDILAbstractVM> for AMDILDeclaration {
             } => VECTOR_COMPONENTS
                 .iter()
                 .take(*len as usize)
-                .map(|comp| ScalarOutcome::Declaration {
+                .map(|comp| Outcome::Declaration {
                     name: (AMDILNameRef::NamedInputRegister(name.clone()), *comp).into(),
                     value: None,
                 })
@@ -185,7 +185,7 @@ impl ScalarAction<AMDILAbstractVM> for AMDILDeclaration {
             } => VECTOR_COMPONENTS
                 .iter()
                 .take(*len as usize)
-                .map(|comp| ScalarOutcome::Declaration {
+                .map(|comp| Outcome::Declaration {
                     name: (AMDILNameRef::NamedOutputRegister(name.clone()), *comp).into(),
                     value: None,
                 })

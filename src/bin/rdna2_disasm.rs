@@ -32,7 +32,7 @@ fn main() {
 
     for dependent in resolver.dependents() {
         match dependent.0 {
-            RDNA2DataRef::Output { .. } => {
+            (RDNA2DataRef::Output { .. }, _) => {
                 println!("Output {:?} depends on {:?}", dependent.0, dependent.1)
             }
             _ => {}

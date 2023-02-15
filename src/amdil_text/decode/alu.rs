@@ -18,7 +18,7 @@ use crate::{
         },
         types::{HLSLConcreteType, HLSLHoleTypeMask, HLSLNumericType, HLSLType},
     },
-    ScalarAction, ScalarOutcome,
+    Action, Outcome,
 };
 use lazy_static::lazy_static;
 
@@ -274,12 +274,34 @@ pub fn decode_alu(
     }
 }
 
-impl ScalarAction<AMDILAbstractVM> for ALUInstruction {
-    fn outcomes(&self) -> Vec<ScalarOutcome<AMDILAbstractVM>> {
+impl Action<AMDILAbstractVM> for ALUInstruction {
+    // This implementation is really bad but it will go away once we change how Outcome works
+    fn outcomes(&self) -> Vec<Outcome<AMDILAbstractVM>> {
         self.dep_relation
             .determine_dependencies(&self.args)
             .into_iter()
-            .map(|(output, inputs)| ScalarOutcome::Dependency { output, inputs })
+            .map(|(output, inputs)| {
+                let (output, comp) = (&self.args.outputs[output.0], output.1);
+                let output_arg = TypedVMRef {
+                    data: (output.data.name.clone(), comp),
+                    kind: output.kind,
+                    width: output.width,
+                };
+                Outcome::Dependency {
+                    output: output_arg,
+                    inputs: inputs
+                        .into_iter()
+                        .map(|(in_idx, comp)| {
+                            let input = &self.args.inputs[in_idx];
+                            TypedVMRef {
+                                data: (input.data.name.clone(), comp),
+                                kind: input.kind,
+                                width: input.width,
+                            }
+                        })
+                        .collect(),
+                }
+            })
             .collect()
     }
 }
@@ -302,11 +324,11 @@ impl HLSLCompatibleAction<AMDILAbstractVM> for ALUInstruction {
                 component_deps: comp_outcomes
                     .iter()
                     .filter_map(|out| match out {
-                        ScalarOutcome::Dependency {
+                        Outcome::Dependency {
                             output: output_comp,
                             inputs: inputs_comps,
                         } => {
-                            if output_comp.data.vm_name_ref == output.data.name {
+                            if output_comp.data.0 == output.data.name {
                                 Some((output_comp.clone(), inputs_comps.clone()))
                             } else {
                                 None
@@ -328,7 +350,7 @@ impl HLSLCompatibleAction<AMDILAbstractVM> for ALUInstruction {
         //     component_deps: comp_outcomes
         //         .into_iter()
         //         .map(|out| match out {
-        //             ScalarOutcome::Dependency {
+        //             Outcome::Dependency {
         //                 output: output_comps,
         //                 inputs: inputs_comps,
         //             }, (output_comps, inputs_comps),

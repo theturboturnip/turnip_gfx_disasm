@@ -1,9 +1,6 @@
 use crate::{
-    abstract_machine::{
-        vector::{MaskedSwizzle, VectorComponent},
-        VMElementRef,
-    },
-    VMDataRef, VMNameRef, VMRef,
+    abstract_machine::vector::{MaskedSwizzle, VectorComponent},
+    VMRef, VMVectorNameRef,
 };
 
 use self::{syntax::UnconcreteOpTarget, types::HLSLType};
@@ -25,6 +22,12 @@ impl HLSLVector {
         MaskedSwizzle::identity(self.n_components as usize)
     }
 }
+impl VMRef for HLSLVector {
+    fn is_pure_input(&self) -> bool {
+        self.vector_name.is_pure_input()
+    }
+}
+impl VMVectorNameRef for HLSLVector {}
 
 /// The name of an unswizzled vector in the HLSL virtual machine
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -46,35 +49,11 @@ impl VMRef for HLSLVectorName {
         }
     }
 }
-impl VMNameRef for HLSLVectorName {}
+impl VMVectorNameRef for HLSLVectorName {}
 
 /// A reference to a single scalar in the HLSL virtual machine
 pub type HLSLScalarDataRef = (HLSLVector, VectorComponent);
-impl VMRef for HLSLScalarDataRef {
-    fn is_pure_input(&self) -> bool {
-        self.0.vector_name.is_pure_input()
-    }
-}
-impl VMDataRef for HLSLScalarDataRef {}
 
 /// A reference to a swizzled vector in the HLSL virtual machine
 pub type HLSLVectorDataRef = (HLSLVector, MaskedSwizzle);
-impl VMRef for HLSLVectorDataRef {
-    fn is_pure_input(&self) -> bool {
-        self.0.vector_name.is_pure_input()
-    }
-}
-impl VMDataRef for HLSLVectorDataRef {}
-impl VMElementRef<HLSLScalarDataRef> for HLSLVectorDataRef {
-    fn decompose(&self) -> Vec<HLSLScalarDataRef> {
-        self.1
-             .0
-            .iter()
-            .filter_map(|comp| match comp {
-                Some(comp) => Some((self.0.clone(), *comp)),
-                None => None,
-            })
-            .collect()
-    }
-}
 impl UnconcreteOpTarget for HLSLVectorDataRef {}

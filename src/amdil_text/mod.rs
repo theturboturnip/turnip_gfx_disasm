@@ -66,7 +66,7 @@ impl<'a> AMDILDecoder<'a> {
 }
 impl<'a> Decoder<AMDILAbstractVM> for AMDILDecoder<'a> {
     type Input = &'a str;
-    type ScalarProgram = AMDILProgram;
+    type Program = AMDILProgram;
     type Err = AMDILDecodeError;
 
     fn decode(&self, data: Self::Input) -> Result<AMDILProgram, AMDILDecodeError> {
