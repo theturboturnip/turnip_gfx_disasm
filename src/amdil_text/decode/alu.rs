@@ -18,7 +18,7 @@ use crate::{
         },
         types::{HLSLConcreteType, HLSLHoleTypeMask, HLSLNumericType, HLSLType},
     },
-    Action, Outcome,
+    Action, LegacyOutcome,
 };
 use lazy_static::lazy_static;
 
@@ -276,7 +276,7 @@ pub fn decode_alu(
 
 impl Action<AMDILAbstractVM> for ALUInstruction {
     // This implementation is really bad but it will go away once we change how Outcome works
-    fn outcomes(&self) -> Vec<Outcome<AMDILAbstractVM>> {
+    fn outcomes(&self) -> Vec<LegacyOutcome<AMDILAbstractVM>> {
         self.dep_relation
             .determine_dependencies(&self.args)
             .into_iter()
@@ -287,7 +287,7 @@ impl Action<AMDILAbstractVM> for ALUInstruction {
                     kind: output.kind,
                     width: output.width,
                 };
-                Outcome::Dependency {
+                LegacyOutcome::Dependency {
                     output: output_arg,
                     inputs: inputs
                         .into_iter()
@@ -324,7 +324,7 @@ impl HLSLCompatibleAction<AMDILAbstractVM> for ALUInstruction {
                 component_deps: comp_outcomes
                     .iter()
                     .filter_map(|out| match out {
-                        Outcome::Dependency {
+                        LegacyOutcome::Dependency {
                             output: output_comp,
                             inputs: inputs_comps,
                         } => {

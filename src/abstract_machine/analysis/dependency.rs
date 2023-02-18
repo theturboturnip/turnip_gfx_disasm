@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
 
 use crate::{
     abstract_machine::{vector::VectorComponent, AbstractVM, TypedVMRef, VMRef, VMScalarDataRef},
-    Action, Outcome,
+    Action, LegacyOutcome,
 };
 
 pub type ScalarDataRef<TVM: AbstractVM> = VMScalarDataRef<TVM::TVectorNameRef>;
@@ -45,10 +45,10 @@ impl<TVM: AbstractVM> ScalarDependencies<TVM> {
     pub fn accum_action(&mut self, action: &dyn Action<TVM>) {
         for dep in action.outcomes() {
             match dep {
-                Outcome::Declaration { value: None, .. } => {
+                LegacyOutcome::Declaration { value: None, .. } => {
                     // Irrelevant because no values are being assigned
                 }
-                Outcome::Declaration {
+                LegacyOutcome::Declaration {
                     name,
                     value: Some(value),
                 } => {
@@ -56,7 +56,7 @@ impl<TVM: AbstractVM> ScalarDependencies<TVM> {
                     self.resolve_input_on(&mut resolved_inputs, &value);
                     self.dependents.insert(name, resolved_inputs);
                 }
-                Outcome::Dependency { output, inputs } => {
+                LegacyOutcome::Dependency { output, inputs } => {
                     if output.data.is_pure_input() {
                         println!(
                             "Weird! Someone is writing to a pure input. Ignoring dependency {:?} -> {:?}",
@@ -76,7 +76,7 @@ impl<TVM: AbstractVM> ScalarDependencies<TVM> {
                     }
                     self.dependents.insert(output.data, resolved_inputs);
                 }
-                Outcome::EarlyOut { inputs } => {
+                LegacyOutcome::EarlyOut { inputs } => {
                     let mut resolved_inputs = HashSet::new();
                     for input in inputs {
                         self.resolve_input_on(&mut resolved_inputs, &input);

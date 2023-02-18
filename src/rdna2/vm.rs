@@ -1,5 +1,5 @@
 use crate::abstract_machine::vector::VectorComponent;
-use crate::{Action, Outcome, VMVectorNameRef};
+use crate::{Action, LegacyOutcome, VMVectorNameRef};
 
 use crate::abstract_machine::{AbstractVM, VMRef, VMVectorDataRef};
 
@@ -12,7 +12,7 @@ impl AbstractVM for RDNA2AbstractVM {
     type TVectorNameRef = RDNA2DataRef;
     type TVectorDataRef = RDNA2DataRef;
 }
-pub type RDNA2Outcome = Outcome<RDNA2AbstractVM>;
+pub type RDNA2Outcome = LegacyOutcome<RDNA2AbstractVM>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum RDNA2Output {

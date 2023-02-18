@@ -1,4 +1,4 @@
-use crate::{AbstractVM, Action, DataWidth, Outcome, TypedVMRef};
+use crate::{AbstractVM, Action, DataWidth, LegacyOutcome, TypedVMRef};
 
 use super::{
     compat::HLSLCompatibleAbstractVM, syntax::HLSLOperator, HLSLScalarDataRef, HLSLVector,
@@ -43,14 +43,14 @@ impl AbstractVM for HLSLAbstractVM {
 impl HLSLCompatibleAbstractVM for HLSLAbstractVM {}
 
 impl Action<HLSLAbstractVM> for HLSLAction {
-    fn outcomes(&self) -> Vec<Outcome<HLSLAbstractVM>> {
+    fn outcomes(&self) -> Vec<LegacyOutcome<HLSLAbstractVM>> {
         match self {
             HLSLAction::Declaration { new_var } => new_var
                 .identity_swizzle()
                 .0
                 .iter()
                 .filter_map(|comp| match comp {
-                    Some(comp) => Some(Outcome::Declaration {
+                    Some(comp) => Some(LegacyOutcome::Declaration {
                         name: (new_var.clone(), *comp),
                         value: None,
                     }),
@@ -66,7 +66,7 @@ impl Action<HLSLAbstractVM> for HLSLAction {
                 .iter()
                 .enumerate()
                 .filter_map(|(i, comp)| match comp {
-                    Some(comp) => Some(Outcome::Declaration {
+                    Some(comp) => Some(LegacyOutcome::Declaration {
                         name: (new_var.clone(), *comp),
                         value: Some(TypedVMRef {
                             data: components[i].clone(),
@@ -79,7 +79,7 @@ impl Action<HLSLAbstractVM> for HLSLAction {
                 .collect(),
             HLSLAction::Operation { scalar_deps, .. } => scalar_deps
                 .iter()
-                .map(|(a, bs)| Outcome::Dependency {
+                .map(|(a, bs)| LegacyOutcome::Dependency {
                     output: TypedVMRef {
                         data: a.clone(),
                         kind: a.0.kind,
@@ -95,7 +95,7 @@ impl Action<HLSLAbstractVM> for HLSLAction {
                         .collect(),
                 })
                 .collect(),
-            HLSLAction::EarlyOut { inputs } => vec![Outcome::EarlyOut {
+            HLSLAction::EarlyOut { inputs } => vec![LegacyOutcome::EarlyOut {
                 inputs: inputs
                     .iter()
                     .map(|(vec, comp)| TypedVMRef {

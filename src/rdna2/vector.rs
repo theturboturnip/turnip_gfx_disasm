@@ -4,7 +4,7 @@ use bitutils::bits;
 use crate::{
     abstract_machine::{DataWidth, TypedVMRef},
     hlsl::types::HLSLHoleTypeMask,
-    Action, Outcome,
+    Action, LegacyOutcome,
 };
 
 use super::{
@@ -159,7 +159,7 @@ impl Action<RDNA2AbstractVM> for VOP {
                 // While refactoring, I assumed these actions could only access numeric types. TODO check if that's the case
                 let kind = HLSLHoleTypeMask::NUMERIC.into();
                 let width = DataWidth::E64;
-                vec![Outcome::Dependency {
+                vec![LegacyOutcome::Dependency {
                     inputs: vec![TypedVMRef {
                         data: VOP::operand_to_dataref(*SRC0, *extra).into(),
                         kind,
@@ -183,7 +183,7 @@ impl Action<RDNA2AbstractVM> for VOP {
                 // While refactoring, I assumed these actions could only access numeric types. TODO check if that's the case
                 let kind = HLSLHoleTypeMask::NUMERIC.into();
                 let width = DataWidth::E64;
-                vec![Outcome::Dependency {
+                vec![LegacyOutcome::Dependency {
                     inputs: vec![
                         TypedVMRef {
                             data: VOP::operand_to_dataref(*SRC0, *extra).into(),

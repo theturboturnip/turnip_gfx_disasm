@@ -4,7 +4,7 @@ use crate::{
         compat::{HLSLCompatibleAction, HLSLCompatibleOutcome},
         types::HLSLHoleTypeMask,
     },
-    Action, DataWidth, Outcome, TypedVMRef,
+    Action, DataWidth, LegacyOutcome, TypedVMRef,
 };
 
 use self::registers::arg_as_vector_data_ref;
@@ -33,7 +33,7 @@ pub enum Instruction {
     EarlyOut(Vec<MatchableArg>),
 }
 impl Action<AMDILAbstractVM> for Instruction {
-    fn outcomes(&self) -> Vec<crate::Outcome<AMDILAbstractVM>> {
+    fn outcomes(&self) -> Vec<crate::LegacyOutcome<AMDILAbstractVM>> {
         match self {
             Instruction::DontCare(..) => {
                 vec![]
@@ -68,7 +68,7 @@ impl Action<AMDILAbstractVM> for Instruction {
                         width: DataWidth::E32,
                     })
                     .collect();
-                vec![Outcome::EarlyOut {
+                vec![LegacyOutcome::EarlyOut {
                     inputs: scalar_args,
                 }]
             }
@@ -95,7 +95,7 @@ impl HLSLCompatibleAction<AMDILAbstractVM> for Instruction {
                 inputs: Self::outcomes(&self)
                     .into_iter()
                     .map(|s_outcome| match s_outcome {
-                        Outcome::EarlyOut { inputs } => inputs,
+                        LegacyOutcome::EarlyOut { inputs } => inputs,
                         _ => panic!(),
                     })
                     .flatten()

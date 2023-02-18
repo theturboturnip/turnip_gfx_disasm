@@ -7,7 +7,7 @@ use crate::{
     abstract_machine::{DataWidth, TypedVMRef},
     hlsl::types::HLSLHoleTypeMask,
     rdna2::vm::{RDNA2AbstractVM, RDNA2DataRef, RDNA2Outcome, RDNA2Output},
-    Action, Outcome,
+    Action, LegacyOutcome,
 };
 
 use super::{utils::extract_u32, Decodable, RDNA2DecodeError};
@@ -116,7 +116,7 @@ impl Action<RDNA2AbstractVM> for EXPORT {
                 DataWidth::E32
             };
 
-            deps.push(Outcome::Dependency {
+            deps.push(LegacyOutcome::Dependency {
                 inputs: vec![TypedVMRef {
                     data: RDNA2DataRef::GeneralPurposeRegister(possible_exports[i] as u64).into(),
                     kind: HLSLHoleTypeMask::NUMERIC.into(),

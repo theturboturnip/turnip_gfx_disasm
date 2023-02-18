@@ -101,17 +101,17 @@ pub trait AbstractVM: std::fmt::Debug + Sized {
 }
 
 pub trait Action<TVM: AbstractVM> {
-    fn outcomes(&self) -> Vec<Outcome<TVM>>;
+    fn outcomes(&self) -> Vec<LegacyOutcome<TVM>>;
 }
 /// Helper implementation for VMs which want to type-erase their actions
 impl<TVM: AbstractVM> Action<TVM> for Box<dyn Action<TVM>> {
-    fn outcomes(&self) -> Vec<Outcome<TVM>> {
+    fn outcomes(&self) -> Vec<LegacyOutcome<TVM>> {
         self.as_ref().outcomes()
     }
 }
 
 #[derive(Debug, Clone)]
-pub enum Outcome<TVM: AbstractVM> {
+pub enum LegacyOutcome<TVM: AbstractVM> {
     /// Declare that some named element exists, and optionally has a known value.
     Declaration {
         name: VMScalarDataRef<TVM::TVectorNameRef>,
@@ -130,7 +130,7 @@ pub enum Outcome<TVM: AbstractVM> {
 
 // pub enum Outcome<TVM: AbstractVM> {
 //     /// Declare a name exists
-//     Declare(TypedVMRef<TVM::TVectorNameRef>),
+//     Declare(TVM::TVectorNameRef),
 //     /// Assign a value derived from a set of inputs using an [HLSLOperator] to an output.
 //     ///
 //     /// The names for all inputs and output must have been previously declared.

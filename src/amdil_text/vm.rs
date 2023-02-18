@@ -11,7 +11,7 @@ use crate::abstract_machine::{
 };
 use crate::hlsl::compat::HLSLCompatibleAbstractVM;
 use crate::hlsl::types::HLSLHoleTypeMask;
-use crate::{Action, Outcome};
+use crate::{Action, LegacyOutcome};
 
 use crate::abstract_machine::{TypedVMRef, VMRef};
 
@@ -145,15 +145,15 @@ pub enum AMDILDeclaration {
     },
 }
 impl Action<AMDILAbstractVM> for AMDILDeclaration {
-    fn outcomes(&self) -> Vec<crate::Outcome<AMDILAbstractVM>> {
+    fn outcomes(&self) -> Vec<crate::LegacyOutcome<AMDILAbstractVM>> {
         match self {
-            AMDILDeclaration::TextureResource(id) => vec![Outcome::Declaration {
+            AMDILDeclaration::TextureResource(id) => vec![LegacyOutcome::Declaration {
                 name: (AMDILNameRef::Texture(*id), VectorComponent::X).into(),
                 value: None,
             }],
             AMDILDeclaration::NamedLiteral(name, value) => VECTOR_COMPONENTS
                 .iter()
-                .map(|comp| Outcome::Declaration {
+                .map(|comp| LegacyOutcome::Declaration {
                     name: (AMDILNameRef::NamedLiteral(name.clone()), *comp).into(),
                     value: Some(TypedVMRef {
                         data: (AMDILNameRef::Literal(*value), *comp).into(),
@@ -173,7 +173,7 @@ impl Action<AMDILAbstractVM> for AMDILDeclaration {
             } => VECTOR_COMPONENTS
                 .iter()
                 .take(*len as usize)
-                .map(|comp| Outcome::Declaration {
+                .map(|comp| LegacyOutcome::Declaration {
                     name: (AMDILNameRef::NamedInputRegister(name.clone()), *comp).into(),
                     value: None,
                 })
@@ -185,7 +185,7 @@ impl Action<AMDILAbstractVM> for AMDILDeclaration {
             } => VECTOR_COMPONENTS
                 .iter()
                 .take(*len as usize)
-                .map(|comp| Outcome::Declaration {
+                .map(|comp| LegacyOutcome::Declaration {
                     name: (AMDILNameRef::NamedOutputRegister(name.clone()), *comp).into(),
                     value: None,
                 })

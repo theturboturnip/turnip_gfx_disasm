@@ -32,6 +32,6 @@ pub mod hlsl;
 pub mod rdna2;
 
 pub use abstract_machine::{
-    AbstractVM, Action, DataWidth, Decoder, Outcome, Program, TypedVMRef, VMRef, VMVectorDataRef,
-    VMVectorNameRef,
+    AbstractVM, Action, DataWidth, Decoder, LegacyOutcome, Program, TypedVMRef, VMRef,
+    VMVectorDataRef, VMVectorNameRef,
 };

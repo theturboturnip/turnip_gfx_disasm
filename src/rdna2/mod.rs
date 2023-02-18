@@ -166,7 +166,7 @@ impl<'a> Decoder<RDNA2AbstractVM> for RDNA2Decoder<'a> {
             println!("{:?}", instr);
             for dep in instr.outcomes() {
                 match dep {
-                    crate::Outcome::Dependency { output, inputs } => {
+                    crate::LegacyOutcome::Dependency { output, inputs } => {
                         println!("\t{:?} -> {:?}", inputs, output)
                     }
                     _ => println!("\t{:?}", dep),
