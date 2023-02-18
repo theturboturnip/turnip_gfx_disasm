@@ -4,8 +4,7 @@ use std::convert::TryFrom;
 use bitutils::bits;
 
 use crate::{
-    abstract_machine::{DataWidth, TypedVMRef},
-    hlsl::types::HLSLHoleTypeMask,
+    abstract_machine::DataWidth,
     rdna2::vm::{RDNA2AbstractVM, RDNA2DataRef, RDNA2Outcome, RDNA2Output},
     Action, LegacyOutcome,
 };
@@ -110,23 +109,18 @@ impl Action<RDNA2AbstractVM> for EXPORT {
                 TARGET::Null => continue,
             };
 
-            let width = if self.COMPR {
+            // TODO start using this again
+            let _width = if self.COMPR {
                 DataWidth::E16
             } else {
                 DataWidth::E32
             };
 
             deps.push(LegacyOutcome::Dependency {
-                inputs: vec![TypedVMRef {
-                    data: RDNA2DataRef::GeneralPurposeRegister(possible_exports[i] as u64).into(),
-                    kind: HLSLHoleTypeMask::NUMERIC.into(),
-                    width,
-                }],
-                output: TypedVMRef {
-                    data: RDNA2DataRef::Output(output_ref).into(),
-                    kind: HLSLHoleTypeMask::NUMERIC.into(),
-                    width,
-                },
+                inputs: vec![
+                    RDNA2DataRef::GeneralPurposeRegister(possible_exports[i] as u64).into(),
+                ],
+                output: RDNA2DataRef::Output(output_ref).into(),
             });
         }
 

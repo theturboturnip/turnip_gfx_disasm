@@ -4,7 +4,7 @@ use crate::{
     abstract_machine::{
         instructions::{ArgsSpec, DependencyRelation, InstrArgs, SimpleDependencyRelation},
         vector::MaskedSwizzle,
-        DataWidth, TypedVMRef,
+        Refinable, RefinableVMDataRef,
     },
     amdil_text::{
         grammar,
@@ -58,16 +58,13 @@ impl ArgsSpec<AMDILAbstractVM> for ALUArgsSpec {
             InputMask::InheritFromFirstOutput => output_elems[0].swizzle.copy_mask(),
             InputMask::TruncateTo(n) => MaskedSwizzle::identity(n.into()),
         };
-        const WIDTH: DataWidth = DataWidth::E32;
 
         let outputs: Vec<_> = output_elems
             .into_iter()
             .zip(self.output_kinds.iter())
-            .map(|(data, kind)| TypedVMRef {
-                // TODO wish we didn't need to clone here :(
-                data: data.clone(),
-                kind: *kind,
-                width: WIDTH,
+            .map(|(data, kind)| {
+                let refinable: RefinableVMDataRef<_> = data.clone().into();
+                refinable.refine_type(*kind).unwrap()
             })
             .collect();
 
@@ -76,15 +73,12 @@ impl ArgsSpec<AMDILAbstractVM> for ALUArgsSpec {
             .zip(self.input_kinds.iter())
             .map(|(data, kind)| {
                 let swizzle = data.swizzle.masked_out(mask_to_apply_to_input);
-                TypedVMRef {
-                    // TODO wish we didn't need to clone here :(
-                    data: AMDILDataRef {
-                        name: data.name.clone(),
-                        swizzle,
-                    },
-                    kind: *kind,
-                    width: WIDTH,
-                }
+                let data = AMDILDataRef {
+                    name: data.name.clone(),
+                    swizzle,
+                };
+                let refinable: RefinableVMDataRef<_> = data.into();
+                refinable.refine_type(*kind).unwrap()
             })
             .collect();
 
@@ -282,10 +276,9 @@ impl Action<AMDILAbstractVM> for ALUInstruction {
             .into_iter()
             .map(|(output, inputs)| {
                 let (output, comp) = (&self.args.outputs[output.0], output.1);
-                let output_arg = TypedVMRef {
+                let output_arg = RefinableVMDataRef {
                     data: (output.data.name.clone(), comp),
                     kind: output.kind,
-                    width: output.width,
                 };
                 LegacyOutcome::Dependency {
                     output: output_arg,
@@ -293,10 +286,9 @@ impl Action<AMDILAbstractVM> for ALUInstruction {
                         .into_iter()
                         .map(|(in_idx, comp)| {
                             let input = &self.args.inputs[in_idx];
-                            TypedVMRef {
+                            RefinableVMDataRef {
                                 data: (input.data.name.clone(), comp),
                                 kind: input.kind,
-                                width: input.width,
                             }
                         })
                         .collect(),

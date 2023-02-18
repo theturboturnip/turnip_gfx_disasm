@@ -1,10 +1,7 @@
 use crate::{
     abstract_machine::vector::MaskedSwizzle,
-    hlsl::{
-        compat::{HLSLCompatibleAction, HLSLCompatibleOutcome},
-        types::HLSLHoleTypeMask,
-    },
-    Action, DataWidth, LegacyOutcome, TypedVMRef,
+    hlsl::compat::{HLSLCompatibleAction, HLSLCompatibleOutcome},
+    Action, LegacyOutcome,
 };
 
 use self::registers::arg_as_vector_data_ref;
@@ -62,11 +59,7 @@ impl Action<AMDILAbstractVM> for Instruction {
                             .filter_map(|comp| comp.map(|comp| (v_arg.name.clone(), comp)))
                     })
                     .flatten()
-                    .map(|comp_ref| TypedVMRef {
-                        data: comp_ref.into(),
-                        kind: HLSLHoleTypeMask::NUMERIC.into(),
-                        width: DataWidth::E32,
-                    })
+                    .map(|comp_ref| comp_ref.into())
                     .collect();
                 vec![LegacyOutcome::EarlyOut {
                     inputs: scalar_args,

@@ -11,11 +11,7 @@
 //! TODO should this be in crate::abstract_machine, or at the top level?
 //!
 
-use crate::hlsl::types::HLSLType;
-
-use super::{
-    vector::VectorComponent, AbstractVM, DataWidth, Refinable, TypedVMRef, VMVectorDataRef,
-};
+use super::{vector::VectorComponent, AbstractVM, RefinableVMDataRef, VMVectorDataRef};
 
 /// Trait for a type that manages a set of possible instructions
 pub trait InstructionSet<TVM: AbstractVM>: Sized {
@@ -58,8 +54,8 @@ impl<TVM: AbstractVM, TArgsSpec: ArgsSpec<TVM>, TDepRelation: DependencyRelation
 /// Struct holding the arguments to an instruction for a given VM
 #[derive(Debug, Clone)]
 pub struct InstrArgs<TVM: AbstractVM> {
-    pub outputs: Vec<TypedVMRef<TVM::TVectorDataRef>>,
-    pub inputs: Vec<TypedVMRef<TVM::TVectorDataRef>>,
+    pub outputs: Vec<RefinableVMDataRef<TVM::TVectorDataRef>>,
+    pub inputs: Vec<RefinableVMDataRef<TVM::TVectorDataRef>>,
 }
 
 /// Trait for types which can map the indivdual output scalars of an instruction to the input scalars that affect them.
@@ -150,49 +146,4 @@ pub trait ArgsSpec<TVM: AbstractVM> {
     ///
     /// TODO Result<> type, probably just use anyhow
     fn sanitize_arguments(&self, args: Vec<TVM::TVectorDataRef>) -> InstrArgs<TVM>;
-}
-/// Implementation of [ArgsSpec] that takes a vector of args as [outputs... inputs...]
-/// and applies [HLSLType]s and [DataWidth]s to create [TypedVMRef]s for each arg
-#[derive(Debug, Clone)]
-pub struct SimpleArgsSpec {
-    output_kinds: Vec<HLSLType>,
-    input_kinds: Vec<HLSLType>,
-    width: DataWidth,
-}
-impl<TVM: AbstractVM> ArgsSpec<TVM> for SimpleArgsSpec
-where
-    TVM::TVectorDataRef: Refinable,
-{
-    fn sanitize_arguments(&self, args: Vec<TVM::TVectorDataRef>) -> InstrArgs<TVM> {
-        let (output_elems, input_elems) = args.split_at(self.output_kinds.len());
-        assert_eq!(output_elems.len(), self.output_kinds.len());
-        assert_eq!(input_elems.len(), self.input_kinds.len());
-
-        let outputs: Vec<_> = output_elems
-            .into_iter()
-            .zip(self.output_kinds.iter())
-            .map(|(data, kind)| TypedVMRef {
-                // TODO wish we didn't need to clone here :(
-                data: data.clone(),
-                kind: *kind,
-                width: self.width,
-            })
-            .collect();
-
-        let inputs: Vec<_> = input_elems
-            .into_iter()
-            .zip(self.input_kinds.iter())
-            .map(|(data, kind)| TypedVMRef {
-                // TODO wish we didn't need to clone here :(
-                data: data.clone(),
-                kind: *kind,
-                width: self.width,
-            })
-            .collect();
-
-        assert_eq!(outputs.len(), self.output_kinds.len());
-        assert_eq!(inputs.len(), self.input_kinds.len());
-
-        InstrArgs { outputs, inputs }
-    }
 }

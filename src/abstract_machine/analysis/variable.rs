@@ -6,11 +6,7 @@ use std::{
 };
 
 use crate::{
-    abstract_machine::vector::{MaskedSwizzle, VECTOR_COMPONENTS},
-    hlsl::syntax::UnconcreteOpResult,
-};
-use crate::{
-    abstract_machine::{vector::VectorComponent, VMScalarDataRef},
+    abstract_machine::{vector::VectorComponent, VMScalarNameRef},
     hlsl::{
         compat::{
             ExpandsIntoHLSLComponents, HLSLCompatibleAbstractVM, HLSLCompatibleAction,
@@ -22,6 +18,13 @@ use crate::{
         vm::HLSLAction,
         HLSLScalarDataRef, HLSLVector, HLSLVectorDataRef, HLSLVectorName,
     },
+};
+use crate::{
+    abstract_machine::{
+        vector::{MaskedSwizzle, VECTOR_COMPONENTS},
+        VMScalarDataRef,
+    },
+    hlsl::syntax::UnconcreteOpResult,
 };
 
 /// An unswizzled vector available to operations in the HLSL virtual machine.
@@ -172,7 +175,7 @@ impl<TVM: HLSLCompatibleAbstractVM> VariableStore<TVM> {
 
     fn expand_declspec_to_scalars(
         declspec: HLSLDeclarationSpec<TVM::TVectorNameRef>,
-    ) -> Vec<VMScalarDataRef<TVM::TVectorNameRef>> {
+    ) -> Vec<VMScalarNameRef<TVM::TVectorNameRef>> {
         (0..declspec.n_components)
             .into_iter()
             .map(|i| (declspec.vm_name_ref.clone(), VECTOR_COMPONENTS[i as usize]).into())
@@ -321,7 +324,7 @@ pub struct VariableAbstractMachine<TVM: HLSLCompatibleAbstractVM> {
     tick: u64,
     variables: VariableStore<TVM>,
     /// Mapping of the VM's scalar references to (Variable, VectorComponent)
-    current_scalar_names: HashMap<VMScalarDataRef<TVM::TVectorNameRef>, HLSLScalarVarRef>,
+    current_scalar_names: HashMap<VMScalarNameRef<TVM::TVectorNameRef>, HLSLScalarVarRef>,
     actions: Vec<(u64, HLSLOutcome)>,
 }
 impl<TVM: HLSLCompatibleAbstractVM> VariableAbstractMachine<TVM> {
@@ -507,15 +510,15 @@ impl<TVM: HLSLCompatibleAbstractVM> VariableAbstractMachine<TVM> {
                         Some(literal_val) => {
                             // Create a new literal """variable"""
                             let literal = self.variables.add_new_variable_from_info(
-                                HLSLVectorName::Literal(literal_val.data),
-                                literal_val.kind,
+                                HLSLVectorName::Literal(literal_val),
+                                declspec.kind,
                                 n_components,
                             );
                             // Hook up the type of the literal to the type of the variable we're assigning it to
                             self.variables
                                 .constrain_var_types(
                                     [var.clone(), literal.clone()].into_iter(),
-                                    literal_val.kind,
+                                    declspec.kind,
                                 )
                                 .expect("Constraining the types of a literal to a variable with the same type should always succeed");
                             // Assign the literal to the variable
@@ -556,7 +559,8 @@ impl<TVM: HLSLCompatibleAbstractVM> VariableAbstractMachine<TVM> {
                             let scalar_input_vars: Vec<_> = scalar_inputs
                                 .into_iter()
                                 .map(|input| {
-                                    if let Some(as_var) = self.current_scalar_names.get(&input.data)
+                                    if let Some(as_var) =
+                                        self.current_scalar_names.get(&input.scalar_name())
                                     {
                                         (*as_var).clone()
                                     } else {
@@ -619,7 +623,7 @@ impl<TVM: HLSLCompatibleAbstractVM> VariableAbstractMachine<TVM> {
                         .map(|(scalar_output, scalar_input_vars)| {
                             let scalar_output_var = self
                                 .current_scalar_names
-                                .get(&scalar_output.data)
+                                .get(&scalar_output.scalar_name())
                                 .unwrap()
                                 .clone();
                             (scalar_output_var, scalar_input_vars)
@@ -634,7 +638,9 @@ impl<TVM: HLSLCompatibleAbstractVM> VariableAbstractMachine<TVM> {
                     let scalar_input_vars: Vec<_> = inputs
                         .into_iter()
                         .map(|input| {
-                            if let Some(as_var) = self.current_scalar_names.get(&input.data) {
+                            if let Some(as_var) =
+                                self.current_scalar_names.get(&input.scalar_name())
+                            {
                                 (*as_var).clone()
                             } else {
                                 panic!("Undeclared/uninitialized item used: {:?}", input)

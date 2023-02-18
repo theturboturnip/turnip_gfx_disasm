@@ -7,13 +7,13 @@
 
 use crate::abstract_machine::vector::{MaskedSwizzle, VectorComponent, VECTOR_COMPONENTS};
 use crate::abstract_machine::{
-    AbstractVM, DataWidth, VMDataRef, VMScalarDataRef, VMVectorDataRef, VMVectorNameRef,
+    AbstractVM, RefinableVMDataRef, VMDataRef, VMVectorDataRef, VMVectorNameRef,
 };
 use crate::hlsl::compat::HLSLCompatibleAbstractVM;
 use crate::hlsl::types::{HLSLHoleTypeMask, HLSLType};
 use crate::{Action, LegacyOutcome};
 
-use crate::abstract_machine::{TypedVMRef, VMRef};
+use crate::abstract_machine::VMRef;
 
 pub mod hlsl;
 
@@ -27,6 +27,7 @@ impl AbstractVM for AMDILAbstractVM {
     type Action = AMDILAction;
     type TVectorNameRef = AMDILNameRef;
     type TVectorDataRef = AMDILDataRef;
+    type TScalarDataRef = RefinableVMDataRef<(AMDILNameRef, VectorComponent)>;
 }
 impl HLSLCompatibleAbstractVM for AMDILAbstractVM {}
 
@@ -131,6 +132,14 @@ impl VMVectorDataRef<AMDILNameRef> for AMDILDataRef {
         self.swizzle
     }
 }
+impl From<AMDILDataRef> for RefinableVMDataRef<AMDILDataRef> {
+    fn from(data: AMDILDataRef) -> Self {
+        Self {
+            kind: data.type_mask(),
+            data,
+        }
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum AMDILDeclaration {
@@ -164,11 +173,7 @@ impl Action<AMDILAbstractVM> for AMDILDeclaration {
                 .iter()
                 .map(|comp| LegacyOutcome::Declaration {
                     name: (AMDILNameRef::NamedLiteral(name.clone()), *comp).into(),
-                    value: Some(TypedVMRef {
-                        data: (AMDILNameRef::Literal(*value), *comp).into(),
-                        kind: HLSLHoleTypeMask::NUMERIC.into(),
-                        width: DataWidth::E32,
-                    }),
+                    value: Some((AMDILNameRef::Literal(*value), *comp).into()),
                 })
                 .collect(),
             AMDILDeclaration::NamedBuffer { .. } => {

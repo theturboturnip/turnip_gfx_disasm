@@ -1,11 +1,7 @@
 #![allow(non_camel_case_types)]
 use bitutils::bits;
 
-use crate::{
-    abstract_machine::{DataWidth, TypedVMRef},
-    hlsl::types::HLSLHoleTypeMask,
-    Action, LegacyOutcome,
-};
+use crate::{Action, LegacyOutcome};
 
 use super::{
     opcodes::{
@@ -157,19 +153,9 @@ impl Action<RDNA2AbstractVM> for VOP {
             } => {
                 // TODO data kind and width
                 // While refactoring, I assumed these actions could only access numeric types. TODO check if that's the case
-                let kind = HLSLHoleTypeMask::NUMERIC.into();
-                let width = DataWidth::E64;
                 vec![LegacyOutcome::Dependency {
-                    inputs: vec![TypedVMRef {
-                        data: VOP::operand_to_dataref(*SRC0, *extra).into(),
-                        kind,
-                        width,
-                    }],
-                    output: TypedVMRef {
-                        data: RDNA2DataRef::GeneralPurposeRegister(*VDST as u64).into(),
-                        kind,
-                        width,
-                    },
+                    inputs: vec![VOP::operand_to_dataref(*SRC0, *extra).into()],
+                    output: RDNA2DataRef::GeneralPurposeRegister(*VDST as u64).into(),
                 }]
             }
             Self::VOP2 {
@@ -181,26 +167,12 @@ impl Action<RDNA2AbstractVM> for VOP {
             } => {
                 // TODO data kind and width
                 // While refactoring, I assumed these actions could only access numeric types. TODO check if that's the case
-                let kind = HLSLHoleTypeMask::NUMERIC.into();
-                let width = DataWidth::E64;
                 vec![LegacyOutcome::Dependency {
                     inputs: vec![
-                        TypedVMRef {
-                            data: VOP::operand_to_dataref(*SRC0, *extra).into(),
-                            kind,
-                            width,
-                        },
-                        TypedVMRef {
-                            data: RDNA2DataRef::GeneralPurposeRegister(*VSRC1 as u64).into(),
-                            kind,
-                            width,
-                        },
+                        VOP::operand_to_dataref(*SRC0, *extra).into(),
+                        RDNA2DataRef::GeneralPurposeRegister(*VSRC1 as u64).into(),
                     ],
-                    output: TypedVMRef {
-                        data: RDNA2DataRef::GeneralPurposeRegister(*VDST as u64).into(),
-                        kind,
-                        width,
-                    },
+                    output: RDNA2DataRef::GeneralPurposeRegister(*VDST as u64).into(),
                 }]
             }
             _ => todo!(),

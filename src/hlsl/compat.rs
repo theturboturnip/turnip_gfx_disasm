@@ -1,7 +1,7 @@
 use crate::{
     abstract_machine::{
         vector::{MaskedSwizzle, VECTOR_COMPONENTS},
-        AbstractVM, TypedVMRef, VMScalarDataRef, VMVectorNameRef,
+        AbstractVM, VMScalarNameRef, VMVectorNameRef,
     },
     Action,
 };
@@ -66,11 +66,11 @@ pub trait ExpandsIntoHLSLComponents {
     /// Expand the vector reference into constituent scalar references.
     ///
     /// TODO refactor this into something that just returns the constituent components?
-    fn expand(&self) -> Vec<VMScalarDataRef<Self::TName>>;
+    fn expand(&self) -> Vec<VMScalarNameRef<Self::TName>>;
 }
 impl<TName: VMVectorNameRef> ExpandsIntoHLSLComponents for HLSLDataRefSpec<TName> {
     type TName = TName;
-    fn expand(&self) -> Vec<VMScalarDataRef<TName>> {
+    fn expand(&self) -> Vec<VMScalarNameRef<TName>> {
         self.swizzle
             .0
             .iter()
@@ -80,7 +80,7 @@ impl<TName: VMVectorNameRef> ExpandsIntoHLSLComponents for HLSLDataRefSpec<TName
 }
 impl<TName: VMVectorNameRef> ExpandsIntoHLSLComponents for HLSLDeclarationSpec<TName> {
     type TName = TName;
-    fn expand(&self) -> Vec<VMScalarDataRef<TName>> {
+    fn expand(&self) -> Vec<VMScalarNameRef<TName>> {
         (0..self.n_components)
             .into_iter()
             .map(|i| (self.vm_name_ref.clone(), VECTOR_COMPONENTS[i as usize]))
@@ -106,7 +106,7 @@ pub enum HLSLCompatibleOutcome<TVM: HLSLCompatibleAbstractVM> {
     /// Declare that some named element exists, and optionally has a known literal value.
     Declaration {
         declspec: HLSLDeclarationSpec<TVM::TVectorNameRef>,
-        literal_value: Option<TypedVMRef<[u64; 4]>>,
+        literal_value: Option<[u64; 4]>,
     },
 
     /// Declare that an output element has a new value, based on many input scalars.
@@ -114,14 +114,9 @@ pub enum HLSLCompatibleOutcome<TVM: HLSLCompatibleAbstractVM> {
         // The actual operation, including the input scalars
         op: UnconcreteOpResult<HLSLDataRefSpec<TVM::TVectorNameRef>>,
         // How each of the output scalars are related to the input scalars
-        component_deps: Vec<(
-            TypedVMRef<VMScalarDataRef<TVM::TVectorNameRef>>,
-            Vec<TypedVMRef<VMScalarDataRef<TVM::TVectorNameRef>>>,
-        )>,
+        component_deps: Vec<(TVM::TScalarDataRef, Vec<TVM::TScalarDataRef>)>,
     },
 
     /// Declare that program flow may end early due to a set of input scalars.
-    EarlyOut {
-        inputs: Vec<TypedVMRef<VMScalarDataRef<TVM::TVectorNameRef>>>,
-    },
+    EarlyOut { inputs: Vec<TVM::TScalarDataRef> },
 }

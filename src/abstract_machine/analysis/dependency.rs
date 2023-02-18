@@ -1,16 +1,14 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::{
-    abstract_machine::{vector::VectorComponent, AbstractVM, TypedVMRef, VMRef, VMScalarDataRef},
+    abstract_machine::{AbstractVM, VMRef, VMScalarDataRef, VMScalarNameRef},
     Action, LegacyOutcome,
 };
 
-pub type ScalarDataRef<TVM: AbstractVM> = VMScalarDataRef<TVM::TVectorNameRef>;
-
 /// Dependency solver for scalar-based abstract VMs
 pub struct ScalarDependencies<TVM: AbstractVM> {
-    discard_dependencies: HashSet<TypedVMRef<ScalarDataRef<TVM>>>,
-    dependents: HashMap<ScalarDataRef<TVM>, HashSet<TypedVMRef<ScalarDataRef<TVM>>>>,
+    discard_dependencies: HashSet<TVM::TScalarDataRef>,
+    dependents: HashMap<VMScalarNameRef<TVM::TVectorNameRef>, HashSet<TVM::TScalarDataRef>>,
 }
 impl<TVM: AbstractVM> ScalarDependencies<TVM> {
     pub fn new() -> Self {
@@ -22,17 +20,17 @@ impl<TVM: AbstractVM> ScalarDependencies<TVM> {
 
     fn resolve_input_on(
         &self,
-        resolved_inputs: &mut HashSet<TypedVMRef<ScalarDataRef<TVM>>>,
-        input: &TypedVMRef<ScalarDataRef<TVM>>,
+        resolved_inputs: &mut HashSet<TVM::TScalarDataRef>,
+        input: &TVM::TScalarDataRef,
     ) {
-        if input.data.is_pure_input() {
+        if input.is_pure_input() {
             // Pure inputs are not resolved into their dependencies
             resolved_inputs.insert(input.clone());
         } else {
-            if let Some(input_dependents) = self.dependents.get(&input.data) {
+            if let Some(input_dependents) = self.dependents.get(&input.scalar_name()) {
                 resolved_inputs.extend(input_dependents.iter().cloned());
             } else {
-                println!("Weird! Someone is using a non-initialized non-pure input {:?}. Treating as pure", input.data);
+                println!("Weird! Someone is using a non-initialized non-pure input {:?}. Treating as pure", input);
                 resolved_inputs.insert(input.clone());
             }
         }
@@ -54,10 +52,10 @@ impl<TVM: AbstractVM> ScalarDependencies<TVM> {
                 } => {
                     let mut resolved_inputs = HashSet::new();
                     self.resolve_input_on(&mut resolved_inputs, &value);
-                    self.dependents.insert(name, resolved_inputs);
+                    self.dependents.insert(name.scalar_name(), resolved_inputs);
                 }
                 LegacyOutcome::Dependency { output, inputs } => {
-                    if output.data.is_pure_input() {
+                    if output.is_pure_input() {
                         println!(
                             "Weird! Someone is writing to a pure input. Ignoring dependency {:?} -> {:?}",
                             inputs, output
@@ -74,7 +72,8 @@ impl<TVM: AbstractVM> ScalarDependencies<TVM> {
                     for input in &self.discard_dependencies {
                         self.resolve_input_on(&mut resolved_inputs, input);
                     }
-                    self.dependents.insert(output.data, resolved_inputs);
+                    self.dependents
+                        .insert(output.scalar_name(), resolved_inputs);
                 }
                 LegacyOutcome::EarlyOut { inputs } => {
                     let mut resolved_inputs = HashSet::new();
@@ -89,7 +88,7 @@ impl<TVM: AbstractVM> ScalarDependencies<TVM> {
 
     pub fn dependents(
         &self,
-    ) -> &HashMap<ScalarDataRef<TVM>, HashSet<TypedVMRef<ScalarDataRef<TVM>>>> {
+    ) -> &HashMap<VMScalarNameRef<TVM::TVectorNameRef>, HashSet<TVM::TScalarDataRef>> {
         &self.dependents
     }
 }

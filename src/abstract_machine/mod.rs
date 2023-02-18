@@ -35,7 +35,7 @@ pub trait Refinable: Sized {
     fn refine_type(&self, type_mask: HLSLType) -> Option<Self>;
 }
 
-/// Marker trait for types referencing the *name* of a VM element, e.g. a vector which could be subscripted.
+/// Trait for types referencing the *name* of a VM element, e.g. a vector which could be subscripted.
 /// May only be able to store a subset of [HLSLType], but does not have any information about
 ///
 /// For scalar machines, the same type may implement [VMVectorNameRef] and [VMDataRef].
@@ -47,11 +47,17 @@ pub trait VMVectorNameRef: VMRef {
 }
 
 /// A VMRef referring to a specific scalar within a VM
-pub type VMScalarDataRef<T: VMVectorNameRef> = (T, VectorComponent);
-impl<T: VMVectorNameRef> VMRef for VMScalarDataRef<T> {
+pub type VMScalarNameRef<T: VMVectorNameRef> = (T, VectorComponent);
+impl<T: VMVectorNameRef> VMRef for VMScalarNameRef<T> {
     fn is_pure_input(&self) -> bool {
         self.0.is_pure_input()
     }
+}
+
+/// Marker trait for types referencing a scalar component within a named vector
+pub trait VMScalarDataRef<T: VMVectorNameRef>: VMDataRef<T> {
+    fn comp(&self) -> VectorComponent;
+    fn scalar_name(&self) -> VMScalarNameRef<T>;
 }
 
 /// A VMDataRef that represents a VM's "element" - the main unit of computation for instructions.
@@ -60,7 +66,7 @@ pub trait VMVectorDataRef<T: VMVectorNameRef>: VMDataRef<T> {
     /// Returns a list of the components that were actually used from self
     ///
     /// e.g. for r0.x_w_, (r0, x) and (r0, w) will be returned
-    fn decompose(&self) -> Vec<VMScalarDataRef<T>> {
+    fn decompose(&self) -> Vec<VMScalarNameRef<T>> {
         self.swizzle()
             .0
             .iter()
@@ -103,22 +109,51 @@ pub enum DataWidth {
     E64,
 }
 
-/// A [VMRef] with extra type information - the [DataWidth] and [HLSLType].
+/// A [Refinable] [VMDataRef] with extra type information
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct TypedVMRef<TData: VMRef> {
+pub struct RefinableVMDataRef<TData: VMRef> {
     pub data: TData,
     pub kind: HLSLType,
-    pub width: DataWidth,
 }
-impl<TData: VMRef> Refinable for TypedVMRef<TData> {
+impl<TData: VMRef> Refinable for RefinableVMDataRef<TData> {
     /// Return a copy of this data ref with the intersection of the given type mask and your actual type mask,
     /// or None if the masks are incompatible.
     fn refine_type(&self, type_mask: HLSLType) -> Option<Self> {
         Some(Self {
             data: self.data.clone(),
             kind: self.kind.intersection(type_mask)?,
-            width: self.width,
         })
+    }
+}
+impl<T: VMVectorNameRef> VMRef for RefinableVMDataRef<VMScalarNameRef<T>> {
+    fn is_pure_input(&self) -> bool {
+        self.data.is_pure_input()
+    }
+}
+impl<T: VMVectorNameRef> VMDataRef<T> for RefinableVMDataRef<VMScalarNameRef<T>> {
+    fn name(&self) -> &T {
+        &self.data.0
+    }
+
+    fn type_mask(&self) -> HLSLType {
+        self.kind
+    }
+}
+impl<T: VMVectorNameRef> VMScalarDataRef<T> for RefinableVMDataRef<VMScalarNameRef<T>> {
+    fn comp(&self) -> VectorComponent {
+        self.data.1
+    }
+
+    fn scalar_name(&self) -> VMScalarNameRef<T> {
+        self.data.clone()
+    }
+}
+impl<T: VMVectorNameRef> From<VMScalarNameRef<T>> for RefinableVMDataRef<VMScalarNameRef<T>> {
+    fn from(data: VMScalarNameRef<T>) -> Self {
+        Self {
+            kind: data.0.base_type_mask(),
+            data,
+        }
     }
 }
 
@@ -137,11 +172,14 @@ pub trait AbstractVM: std::fmt::Debug + Sized {
     ///
     /// e.g. for DXBC and AMDIL instructions operate on vectors => TVectorNameRef = a VectorNameRef.
     type TVectorNameRef: VMVectorNameRef;
-    /// A reference to data held inside an element.
+    /// A reference to data (vector or scalar) held inside an element.
     /// e.g. in a vector machine, a TVectorNameRef plus a swizzle.
     ///
-    /// Can be decomposed into [ScalarDataRef]s.
+    /// Can be decomposed into [Self::ScalarDataRef]s.
     type TVectorDataRef: VMVectorDataRef<Self::TVectorNameRef>; // (Self::TVectorNameRef, MaskedSwizzle);
+    /// A reference to scalar data held inside an element.
+    /// e.g. in a vector machine, a TVectorNameRef plus a component.
+    type TScalarDataRef: VMScalarDataRef<Self::TVectorNameRef>;
 }
 
 pub trait Action<TVM: AbstractVM> {
@@ -158,18 +196,16 @@ impl<TVM: AbstractVM> Action<TVM> for Box<dyn Action<TVM>> {
 pub enum LegacyOutcome<TVM: AbstractVM> {
     /// Declare that some named element exists, and optionally has a known value.
     Declaration {
-        name: VMScalarDataRef<TVM::TVectorNameRef>,
-        value: Option<TypedVMRef<VMScalarDataRef<TVM::TVectorNameRef>>>,
+        name: TVM::TScalarDataRef,
+        value: Option<TVM::TScalarDataRef>,
     },
     /// Declare that an output scalar has a new value, based on many input scalars.
     Dependency {
-        output: TypedVMRef<VMScalarDataRef<TVM::TVectorNameRef>>,
-        inputs: Vec<TypedVMRef<VMScalarDataRef<TVM::TVectorNameRef>>>,
+        output: TVM::TScalarDataRef,
+        inputs: Vec<TVM::TScalarDataRef>,
     },
     /// Declare that program flow may end early due to a set of input scalars.
-    EarlyOut {
-        inputs: Vec<TypedVMRef<VMScalarDataRef<TVM::TVectorNameRef>>>,
-    },
+    EarlyOut { inputs: Vec<TVM::TScalarDataRef> },
 }
 
 pub enum Outcome<TVM: AbstractVM> {

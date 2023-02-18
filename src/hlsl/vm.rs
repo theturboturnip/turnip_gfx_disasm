@@ -1,4 +1,7 @@
-use crate::{AbstractVM, Action, DataWidth, LegacyOutcome, TypedVMRef};
+use crate::{
+    abstract_machine::{vector::VectorComponent, VMDataRef, VMScalarDataRef, VMScalarNameRef},
+    AbstractVM, Action, LegacyOutcome,
+};
 
 use super::{
     compat::HLSLCompatibleAbstractVM, syntax::HLSLOperator, HLSLScalarDataRef, HLSLVector,
@@ -39,8 +42,28 @@ impl AbstractVM for HLSLAbstractVM {
     type Action = HLSLAction;
     type TVectorNameRef = HLSLVector;
     type TVectorDataRef = HLSLVectorDataRef;
+    type TScalarDataRef = HLSLScalarDataRef;
 }
 impl HLSLCompatibleAbstractVM for HLSLAbstractVM {}
+
+impl VMDataRef<HLSLVector> for HLSLScalarDataRef {
+    fn name(&self) -> &HLSLVector {
+        &self.0
+    }
+
+    fn type_mask(&self) -> super::types::HLSLType {
+        self.0.kind
+    }
+}
+impl VMScalarDataRef<HLSLVector> for HLSLScalarDataRef {
+    fn comp(&self) -> VectorComponent {
+        self.1
+    }
+
+    fn scalar_name(&self) -> VMScalarNameRef<HLSLVector> {
+        self.clone()
+    }
+}
 
 impl Action<HLSLAbstractVM> for HLSLAction {
     fn outcomes(&self) -> Vec<LegacyOutcome<HLSLAbstractVM>> {
@@ -68,11 +91,7 @@ impl Action<HLSLAbstractVM> for HLSLAction {
                 .filter_map(|(i, comp)| match comp {
                     Some(comp) => Some(LegacyOutcome::Declaration {
                         name: (new_var.clone(), *comp),
-                        value: Some(TypedVMRef {
-                            data: components[i].clone(),
-                            kind: new_var.kind,
-                            width: DataWidth::E32,
-                        }),
+                        value: Some(components[i].clone()),
                     }),
                     None => None,
                 })
@@ -80,29 +99,14 @@ impl Action<HLSLAbstractVM> for HLSLAction {
             HLSLAction::Operation { scalar_deps, .. } => scalar_deps
                 .iter()
                 .map(|(a, bs)| LegacyOutcome::Dependency {
-                    output: TypedVMRef {
-                        data: a.clone(),
-                        kind: a.0.kind,
-                        width: DataWidth::E32,
-                    },
-                    inputs: bs
-                        .iter()
-                        .map(|b| TypedVMRef {
-                            data: b.clone(),
-                            kind: b.0.kind,
-                            width: DataWidth::E32,
-                        })
-                        .collect(),
+                    output: a.clone(),
+                    inputs: bs.clone(),
                 })
                 .collect(),
             HLSLAction::EarlyOut { inputs } => vec![LegacyOutcome::EarlyOut {
                 inputs: inputs
                     .iter()
-                    .map(|(vec, comp)| TypedVMRef {
-                        data: (vec.clone(), *comp),
-                        kind: vec.kind,
-                        width: DataWidth::E32,
-                    })
+                    .map(|(vec, comp)| (vec.clone(), *comp))
                     .collect(),
             }],
         }

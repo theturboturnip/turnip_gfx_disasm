@@ -1,12 +1,9 @@
-use crate::{
-    abstract_machine::{DataWidth, TypedVMRef},
-    hlsl::{
-        compat::{
-            HLSLCompatibleAction, HLSLCompatibleOutcome, HLSLDataRefSpec, HLSLDeclarationSpec,
-            HLSLDeclarationSpecType, HLSLNameRefType,
-        },
-        types::{HLSLConcreteType, HLSLHoleTypeMask, HLSLType},
+use crate::hlsl::{
+    compat::{
+        HLSLCompatibleAction, HLSLCompatibleOutcome, HLSLDataRefSpec, HLSLDeclarationSpec,
+        HLSLDeclarationSpecType, HLSLNameRefType,
     },
+    types::{HLSLConcreteType, HLSLHoleTypeMask, HLSLType},
 };
 
 use super::{AMDILAbstractVM, AMDILDataRef, AMDILDeclaration, AMDILNameRef};
@@ -33,11 +30,7 @@ impl HLSLCompatibleAction<AMDILAbstractVM> for AMDILDeclaration {
                         decl_type: HLSLDeclarationSpecType::GenericRegister,
                         name: name.clone(),
                     },
-                    literal_value: Some(TypedVMRef {
-                        data: *value,
-                        kind: HLSLHoleTypeMask::NUMERIC.into(),
-                        width: DataWidth::E32,
-                    }),
+                    literal_value: Some(*value),
                 }]
             }
             AMDILDeclaration::NamedInputRegister {

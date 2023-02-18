@@ -1,7 +1,10 @@
 use crate::abstract_machine::vector::{MaskedSwizzle, VectorComponent};
+use crate::hlsl::types::HLSLHoleTypeMask;
 use crate::{Action, LegacyOutcome, VMVectorNameRef};
 
-use crate::abstract_machine::{AbstractVM, VMDataRef, VMRef, VMVectorDataRef};
+use crate::abstract_machine::{
+    AbstractVM, VMDataRef, VMRef, VMScalarDataRef, VMScalarNameRef, VMVectorDataRef,
+};
 
 pub type RDNA2Action = Box<dyn Action<RDNA2AbstractVM>>;
 
@@ -11,6 +14,7 @@ impl AbstractVM for RDNA2AbstractVM {
     type Action = RDNA2Action;
     type TVectorNameRef = RDNA2DataRef;
     type TVectorDataRef = RDNA2DataRef;
+    type TScalarDataRef = RDNA2DataRef;
 }
 pub type RDNA2Outcome = LegacyOutcome<RDNA2AbstractVM>;
 
@@ -67,7 +71,8 @@ impl VMVectorNameRef for RDNA2DataRef {
     }
 
     fn base_type_mask(&self) -> crate::hlsl::types::HLSLType {
-        todo!()
+        // TODO check this is right
+        HLSLHoleTypeMask::NUMERIC.into()
     }
 }
 impl VMDataRef<RDNA2DataRef> for RDNA2DataRef {
@@ -86,6 +91,15 @@ impl VMVectorDataRef<RDNA2DataRef> for RDNA2DataRef {
 
     fn swizzle(&self) -> MaskedSwizzle {
         MaskedSwizzle::identity(1)
+    }
+}
+impl VMScalarDataRef<RDNA2DataRef> for RDNA2DataRef {
+    fn comp(&self) -> VectorComponent {
+        VectorComponent::X
+    }
+
+    fn scalar_name(&self) -> VMScalarNameRef<RDNA2DataRef> {
+        (*self, self.comp())
     }
 }
 impl Into<(RDNA2DataRef, VectorComponent)> for RDNA2DataRef {
