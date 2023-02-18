@@ -13,7 +13,9 @@
 
 use crate::hlsl::types::HLSLType;
 
-use super::{vector::VectorComponent, AbstractVM, DataWidth, TypedVMRef, VMVectorDataRef};
+use super::{
+    vector::VectorComponent, AbstractVM, DataWidth, Refinable, TypedVMRef, VMVectorDataRef,
+};
 
 /// Trait for a type that manages a set of possible instructions
 pub trait InstructionSet<TVM: AbstractVM>: Sized {
@@ -157,7 +159,10 @@ pub struct SimpleArgsSpec {
     input_kinds: Vec<HLSLType>,
     width: DataWidth,
 }
-impl<TVM: AbstractVM> ArgsSpec<TVM> for SimpleArgsSpec {
+impl<TVM: AbstractVM> ArgsSpec<TVM> for SimpleArgsSpec
+where
+    TVM::TVectorDataRef: Refinable,
+{
     fn sanitize_arguments(&self, args: Vec<TVM::TVectorDataRef>) -> InstrArgs<TVM> {
         let (output_elems, input_elems) = args.split_at(self.output_kinds.len());
         assert_eq!(output_elems.len(), self.output_kinds.len());

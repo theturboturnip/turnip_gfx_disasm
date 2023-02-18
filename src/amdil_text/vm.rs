@@ -7,10 +7,10 @@
 
 use crate::abstract_machine::vector::{MaskedSwizzle, VectorComponent, VECTOR_COMPONENTS};
 use crate::abstract_machine::{
-    AbstractVM, DataWidth, VMScalarDataRef, VMVectorDataRef, VMVectorNameRef,
+    AbstractVM, DataWidth, VMDataRef, VMScalarDataRef, VMVectorDataRef, VMVectorNameRef,
 };
 use crate::hlsl::compat::HLSLCompatibleAbstractVM;
-use crate::hlsl::types::HLSLHoleTypeMask;
+use crate::hlsl::types::{HLSLHoleTypeMask, HLSLType};
 use crate::{Action, LegacyOutcome};
 
 use crate::abstract_machine::{TypedVMRef, VMRef};
@@ -53,7 +53,21 @@ impl VMRef for AMDILNameRef {
         }
     }
 }
-impl VMVectorNameRef for AMDILNameRef {}
+impl VMVectorNameRef for AMDILNameRef {
+    fn n_components(&self) -> u8 {
+        match self {
+            Self::Texture(_) => 1,
+            _ => 4,
+        }
+    }
+
+    fn base_type_mask(&self) -> HLSLType {
+        match self {
+            Self::Texture(_) => HLSLHoleTypeMask::TEXTURE2D.into(),
+            _ => HLSLHoleTypeMask::NUMERIC.into(),
+        }
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct AMDILDataRef {
@@ -103,23 +117,18 @@ impl VMRef for AMDILDataRef {
         self.name.is_pure_input()
     }
 }
-impl VMVectorDataRef<AMDILNameRef> for AMDILDataRef {
-    /// Returns a list of the components that were actually used from self
-    ///
-    /// e.g. for r0.x_w_, (r0, x) and (r0, w) will be returned
-    fn decompose(&self) -> Vec<VMScalarDataRef<AMDILNameRef>> {
-        self.swizzle
-            .0
-            .iter()
-            .filter_map(|comp| match comp {
-                Some(comp) => Some((self.name.clone(), *comp)),
-                None => None,
-            })
-            .collect()
-    }
-
+impl VMDataRef<AMDILNameRef> for AMDILDataRef {
     fn name(&self) -> &AMDILNameRef {
         &self.name
+    }
+
+    fn type_mask(&self) -> HLSLType {
+        self.name.base_type_mask()
+    }
+}
+impl VMVectorDataRef<AMDILNameRef> for AMDILDataRef {
+    fn swizzle(&self) -> MaskedSwizzle {
+        self.swizzle
     }
 }
 

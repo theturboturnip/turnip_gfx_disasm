@@ -27,7 +27,15 @@ impl VMRef for HLSLVector {
         self.vector_name.is_pure_input()
     }
 }
-impl VMVectorNameRef for HLSLVector {}
+impl VMVectorNameRef for HLSLVector {
+    fn n_components(&self) -> u8 {
+        self.n_components
+    }
+
+    fn base_type_mask(&self) -> HLSLType {
+        self.kind
+    }
+}
 
 /// The name of an unswizzled vector in the HLSL virtual machine
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -49,7 +57,6 @@ impl VMRef for HLSLVectorName {
         }
     }
 }
-impl VMVectorNameRef for HLSLVectorName {}
 
 /// A reference to a single scalar in the HLSL virtual machine
 pub type HLSLScalarDataRef = (HLSLVector, VectorComponent);
