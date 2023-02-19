@@ -2,7 +2,7 @@
 //!
 //!  TODO Merge hole handling with hlsl::syntax setup
 
-use super::{vector::VectorComponent, AbstractVM, VMVectorDataRef};
+use super::{AbstractVM, VMScalarNameRef, VMVectorDataRef};
 
 /// Trait for a type that manages a set of possible instructions
 pub trait InstructionSet<TVM: AbstractVM>: Sized {
@@ -24,7 +24,10 @@ pub trait InstructionSpec<TVM: AbstractVM> {
     fn determine_dependencies(
         &self,
         args: &InstrArgs<TVM>,
-    ) -> Vec<((usize, VectorComponent), Vec<(usize, VectorComponent)>)>;
+    ) -> Vec<(
+        VMScalarNameRef<TVM::TVectorNameRef>,
+        Vec<VMScalarNameRef<TVM::TVectorNameRef>>,
+    )>;
     /// [ArgsSpec::sanitize_arguments]
     fn sanitize_arguments(&self, args: Vec<TVM::TVectorDataRef>) -> InstrArgs<TVM>;
 }
@@ -37,7 +40,10 @@ impl<TVM: AbstractVM, TArgsSpec: ArgsSpec<TVM>, TDepRelation: DependencyRelation
     fn determine_dependencies(
         &self,
         args: &InstrArgs<TVM>,
-    ) -> Vec<((usize, VectorComponent), Vec<(usize, VectorComponent)>)> {
+    ) -> Vec<(
+        VMScalarNameRef<TVM::TVectorNameRef>,
+        Vec<VMScalarNameRef<TVM::TVectorNameRef>>,
+    )> {
         self.1.determine_dependencies(args)
     }
 }
@@ -56,7 +62,10 @@ pub trait DependencyRelation<TVM: AbstractVM> {
     fn determine_dependencies(
         &self,
         args: &InstrArgs<TVM>,
-    ) -> Vec<((usize, VectorComponent), Vec<(usize, VectorComponent)>)>;
+    ) -> Vec<(
+        VMScalarNameRef<TVM::TVectorNameRef>,
+        Vec<VMScalarNameRef<TVM::TVectorNameRef>>,
+    )>;
 }
 
 /// Impl for [DependencyRelation] that defines simple relations
@@ -75,19 +84,22 @@ impl<TVM: AbstractVM> DependencyRelation<TVM> for SimpleDependencyRelation {
     fn determine_dependencies(
         &self,
         args: &InstrArgs<TVM>,
-    ) -> Vec<((usize, VectorComponent), Vec<(usize, VectorComponent)>)> {
+    ) -> Vec<(
+        VMScalarNameRef<TVM::TVectorNameRef>,
+        Vec<VMScalarNameRef<TVM::TVectorNameRef>>,
+    )> {
         // for output in outputs
         //     for component in output
         let expanded_outs = args
             .outputs
             .iter()
             .enumerate()
-            .map(|(i, elem)| elem.decompose().into_iter().map(move |(_, comp)| (i, comp)));
+            .map(|(i, elem)| elem.decompose().into_iter());
         let expanded_inputs = args
             .inputs
             .iter()
             .enumerate()
-            .map(|(i, elem)| elem.decompose().into_iter().map(move |(_, comp)| (i, comp)));
+            .map(|(i, elem)| elem.decompose().into_iter());
         match self {
             Self::AllToAll => {
                 // Put all inputs in a vector

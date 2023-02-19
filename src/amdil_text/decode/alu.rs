@@ -271,25 +271,9 @@ impl Action<AMDILAbstractVM> for ALUInstruction {
         self.dep_relation
             .determine_dependencies(&self.args)
             .into_iter()
-            .map(|(output, inputs)| {
-                let (output, comp) = (&self.args.outputs[output.0], output.1);
-                let output_arg = RefinableVMDataRef {
-                    data: (output.data.name.clone(), comp),
-                    kind: output.kind,
-                };
-                LegacyOutcome::Dependency {
-                    output: output_arg,
-                    inputs: inputs
-                        .into_iter()
-                        .map(|(in_idx, comp)| {
-                            let input = &self.args.inputs[in_idx];
-                            RefinableVMDataRef {
-                                data: (input.data.name.clone(), comp),
-                                kind: input.kind,
-                            }
-                        })
-                        .collect(),
-                }
+            .map(|(output, inputs)| LegacyOutcome::Dependency {
+                output: output.into(),
+                inputs: inputs.into_iter().map(|input| input.into()).collect(),
             })
             .collect()
     }
@@ -303,7 +287,7 @@ impl HLSLCompatibleAction<AMDILAbstractVM> for ALUInstruction {
                 op: self.op,
                 inputs: self.args.inputs.clone(),
                 output: output.clone(),
-                dep_rel: todo!(),
+                dep_rel: self.dep_relation,
             })
             .collect()
     }

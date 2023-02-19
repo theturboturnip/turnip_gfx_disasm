@@ -1,8 +1,10 @@
-use std::hash::Hash;
+use std::{collections::HashMap, hash::Hash};
 
 use crate::hlsl::{syntax::HLSLOperator, types::HLSLType};
 
-use self::{vector::MaskedSwizzle, vector::VectorComponent};
+use self::{
+    instructions::SimpleDependencyRelation, vector::MaskedSwizzle, vector::VectorComponent,
+};
 
 pub mod analysis;
 pub mod display;
@@ -218,14 +220,8 @@ pub enum Outcome<TVM: AbstractVM> {
         output: TVM::TVectorDataRef,
         op: HLSLOperator,
         inputs: Vec<TVM::TVectorDataRef>,
-        /// ```python
-        /// for (comp, inputs) in dep_rel
-        ///     (output.name(), comp) depends on [
-        ///         (inputs[input_idx], input_comp)
-        ///         for (input_idx, input_comp) in inputs
-        ///     ]
-        /// ```
-        dep_rel: Vec<(VectorComponent, Vec<(usize, VectorComponent)>)>,
+        /// Mapping of (input data ref) -> (output data refs affected by input data ref)
+        dep_rel: SimpleDependencyRelation,
     },
     /// Early out based on a set of inputs
     EarlyOut { inputs: Vec<TVM::TScalarDataRef> },

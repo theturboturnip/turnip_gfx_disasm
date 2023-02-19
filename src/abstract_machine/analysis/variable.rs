@@ -6,12 +6,16 @@ use std::{
 };
 
 use crate::{
-    abstract_machine::{vector::VectorComponent, VMDataRef, VMScalarNameRef},
+    abstract_machine::{
+        instructions::{DependencyRelation, InstrArgs, SimpleDependencyRelation},
+        vector::VectorComponent,
+        VMDataRef, VMScalarNameRef,
+    },
     hlsl::{
         compat::{HLSLCompatibleAbstractVM, HLSLCompatibleAction, HLSLCompatibleOutcome},
         syntax::{Operator, UnconcreteOpTarget},
         types::HLSLType,
-        vm::HLSLAction,
+        vm::{HLSLAbstractVM, HLSLAction},
         HLSLScalarDataRef, HLSLVector, HLSLVectorDataRef, HLSLVectorName,
     },
     VMVectorDataRef, VMVectorNameRef,
@@ -55,7 +59,7 @@ pub enum HLSLOutcome {
     Operation {
         op: UnconcreteOpResult<HLSLVectorVarRef>,
         // Mapping of each individual scalar output to each individual scalar input
-        scalar_deps: Vec<(HLSLScalarVarRef, Vec<HLSLScalarVarRef>)>,
+        dep_rel: SimpleDependencyRelation,
     },
     /// State that the program flow may end early due to some vector components
     EarlyOut { inputs: Vec<HLSLScalarVarRef> },
@@ -485,28 +489,6 @@ impl<TVM: HLSLCompatibleAbstractVM> VariableAbstractMachine<TVM> {
                         })
                         .collect();
 
-                    // Remap the INPUT of the scalar dependencies only, now the variables exist.
-                    // Do this now, before the output variable has been created, because that might change the mapping.
-                    // In particular if the output variable reuses scalars from the input this will output a self-self dependency
-                    let scalar_deps_with_remapped_input: Vec<_> = dep_rel
-                        .into_iter()
-                        .map(|(scalar_output, scalar_inputs)| {
-                            let scalar_input_vars: Vec<_> = scalar_inputs
-                                .into_iter()
-                                .map(|input| {
-                                    if let Some(as_var) =
-                                        self.current_scalar_names.get(&input.scalar_name())
-                                    {
-                                        (*as_var).clone()
-                                    } else {
-                                        panic!("Undeclared/uninitialized item used: {:?}", input)
-                                    }
-                                })
-                                .collect();
-                            (scalar_output, scalar_input_vars)
-                        })
-                        .collect();
-
                     // Create a new variable for the output
 
                     // TODO apply an extra rule:
@@ -551,22 +533,9 @@ impl<TVM: HLSLCompatibleAbstractVM> VariableAbstractMachine<TVM> {
                         }
                     }
 
-                    // Remap the OUTPUTs of the scalar dependencies
-                    let scalar_deps: Vec<_> = scalar_deps_with_remapped_input
-                        .into_iter()
-                        .map(|(scalar_output, scalar_input_vars)| {
-                            let scalar_output_var = self
-                                .current_scalar_names
-                                .get(&scalar_output.scalar_name())
-                                .unwrap()
-                                .clone();
-                            (scalar_output_var, scalar_input_vars)
-                        })
-                        .collect();
-
                     let op = UnconcreteOpResult::new(op, input_datarefs, output_dataref);
 
-                    self.add_outcome(HLSLOutcome::Operation { op, scalar_deps })
+                    self.add_outcome(HLSLOutcome::Operation { op, dep_rel })
                 }
                 HLSLCompatibleOutcome::EarlyOut { inputs } => {
                     let scalar_input_vars: Vec<_> = inputs
@@ -607,26 +576,28 @@ impl<TVM: HLSLCompatibleAbstractVM> VariableAbstractMachine<TVM> {
                         .map(|s| self.variables.concretize_scalar_var_ref(s))
                         .collect(),
                 },
-                HLSLOutcome::Operation { op, scalar_deps } => HLSLAction::Operation {
-                    op: op.op,
-                    inputs: op
+                HLSLOutcome::Operation { op, dep_rel } => {
+                    let inputs = op
                         .inputs
                         .iter()
                         .map(|v| self.variables.concretize_vector_var_ref(v))
-                        .collect(),
-                    output: self.variables.concretize_vector_var_ref(&op.output),
-                    scalar_deps: scalar_deps
-                        .iter()
-                        .map(|(a, bs)| {
-                            (
-                                self.variables.concretize_scalar_var_ref(a),
-                                bs.iter()
-                                    .map(|s| self.variables.concretize_scalar_var_ref(s))
-                                    .collect(),
-                            )
-                        })
-                        .collect(),
-                },
+                        .collect();
+                    let output = self.variables.concretize_vector_var_ref(&op.output);
+
+                    // Put the args inside an InstrArgs so we can do dependency resolution
+                    let args = InstrArgs::<HLSLAbstractVM> {
+                        inputs,
+                        outputs: vec![output.clone()], // TODO ugh this sucks
+                    };
+                    let scalar_deps = dep_rel.determine_dependencies(&args);
+
+                    HLSLAction::Operation {
+                        op: op.op,
+                        inputs: args.inputs,
+                        output: output,
+                        scalar_deps,
+                    }
+                }
                 HLSLOutcome::EarlyOut { inputs } => HLSLAction::EarlyOut {
                     inputs: inputs
                         .iter()

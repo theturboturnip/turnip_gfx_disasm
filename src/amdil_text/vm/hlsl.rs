@@ -1,5 +1,5 @@
 use crate::{
-    abstract_machine::vector::{MaskedSwizzle, VectorComponent},
+    abstract_machine::{instructions::SimpleDependencyRelation, vector::MaskedSwizzle},
     hlsl::{
         compat::{HLSLCompatibleAction, HLSLCompatibleOutcome},
         syntax::HLSLOperator,
@@ -16,6 +16,7 @@ impl HLSLCompatibleAction<AMDILAbstractVM> for AMDILDeclaration {
             }
             AMDILDeclaration::NamedLiteral(name, value) => {
                 let name = AMDILNameRef::NamedLiteral(name.clone());
+                let input_name = AMDILNameRef::Literal(*value);
                 vec![
                     HLSLCompatibleOutcome::Declare(name.clone()),
                     HLSLCompatibleOutcome::Assign {
@@ -28,12 +29,7 @@ impl HLSLCompatibleAction<AMDILAbstractVM> for AMDILDeclaration {
                         inputs: vec![
                             AMDILDataRef::literal(*value, MaskedSwizzle::identity(4)).into()
                         ],
-                        dep_rel: vec![
-                            (VectorComponent::X, vec![(0, VectorComponent::X)]),
-                            (VectorComponent::Y, vec![(0, VectorComponent::Y)]),
-                            (VectorComponent::Z, vec![(0, VectorComponent::Z)]),
-                            (VectorComponent::W, vec![(0, VectorComponent::W)]),
-                        ],
+                        dep_rel: SimpleDependencyRelation::PerComponent,
                     },
                 ]
             }
