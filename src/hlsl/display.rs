@@ -3,7 +3,7 @@ use std::fmt::{Display, Formatter};
 use crate::abstract_machine::vector::VectorComponent;
 
 use super::{
-    types::{HLSLConcreteType, HLSLHoleTypeMask, HLSLNumericType, HLSLType},
+    types::{HLSLConcreteKind, HLSLKind, HLSLKindBitmask, HLSLNumericKind},
     vm::HLSLAction,
     HLSLScalarDataRef, HLSLVectorDataRef, HLSLVectorName,
 };
@@ -33,11 +33,11 @@ impl std::fmt::Display for DWrap<&HLSLScalarDataRef> {
         if let HLSLVectorName::Literal(vals) = v.vector_name {
             let val: u64 = vals[c.into_index()];
             return match v.kind.mask() {
-                HLSLHoleTypeMask::NUMERIC_FLOAT => write!(f, "{:?}f", f32::from_bits(val as u32)),
-                HLSLHoleTypeMask::NUMERIC_SINT => write!(f, "{}", val),
-                HLSLHoleTypeMask::NUMERIC_UINT => write!(f, "{}u", val),
-                HLSLHoleTypeMask::NUMERIC => write!(f, "(num?)0x{:x}", val),
-                HLSLHoleTypeMask::INTEGER => write!(f, "(u?int)0x{:x}", val),
+                HLSLKindBitmask::NUMERIC_FLOAT => write!(f, "{:?}f", f32::from_bits(val as u32)),
+                HLSLKindBitmask::NUMERIC_SINT => write!(f, "{}", val),
+                HLSLKindBitmask::NUMERIC_UINT => write!(f, "{}u", val),
+                HLSLKindBitmask::NUMERIC => write!(f, "(num?)0x{:x}", val),
+                HLSLKindBitmask::INTEGER => write!(f, "(u?int)0x{:x}", val),
                 _ => write!(f, "({})0x{:x}", v.kind, val),
             };
         }
@@ -89,7 +89,7 @@ impl std::fmt::Display for HLSLAction {
     }
 }
 
-impl Display for HLSLNumericType {
+impl Display for HLSLNumericKind {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         match self {
             Self::Float => write!(f, "float"),
@@ -98,7 +98,7 @@ impl Display for HLSLNumericType {
         }
     }
 }
-impl Display for HLSLConcreteType {
+impl Display for HLSLConcreteKind {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         match self {
             Self::Numeric(n) => write!(f, "{}", n),
@@ -106,14 +106,14 @@ impl Display for HLSLConcreteType {
         }
     }
 }
-impl Display for HLSLType {
+impl Display for HLSLKind {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         match self.mask() {
-            HLSLHoleTypeMask::NUMERIC_FLOAT => write!(f, "float"),
-            HLSLHoleTypeMask::NUMERIC_SINT => write!(f, "int"),
-            HLSLHoleTypeMask::NUMERIC_UINT => write!(f, "uint"),
-            HLSLHoleTypeMask::NUMERIC => write!(f, "num?"),
-            HLSLHoleTypeMask::INTEGER => write!(f, "u?int"),
+            HLSLKindBitmask::NUMERIC_FLOAT => write!(f, "float"),
+            HLSLKindBitmask::NUMERIC_SINT => write!(f, "int"),
+            HLSLKindBitmask::NUMERIC_UINT => write!(f, "uint"),
+            HLSLKindBitmask::NUMERIC => write!(f, "num?"),
+            HLSLKindBitmask::INTEGER => write!(f, "u?int"),
             _ => write!(f, "{:?}", self),
         }
     }

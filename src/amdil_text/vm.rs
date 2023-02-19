@@ -12,7 +12,7 @@ use crate::abstract_machine::{
 };
 use crate::hlsl::compat::HLSLCompatibleAbstractVM;
 use crate::hlsl::syntax::HLSLOperator;
-use crate::hlsl::types::{HLSLHoleTypeMask, HLSLType};
+use crate::hlsl::types::{HLSLKind, HLSLKindBitmask};
 use crate::hlsl::HLSLVectorName;
 use crate::{Action, Outcome};
 
@@ -31,7 +31,7 @@ impl AbstractVM for AMDILAbstractVM {
     type TScalarDataRef = RefinableVMDataRef<(AMDILNameRef, VectorComponent)>;
 }
 impl HLSLCompatibleAbstractVM for AMDILAbstractVM {
-    fn vector_name_to_hlsl(name: &Self::TVectorNameRef) -> (HLSLVectorName, HLSLType, u8) {
+    fn vector_name_to_hlsl(name: &Self::TVectorNameRef) -> (HLSLVectorName, HLSLKind, u8) {
         let kind = name.base_type_mask();
         let n_components = name.n_components();
         let name = match name {
@@ -50,7 +50,7 @@ impl HLSLCompatibleAbstractVM for AMDILAbstractVM {
         (name, kind, n_components)
     }
 
-    fn vector_data_to_hlsl(data: &Self::TVectorDataRef) -> (HLSLVectorName, HLSLType, u8) {
+    fn vector_data_to_hlsl(data: &Self::TVectorDataRef) -> (HLSLVectorName, HLSLKind, u8) {
         let kind = data.kind;
         let n_components = data.swizzle().num_used_components();
         let name = match data.name() {
@@ -101,10 +101,10 @@ impl VMVectorNameRef for AMDILNameRef {
         }
     }
 
-    fn base_type_mask(&self) -> HLSLType {
+    fn base_type_mask(&self) -> HLSLKind {
         match self {
-            Self::Texture(_) => HLSLHoleTypeMask::TEXTURE2D.into(),
-            _ => HLSLHoleTypeMask::NUMERIC.into(),
+            Self::Texture(_) => HLSLKindBitmask::TEXTURE2D.into(),
+            _ => HLSLKindBitmask::NUMERIC.into(),
         }
     }
 }
@@ -162,7 +162,7 @@ impl VMDataRef<AMDILNameRef> for AMDILDataRef {
         &self.name
     }
 
-    fn type_mask(&self) -> HLSLType {
+    fn type_mask(&self) -> HLSLKind {
         self.name.base_type_mask()
     }
 }
@@ -176,7 +176,7 @@ impl VMDataRef<AMDILNameRef> for RefinableVMDataRef<AMDILDataRef> {
         &self.data.name
     }
 
-    fn type_mask(&self) -> HLSLType {
+    fn type_mask(&self) -> HLSLKind {
         self.kind
     }
 }
@@ -223,7 +223,6 @@ impl Action<AMDILAbstractVM> for AMDILDeclaration {
             }
             AMDILDeclaration::NamedLiteral(name, value) => {
                 let name = AMDILNameRef::NamedLiteral(name.clone());
-                let input_name = AMDILNameRef::Literal(*value);
                 vec![
                     Outcome::Declare(name.clone()),
                     Outcome::Assign {

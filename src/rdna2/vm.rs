@@ -1,5 +1,5 @@
 use crate::abstract_machine::vector::{MaskedSwizzle, VectorComponent};
-use crate::hlsl::types::HLSLHoleTypeMask;
+use crate::hlsl::types::HLSLKindBitmask;
 use crate::{Action, Outcome, VMVectorNameRef};
 
 use crate::abstract_machine::{
@@ -70,9 +70,9 @@ impl VMVectorNameRef for RDNA2DataRef {
         1
     }
 
-    fn base_type_mask(&self) -> crate::hlsl::types::HLSLType {
+    fn base_type_mask(&self) -> crate::hlsl::types::HLSLKind {
         // TODO check this is right
-        HLSLHoleTypeMask::NUMERIC.into()
+        HLSLKindBitmask::NUMERIC.into()
     }
 }
 impl VMDataRef<RDNA2DataRef> for RDNA2DataRef {
@@ -80,7 +80,7 @@ impl VMDataRef<RDNA2DataRef> for RDNA2DataRef {
         self
     }
 
-    fn type_mask(&self) -> crate::hlsl::types::HLSLType {
+    fn type_mask(&self) -> crate::hlsl::types::HLSLKind {
         self.base_type_mask()
     }
 }

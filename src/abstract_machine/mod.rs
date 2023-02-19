@@ -1,6 +1,6 @@
 use std::hash::Hash;
 
-use crate::hlsl::{syntax::HLSLOperator, types::HLSLType};
+use crate::hlsl::{syntax::HLSLOperator, types::HLSLKind};
 
 use self::{
     instructions::SimpleDependencyRelation, vector::MaskedSwizzle, vector::VectorComponent,
@@ -30,22 +30,22 @@ pub trait VMDataRef<T: VMVectorNameRef>: VMRef {
     /// Return the vector name
     fn name(&self) -> &T;
     /// The type of the data - must be compatible with + should be more specific than [VMVectorNameRef::base_type_mask]
-    fn type_mask(&self) -> HLSLType;
+    fn type_mask(&self) -> HLSLKind;
 }
 /// A [VMDataRef] may also be [Refinable] - i.e. can have its type refined with further context
 pub trait Refinable: Sized {
-    fn refine_type(&self, type_mask: HLSLType) -> Option<Self>;
+    fn refine_type(&self, type_mask: HLSLKind) -> Option<Self>;
 }
 
 /// Trait for types referencing the *name* of a VM element, e.g. a vector which could be subscripted.
-/// May only be able to store a subset of [HLSLType], but does not have any information about
+/// May only be able to store a subset of [HLSLKind], but does not have any information about
 ///
 /// For scalar machines, the same type may implement [VMVectorNameRef] and [VMDataRef].
 pub trait VMVectorNameRef: VMRef {
     /// Number of components in the vector
     fn n_components(&self) -> u8;
-    /// Base type - the lowest common denominator [HLSLType] that could this name could possibly hold.
-    fn base_type_mask(&self) -> HLSLType;
+    /// Base type - the lowest common denominator [HLSLKind] that could this name could possibly hold.
+    fn base_type_mask(&self) -> HLSLKind;
 }
 
 /// A VMRef referring to a specific scalar within a VM
@@ -89,7 +89,7 @@ impl<T: VMVectorNameRef> VMDataRef<T> for (T, MaskedSwizzle) {
         &self.0
     }
 
-    fn type_mask(&self) -> HLSLType {
+    fn type_mask(&self) -> HLSLKind {
         self.name().base_type_mask()
     }
 }
@@ -115,12 +115,12 @@ pub enum DataWidth {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct RefinableVMDataRef<TData: VMRef> {
     pub data: TData,
-    pub kind: HLSLType,
+    pub kind: HLSLKind,
 }
 impl<TData: VMRef> Refinable for RefinableVMDataRef<TData> {
     /// Return a copy of this data ref with the intersection of the given type mask and your actual type mask,
     /// or None if the masks are incompatible.
-    fn refine_type(&self, type_mask: HLSLType) -> Option<Self> {
+    fn refine_type(&self, type_mask: HLSLKind) -> Option<Self> {
         Some(Self {
             data: self.data.clone(),
             kind: self.kind.intersection(type_mask)?,
@@ -137,7 +137,7 @@ impl<T: VMVectorNameRef> VMDataRef<T> for RefinableVMDataRef<VMScalarNameRef<T>>
         &self.data.0
     }
 
-    fn type_mask(&self) -> HLSLType {
+    fn type_mask(&self) -> HLSLKind {
         self.kind
     }
 }

@@ -3,7 +3,7 @@ use crate::{
     VMRef, VMVectorNameRef,
 };
 
-use self::{syntax::UnconcreteOpTarget, types::HLSLType};
+use self::{syntax::UnconcreteOpTarget, types::HLSLKind};
 
 pub mod compat;
 pub mod display;
@@ -14,7 +14,7 @@ pub mod vm;
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct HLSLVector {
     pub vector_name: HLSLVectorName,
-    pub kind: HLSLType,
+    pub kind: HLSLKind,
     pub n_components: u8,
 }
 impl HLSLVector {
@@ -32,7 +32,7 @@ impl VMVectorNameRef for HLSLVector {
         self.n_components
     }
 
-    fn base_type_mask(&self) -> HLSLType {
+    fn base_type_mask(&self) -> HLSLKind {
         self.kind
     }
 }

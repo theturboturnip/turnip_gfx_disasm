@@ -14,7 +14,7 @@ use crate::{
     hlsl::{
         compat::HLSLCompatibleAbstractVM,
         syntax::{ConstructorOp, HLSLOperator, Operator, UnconcreteOpTarget},
-        types::HLSLType,
+        types::HLSLKind,
         vm::{HLSLAbstractVM, HLSLAction},
         HLSLScalarDataRef, HLSLVector, HLSLVectorDataRef, HLSLVectorName,
     },
@@ -38,7 +38,7 @@ pub type HLSLVariable = Rc<RefCell<HLSLVariableInfo>>;
 #[derive(Debug)]
 pub struct HLSLVariableInfo {
     pub vector_name: HLSLVectorName,
-    /// The index of the vector kind mask [HLSLType] in the global list of vector kinds.
+    /// The index of the vector kind mask [HLSLKind] in the global list of vector kinds.
     ///
     /// Indirection is used here because variables may be connected and have the same kind.
     pub kind_idx: usize,
@@ -72,7 +72,7 @@ struct VariableStore<TVM: HLSLCompatibleAbstractVM> {
     inputs: HashMap<HLSLVectorName, HLSLVariable>,
     outputs: HashMap<HLSLVectorName, HLSLVariable>,
     next_general_var_id: u64,
-    kind_mask_vec: Vec<HLSLType>,
+    kind_mask_vec: Vec<HLSLKind>,
     all_variables: Vec<HLSLVariable>,
     _phantom: PhantomData<TVM>,
 }
@@ -95,7 +95,7 @@ impl<TVM: HLSLCompatibleAbstractVM> VariableStore<TVM> {
     fn add_new_variable_from_info(
         &mut self,
         vector_name: HLSLVectorName,
-        initial_kind: HLSLType,
+        initial_kind: HLSLKind,
         n_components: u8,
     ) -> HLSLVariable {
         let vector_ref = vector_name.clone();
@@ -155,7 +155,7 @@ impl<TVM: HLSLCompatibleAbstractVM> VariableStore<TVM> {
     pub fn add_new_variable_from_dataspec(
         &mut self,
         old_name: HLSLVectorName,
-        kind: HLSLType,
+        kind: HLSLKind,
         n_components: u8,
     ) -> HLSLVariable {
         let vector_name = self.remap_generic_name(old_name);
@@ -181,7 +181,7 @@ impl<TVM: HLSLCompatibleAbstractVM> VariableStore<TVM> {
     }
 
     /// Given an HLSLVariable, get its kind by indexing into the kind_mask_vec
-    pub fn get_variable_kind(&mut self, var: &HLSLVariable) -> HLSLType {
+    pub fn get_variable_kind(&mut self, var: &HLSLVariable) -> HLSLKind {
         self.kind_mask_vec[var.borrow().kind_idx]
     }
 
@@ -192,8 +192,8 @@ impl<TVM: HLSLCompatibleAbstractVM> VariableStore<TVM> {
     pub fn constrain_var_types<I: Iterator<Item = HLSLVariable>>(
         &mut self,
         vars: I,
-        extra_constraint: HLSLType,
-    ) -> Result<(), Vec<HLSLType>> {
+        extra_constraint: HLSLKind,
+    ) -> Result<(), Vec<HLSLKind>> {
         let new_mask_idx = self.combine_mask_indices(vars.map(|v| v.borrow().kind_idx))?;
         match new_mask_idx {
             None => return Ok(()),
@@ -214,7 +214,7 @@ impl<TVM: HLSLCompatibleAbstractVM> VariableStore<TVM> {
     pub fn combine_mask_indices<I: Iterator<Item = usize>>(
         &mut self,
         mut indices: I,
-    ) -> Result<Option<usize>, Vec<HLSLType>> {
+    ) -> Result<Option<usize>, Vec<HLSLKind>> {
         let first_idx = match indices.next() {
             Some(f) => f,
             None => return Ok(None),
@@ -320,7 +320,7 @@ impl<TVM: HLSLCompatibleAbstractVM> VariableAbstractMachine<TVM> {
         &mut self,
         var_data: &TVM::TVectorDataRef,
         old_name: HLSLVectorName,
-        kind: HLSLType,
+        kind: HLSLKind,
         n_components: u8,
     ) -> HLSLVariable {
         let variable = self
@@ -347,7 +347,7 @@ impl<TVM: HLSLCompatibleAbstractVM> VariableAbstractMachine<TVM> {
     fn map_dataspec_to_dataref(
         &mut self,
         var_data: &TVM::TVectorDataRef,
-        intersect_with_kind: HLSLType,
+        intersect_with_kind: HLSLKind,
         force_new_general_purpose_var: bool,
     ) -> HLSLVectorVarRef {
         // TODO ONLY REMAP NAMES FOR GENERAL REGISTERS

@@ -12,7 +12,7 @@ use crate::{
     },
     hlsl::{
         syntax::{ArithmeticOp, FauxBooleanOp, HLSLOperator, NumericIntrinsic, SampleIntrinsic},
-        types::{HLSLConcreteType, HLSLHoleTypeMask, HLSLNumericType, HLSLType},
+        types::{HLSLConcreteKind, HLSLKind, HLSLKindBitmask, HLSLNumericKind},
     },
     Action, Outcome,
 };
@@ -40,9 +40,9 @@ pub struct ALUInstruction {
 // TODO Should this use HLSLOperandType and have a separate hole vector? probably not - we don't need to encode the type dependency here
 #[derive(Debug, Clone)]
 struct ALUArgsSpec {
-    input_kinds: Vec<HLSLType>,
+    input_kinds: Vec<HLSLKind>,
     input_mask: InputMask,
-    output_kinds: Vec<HLSLType>,
+    output_kinds: Vec<HLSLKind>,
 }
 impl ALUArgsSpec {
     fn sanitize_arguments(&self, args: Vec<AMDILDataRef>) -> InstrArgs<AMDILAbstractVM> {
@@ -90,9 +90,9 @@ type ALUInstructionSet =
 fn float_arith(op: ArithmeticOp) -> (ALUArgsSpec, SimpleDependencyRelation, HLSLOperator) {
     (
         ALUArgsSpec {
-            input_kinds: vec![HLSLNumericType::Float.into(), HLSLNumericType::Float.into()],
+            input_kinds: vec![HLSLNumericKind::Float.into(), HLSLNumericKind::Float.into()],
             input_mask: InputMask::InheritFromFirstOutput,
-            output_kinds: vec![HLSLNumericType::Float.into()],
+            output_kinds: vec![HLSLNumericKind::Float.into()],
         },
         SimpleDependencyRelation::PerComponent,
         HLSLOperator::Arithmetic(op),
@@ -103,45 +103,45 @@ lazy_static! {
     static ref ALU_INSTR_DEFS: ALUInstructionSet = HashMap::from([
         ("mov", (
             ALUArgsSpec {
-                input_kinds: vec![HLSLHoleTypeMask::all().into()],
+                input_kinds: vec![HLSLKindBitmask::all().into()],
                 input_mask: InputMask::InheritFromFirstOutput,
-                output_kinds: vec![HLSLHoleTypeMask::all().into()]
+                output_kinds: vec![HLSLKindBitmask::all().into()]
             },
             SimpleDependencyRelation::PerComponent,
             HLSLOperator::Assign,
         )),
         ("dp4_ieee", (
             ALUArgsSpec {
-                input_kinds: vec![HLSLNumericType::Float.into(), HLSLNumericType::Float.into()],
+                input_kinds: vec![HLSLNumericKind::Float.into(), HLSLNumericKind::Float.into()],
                 input_mask: InputMask::TruncateTo(4),
-                output_kinds: vec![HLSLNumericType::Float.into()],
+                output_kinds: vec![HLSLNumericKind::Float.into()],
             },
             SimpleDependencyRelation::AllToAll,
             HLSLOperator::NumericI(NumericIntrinsic::Dot),
         )),
         ("dp3_ieee", (
             ALUArgsSpec {
-                input_kinds: vec![HLSLNumericType::Float.into(), HLSLNumericType::Float.into()],
+                input_kinds: vec![HLSLNumericKind::Float.into(), HLSLNumericKind::Float.into()],
                 input_mask: InputMask::TruncateTo(3),
-                output_kinds: vec![HLSLNumericType::Float.into()],
+                output_kinds: vec![HLSLNumericKind::Float.into()],
             },
             SimpleDependencyRelation::AllToAll,
             HLSLOperator::NumericI(NumericIntrinsic::Dot),
         )),
         ("min_ieee", (
             ALUArgsSpec {
-                input_kinds: vec![HLSLNumericType::Float.into(), HLSLNumericType::Float.into()],
+                input_kinds: vec![HLSLNumericKind::Float.into(), HLSLNumericKind::Float.into()],
                 input_mask: InputMask::InheritFromFirstOutput,
-                output_kinds: vec![HLSLNumericType::Float.into()],
+                output_kinds: vec![HLSLNumericKind::Float.into()],
             },
             SimpleDependencyRelation::PerComponent,
             HLSLOperator::NumericI(NumericIntrinsic::Min),
         )),
         ("max_ieee", (
             ALUArgsSpec {
-                input_kinds: vec![HLSLNumericType::Float.into(), HLSLNumericType::Float.into()],
+                input_kinds: vec![HLSLNumericKind::Float.into(), HLSLNumericKind::Float.into()],
                 input_mask: InputMask::InheritFromFirstOutput,
-                output_kinds: vec![HLSLNumericType::Float.into()],
+                output_kinds: vec![HLSLNumericKind::Float.into()],
             },
             SimpleDependencyRelation::PerComponent,
             HLSLOperator::NumericI(NumericIntrinsic::Max),
@@ -154,36 +154,36 @@ lazy_static! {
 
         ("lt", (
             ALUArgsSpec {
-                input_kinds: vec![HLSLNumericType::Float.into(), HLSLNumericType::Float.into()],
+                input_kinds: vec![HLSLNumericKind::Float.into(), HLSLNumericKind::Float.into()],
                 input_mask: InputMask::InheritFromFirstOutput,
-                output_kinds: vec![HLSLHoleTypeMask::INTEGER.into()],
+                output_kinds: vec![HLSLKindBitmask::INTEGER.into()],
             },
             SimpleDependencyRelation::PerComponent,
             HLSLOperator::FauxBoolean(FauxBooleanOp::Lt),
         )),
         ("le", (
             ALUArgsSpec {
-                input_kinds: vec![HLSLNumericType::Float.into(), HLSLNumericType::Float.into()],
+                input_kinds: vec![HLSLNumericKind::Float.into(), HLSLNumericKind::Float.into()],
                 input_mask: InputMask::InheritFromFirstOutput,
-                output_kinds: vec![HLSLHoleTypeMask::INTEGER.into()],
+                output_kinds: vec![HLSLKindBitmask::INTEGER.into()],
             },
             SimpleDependencyRelation::PerComponent,
             HLSLOperator::FauxBoolean(FauxBooleanOp::Le),
         )),
         ("gt", (
             ALUArgsSpec {
-                input_kinds: vec![HLSLNumericType::Float.into(), HLSLNumericType::Float.into()],
+                input_kinds: vec![HLSLNumericKind::Float.into(), HLSLNumericKind::Float.into()],
                 input_mask: InputMask::InheritFromFirstOutput,
-                output_kinds: vec![HLSLHoleTypeMask::INTEGER.into()],
+                output_kinds: vec![HLSLKindBitmask::INTEGER.into()],
             },
             SimpleDependencyRelation::PerComponent,
             HLSLOperator::FauxBoolean(FauxBooleanOp::Gt),
         )),
         ("ge", (
             ALUArgsSpec {
-                input_kinds: vec![HLSLNumericType::Float.into(), HLSLNumericType::Float.into()],
+                input_kinds: vec![HLSLNumericKind::Float.into(), HLSLNumericKind::Float.into()],
                 input_mask: InputMask::InheritFromFirstOutput,
-                output_kinds: vec![HLSLHoleTypeMask::INTEGER.into()],
+                output_kinds: vec![HLSLKindBitmask::INTEGER.into()],
             },
             SimpleDependencyRelation::PerComponent,
             HLSLOperator::FauxBoolean(FauxBooleanOp::Ge),
@@ -193,9 +193,9 @@ lazy_static! {
             ALUArgsSpec {
                 // first input = integer "is zero"?
                 // second and third input could be anything, output kind could be anything
-                input_kinds: vec![HLSLNumericType::UnsignedInt.into(), HLSLHoleTypeMask::all().into(), HLSLHoleTypeMask::all().into()],
+                input_kinds: vec![HLSLNumericKind::UnsignedInt.into(), HLSLKindBitmask::all().into(), HLSLKindBitmask::all().into()],
                 input_mask: InputMask::TruncateTo(3),
-                output_kinds: vec![HLSLHoleTypeMask::all().into()],
+                output_kinds: vec![HLSLKindBitmask::all().into()],
             },
             SimpleDependencyRelation::AllToAll,
             HLSLOperator::FauxBoolean(FauxBooleanOp::Ternary)
@@ -227,11 +227,11 @@ pub fn decode_alu(
 
             let arg_spec = ALUArgsSpec {
                 input_kinds: vec![
-                    HLSLConcreteType::Texture2D.into(),
-                    HLSLNumericType::Float.into(),
+                    HLSLConcreteKind::Texture2D.into(),
+                    HLSLNumericKind::Float.into(),
                 ],
                 input_mask: InputMask::TruncateTo(2),
-                output_kinds: vec![HLSLNumericType::Float.into()],
+                output_kinds: vec![HLSLNumericKind::Float.into()],
             };
 
             return Ok(Some(ALUInstruction {

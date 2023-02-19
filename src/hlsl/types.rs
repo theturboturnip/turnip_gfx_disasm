@@ -1,28 +1,28 @@
 use bitflags::bitflags;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum HLSLNumericType {
+pub enum HLSLNumericKind {
     Float,
     UnsignedInt,
     SignedInt,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum HLSLConcreteType {
-    Numeric(HLSLNumericType),
+pub enum HLSLConcreteKind {
+    Numeric(HLSLNumericKind),
     Texture2D,
 }
-impl From<HLSLNumericType> for HLSLConcreteType {
-    fn from(num: HLSLNumericType) -> Self {
+impl From<HLSLNumericKind> for HLSLConcreteKind {
+    fn from(num: HLSLNumericKind) -> Self {
         Self::Numeric(num)
     }
 }
 
-/// A type for HLSL values - an [HLSLTypeMask] with at least one bit set
+/// A type for HLSL values - an [HLSLKindMask] with at least one bit set
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct HLSLType(HLSLHoleTypeMask);
-impl HLSLType {
-    pub fn try_concretize(&self) -> Option<HLSLConcreteType> {
+pub struct HLSLKind(HLSLKindBitmask);
+impl HLSLKind {
+    pub fn try_concretize(&self) -> Option<HLSLConcreteKind> {
         self.0.try_concretize()
     }
     /// Return an intersection of this and other, as long as that intersection has at least one bit set
@@ -34,59 +34,59 @@ impl HLSLType {
             Some(Self(i))
         }
     }
-    pub fn mask(&self) -> HLSLHoleTypeMask {
+    pub fn mask(&self) -> HLSLKindBitmask {
         self.0
     }
 }
-impl From<HLSLHoleTypeMask> for HLSLType {
-    fn from(m: HLSLHoleTypeMask) -> Self {
+impl From<HLSLKindBitmask> for HLSLKind {
+    fn from(m: HLSLKindBitmask) -> Self {
         if m.is_empty() {
             panic!("From(empty mask) attempted");
         }
         Self(m)
     }
 }
-impl From<HLSLConcreteType> for HLSLType {
-    fn from(c: HLSLConcreteType) -> Self {
+impl From<HLSLConcreteKind> for HLSLKind {
+    fn from(c: HLSLConcreteKind) -> Self {
         Self(c.into())
     }
 }
-impl From<HLSLNumericType> for HLSLType {
-    fn from(n: HLSLNumericType) -> Self {
+impl From<HLSLNumericKind> for HLSLKind {
+    fn from(n: HLSLNumericKind) -> Self {
         Self(n.into())
     }
 }
 
-/// A type for operands passed to [Operator]s.
-/// Equivalent to [HLSLType] but holds a hole ID instead of the actual hole mask.
+/// A type for operands passed to [HLSLOperator]s.
+/// Equivalent to [HLSLKind] but holds a hole ID instead of the actual hole mask.
 ///
-/// [Operator]s need to keep track of type holes separately,
+/// [HLSLOperator]s need to keep track of type holes separately,
 /// because there may be correlations between different argument's type holes,
 /// so this enum uses zero-indexed IDs for correlated holes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum HLSLOperandType {
-    Concrete(HLSLConcreteType),
+    Concrete(HLSLConcreteKind),
     Hole(usize),
 }
-impl From<HLSLConcreteType> for HLSLOperandType {
-    fn from(c: HLSLConcreteType) -> Self {
+impl From<HLSLConcreteKind> for HLSLOperandType {
+    fn from(c: HLSLConcreteKind) -> Self {
         Self::Concrete(c)
     }
 }
-impl From<HLSLNumericType> for HLSLOperandType {
-    fn from(num: HLSLNumericType) -> Self {
+impl From<HLSLNumericKind> for HLSLOperandType {
+    fn from(num: HLSLNumericKind) -> Self {
         Self::Concrete(num.into())
     }
 }
 impl HLSLOperandType {
-    pub fn as_hlsltype(&self, holes: &[HLSLType]) -> HLSLType {
+    pub fn as_hlslkind(&self, holes: &[HLSLKind]) -> HLSLKind {
         match self {
             Self::Concrete(c) => (*c).into(),
             Self::Hole(idx) => holes[*idx],
         }
     }
 
-    pub fn concretize(&self, holes: &[HLSLConcreteType]) -> HLSLConcreteType {
+    pub fn concretize(&self, holes: &[HLSLConcreteKind]) -> HLSLConcreteKind {
         match self {
             Self::Concrete(c) => *c,
             Self::Hole(idx) => holes[*idx],
@@ -95,7 +95,7 @@ impl HLSLOperandType {
 }
 
 bitflags! {
-    pub struct HLSLHoleTypeMask: u32 {
+    pub struct HLSLKindBitmask: u32 {
         const NUMERIC_FLOAT = 0b0000_0001;
         const NUMERIC_UINT = 0b0000_0010;
         const NUMERIC_SINT = 0b0000_0100;
@@ -105,30 +105,30 @@ bitflags! {
         const INTEGER = Self::NUMERIC_SINT.bits | Self::NUMERIC_UINT.bits;
     }
 }
-impl From<HLSLNumericType> for HLSLHoleTypeMask {
-    fn from(num: HLSLNumericType) -> Self {
+impl From<HLSLNumericKind> for HLSLKindBitmask {
+    fn from(num: HLSLNumericKind) -> Self {
         match num {
-            HLSLNumericType::Float => HLSLHoleTypeMask::NUMERIC_FLOAT,
-            HLSLNumericType::UnsignedInt => HLSLHoleTypeMask::NUMERIC_UINT,
-            HLSLNumericType::SignedInt => HLSLHoleTypeMask::NUMERIC_SINT,
+            HLSLNumericKind::Float => HLSLKindBitmask::NUMERIC_FLOAT,
+            HLSLNumericKind::UnsignedInt => HLSLKindBitmask::NUMERIC_UINT,
+            HLSLNumericKind::SignedInt => HLSLKindBitmask::NUMERIC_SINT,
         }
     }
 }
-impl From<HLSLConcreteType> for HLSLHoleTypeMask {
-    fn from(t: HLSLConcreteType) -> Self {
+impl From<HLSLConcreteKind> for HLSLKindBitmask {
+    fn from(t: HLSLConcreteKind) -> Self {
         match t {
-            HLSLConcreteType::Numeric(num) => num.into(),
-            HLSLConcreteType::Texture2D => HLSLHoleTypeMask::TEXTURE2D,
+            HLSLConcreteKind::Numeric(num) => num.into(),
+            HLSLConcreteKind::Texture2D => HLSLKindBitmask::TEXTURE2D,
         }
     }
 }
-impl HLSLHoleTypeMask {
-    pub fn try_concretize(&self) -> Option<HLSLConcreteType> {
+impl HLSLKindBitmask {
+    pub fn try_concretize(&self) -> Option<HLSLConcreteKind> {
         match *self {
-            HLSLHoleTypeMask::NUMERIC_FLOAT => Some(HLSLNumericType::Float.into()),
-            HLSLHoleTypeMask::NUMERIC_SINT => Some(HLSLNumericType::SignedInt.into()),
-            HLSLHoleTypeMask::NUMERIC_UINT => Some(HLSLNumericType::UnsignedInt.into()),
-            HLSLHoleTypeMask::TEXTURE2D => Some(HLSLConcreteType::Texture2D),
+            HLSLKindBitmask::NUMERIC_FLOAT => Some(HLSLNumericKind::Float.into()),
+            HLSLKindBitmask::NUMERIC_SINT => Some(HLSLNumericKind::SignedInt.into()),
+            HLSLKindBitmask::NUMERIC_UINT => Some(HLSLNumericKind::UnsignedInt.into()),
+            HLSLKindBitmask::TEXTURE2D => Some(HLSLConcreteKind::Texture2D),
             _ => None,
         }
     }

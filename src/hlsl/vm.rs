@@ -24,7 +24,7 @@ impl VMDataRef<HLSLVector> for HLSLScalarDataRef {
         &self.0
     }
 
-    fn type_mask(&self) -> super::types::HLSLType {
+    fn type_mask(&self) -> super::types::HLSLKind {
         self.0.kind
     }
 }
