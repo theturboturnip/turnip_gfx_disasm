@@ -7,18 +7,18 @@ use std::{
 
 use crate::{
     abstract_machine::{
-        instructions::{DependencyRelation, InstrArgs, SimpleDependencyRelation},
+        instructions::{InstrArgs, SimpleDependencyRelation},
         vector::VectorComponent,
         VMDataRef, VMScalarNameRef,
     },
     hlsl::{
-        compat::{HLSLCompatibleAbstractVM, HLSLCompatibleAction, HLSLCompatibleOutcome},
-        syntax::{Operator, UnconcreteOpTarget},
+        compat::HLSLCompatibleAbstractVM,
+        syntax::{ConstructorOp, HLSLOperator, Operator, UnconcreteOpTarget},
         types::HLSLType,
         vm::{HLSLAbstractVM, HLSLAction},
         HLSLScalarDataRef, HLSLVector, HLSLVectorDataRef, HLSLVectorName,
     },
-    VMVectorDataRef, VMVectorNameRef,
+    Action, Outcome, VMVectorDataRef, VMVectorNameRef,
 };
 use crate::{
     abstract_machine::{
@@ -50,11 +50,6 @@ pub struct HLSLVariableInfo {
 pub enum HLSLOutcome {
     /// State that a new variable exists without setting its value
     Declaration { new_var: HLSLVariable },
-    /// State that a new variable exists and has a given value taken directly from other variables
-    Definition {
-        new_var: HLSLVariable,
-        components: Vec<HLSLScalarVarRef>,
-    },
     /// State that the output of an operation has been assigned to some components of a variable
     Operation {
         op: UnconcreteOpResult<HLSLVectorVarRef>,
@@ -426,10 +421,38 @@ impl<TVM: HLSLCompatibleAbstractVM> VariableAbstractMachine<TVM> {
                     ),
                 }
 
-                self.add_outcome(HLSLOutcome::Definition {
+                self.add_outcome(HLSLOutcome::Declaration {
                     new_var: variable.clone(),
-                    components: scalar_comps_as_vars.into_iter().collect(),
                 });
+
+                // Compute an HLSLOutcome::Operator to generate the new variable
+                // If we're just assigning one vector
+                let scalar_comps_as_vecs: Vec<_> = scalar_comps_as_vars
+                    .into_iter()
+                    .map(|(var, comp)| (var, MaskedSwizzle::new([Some(comp), None, None, None])))
+                    .collect();
+                let op = match expected_number_of_comps {
+                    1 => HLSLOperator::Assign,
+                    2 => HLSLOperator::Constructor(ConstructorOp::Vec2),
+                    3 => HLSLOperator::Constructor(ConstructorOp::Vec3),
+                    4 => HLSLOperator::Constructor(ConstructorOp::Vec4),
+                    _ => panic!(
+                        "Impossible expected_number_of_comps: {}",
+                        expected_number_of_comps
+                    ),
+                };
+                self.add_outcome(HLSLOutcome::Operation {
+                    op: UnconcreteOpResult::new(
+                        op,
+                        scalar_comps_as_vecs,
+                        (
+                            variable.clone(),
+                            MaskedSwizzle::identity(expected_number_of_comps),
+                        ),
+                    ),
+                    dep_rel: SimpleDependencyRelation::AllToAll, // TODO fix - can't do PerComponent here because each of the inputs is only one component
+                });
+
                 (variable, MaskedSwizzle::identity(expected_number_of_comps))
             } else {
                 // All components come from the same variable, we can just reuse that one
@@ -450,10 +473,10 @@ impl<TVM: HLSLCompatibleAbstractVM> VariableAbstractMachine<TVM> {
         self.actions.push((self.tick, outcome))
     }
 
-    pub fn accum_action(&mut self, action: &dyn HLSLCompatibleAction<TVM>) {
-        for outcome in action.hlsl_outcomes() {
+    pub fn accum_action(&mut self, action: &dyn Action<TVM>) {
+        for outcome in action.outcomes() {
             match outcome {
-                HLSLCompatibleOutcome::Declare(var_name) => {
+                Outcome::Declare(var_name) => {
                     // Create a new variable based on the name
                     // TODO we can't really handle arrays well like this :(
                     let n_components = var_name.n_components();
@@ -471,7 +494,7 @@ impl<TVM: HLSLCompatibleAbstractVM> VariableAbstractMachine<TVM> {
                         new_var: var.clone(),
                     });
                 }
-                HLSLCompatibleOutcome::Assign {
+                Outcome::Assign {
                     op,
                     inputs,
                     output,
@@ -537,7 +560,7 @@ impl<TVM: HLSLCompatibleAbstractVM> VariableAbstractMachine<TVM> {
 
                     self.add_outcome(HLSLOutcome::Operation { op, dep_rel })
                 }
-                HLSLCompatibleOutcome::EarlyOut { inputs } => {
+                Outcome::EarlyOut { inputs } => {
                     let scalar_input_vars: Vec<_> = inputs
                         .into_iter()
                         .map(|input| {
@@ -563,19 +586,9 @@ impl<TVM: HLSLCompatibleAbstractVM> VariableAbstractMachine<TVM> {
         self.actions
             .iter()
             .map(|(_, outcome)| match outcome {
-                HLSLOutcome::Declaration { new_var } => HLSLAction::Declaration {
-                    new_var: self.variables.concretize_var(new_var),
-                },
-                HLSLOutcome::Definition {
-                    new_var,
-                    components,
-                } => HLSLAction::Definition {
-                    new_var: self.variables.concretize_var(new_var),
-                    components: components
-                        .iter()
-                        .map(|s| self.variables.concretize_scalar_var_ref(s))
-                        .collect(),
-                },
+                HLSLOutcome::Declaration { new_var } => {
+                    HLSLAction::Declare(self.variables.concretize_var(new_var))
+                }
                 HLSLOutcome::Operation { op, dep_rel } => {
                     let inputs = op
                         .inputs
@@ -589,13 +602,12 @@ impl<TVM: HLSLCompatibleAbstractVM> VariableAbstractMachine<TVM> {
                         inputs,
                         outputs: vec![output.clone()], // TODO ugh this sucks
                     };
-                    let scalar_deps = dep_rel.determine_dependencies(&args);
 
-                    HLSLAction::Operation {
+                    HLSLAction::Assign {
                         op: op.op,
                         inputs: args.inputs,
                         output: output,
-                        scalar_deps,
+                        dep_rel: *dep_rel,
                     }
                 }
                 HLSLOutcome::EarlyOut { inputs } => HLSLAction::EarlyOut {

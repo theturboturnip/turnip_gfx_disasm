@@ -1,8 +1,4 @@
-use crate::{
-    abstract_machine::vector::MaskedSwizzle,
-    hlsl::compat::{HLSLCompatibleAction, HLSLCompatibleOutcome},
-    Action, LegacyOutcome,
-};
+use crate::{abstract_machine::vector::MaskedSwizzle, Action, Outcome};
 
 use self::registers::arg_as_vector_data_ref;
 
@@ -30,7 +26,7 @@ pub enum Instruction {
     EarlyOut(Vec<MatchableArg>),
 }
 impl Action<AMDILAbstractVM> for Instruction {
-    fn outcomes(&self) -> Vec<crate::LegacyOutcome<AMDILAbstractVM>> {
+    fn outcomes(&self) -> Vec<Outcome<AMDILAbstractVM>> {
         match self {
             Instruction::DontCare(..) => {
                 vec![]
@@ -61,39 +57,10 @@ impl Action<AMDILAbstractVM> for Instruction {
                     .flatten()
                     .map(|comp_ref| comp_ref.into())
                     .collect();
-                vec![LegacyOutcome::EarlyOut {
+                vec![Outcome::EarlyOut {
                     inputs: scalar_args,
                 }]
             }
-        }
-    }
-}
-impl HLSLCompatibleAction<AMDILAbstractVM> for Instruction {
-    fn hlsl_outcomes(&self) -> Vec<HLSLCompatibleOutcome<AMDILAbstractVM>> {
-        match self {
-            Instruction::DontCare(..) => {
-                vec![]
-            }
-            Instruction::Unknown(g_instr) => {
-                if g_instr.args.len() >= 2 {
-                    todo!("Best-effort outcomes for Unknown instructions with an identifiable src and dst")
-                } else {
-                    // Assume the unknown instruction doesn't do anything necessary
-                    vec![]
-                }
-            }
-            Instruction::Decl(decl) => decl.hlsl_outcomes(),
-            Instruction::Alu(alu) => alu.hlsl_outcomes(),
-            Instruction::EarlyOut(_) => vec![HLSLCompatibleOutcome::EarlyOut {
-                inputs: Self::outcomes(&self)
-                    .into_iter()
-                    .map(|s_outcome| match s_outcome {
-                        LegacyOutcome::EarlyOut { inputs } => inputs,
-                        _ => panic!(),
-                    })
-                    .flatten()
-                    .collect(),
-            }],
         }
     }
 }

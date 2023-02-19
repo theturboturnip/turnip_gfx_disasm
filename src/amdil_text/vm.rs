@@ -5,18 +5,18 @@
 //! All data is represented as 4-component vectors.
 //! Inputs to instructions can be swizzled i.e. can have their components reordered or reused (v0.xyxx, v3.wzwx etc. are valid)
 
-use crate::abstract_machine::vector::{MaskedSwizzle, VectorComponent, VECTOR_COMPONENTS};
+use crate::abstract_machine::instructions::SimpleDependencyRelation;
+use crate::abstract_machine::vector::{MaskedSwizzle, VectorComponent};
 use crate::abstract_machine::{
     AbstractVM, RefinableVMDataRef, VMDataRef, VMVectorDataRef, VMVectorNameRef,
 };
 use crate::hlsl::compat::HLSLCompatibleAbstractVM;
+use crate::hlsl::syntax::HLSLOperator;
 use crate::hlsl::types::{HLSLHoleTypeMask, HLSLType};
 use crate::hlsl::HLSLVectorName;
-use crate::{Action, LegacyOutcome};
+use crate::{Action, Outcome};
 
 use crate::abstract_machine::VMRef;
-
-pub mod hlsl;
 
 /// The type of Action held by Programs for the [AMDILAbstractVM]
 pub type AMDILAction = super::decode::Instruction;
@@ -216,47 +216,61 @@ pub enum AMDILDeclaration {
     },
 }
 impl Action<AMDILAbstractVM> for AMDILDeclaration {
-    fn outcomes(&self) -> Vec<crate::LegacyOutcome<AMDILAbstractVM>> {
+    fn outcomes(&self) -> Vec<Outcome<AMDILAbstractVM>> {
         match self {
-            AMDILDeclaration::TextureResource(id) => vec![LegacyOutcome::Declaration {
-                name: (AMDILNameRef::Texture(*id), VectorComponent::X).into(),
-                value: None,
-            }],
-            AMDILDeclaration::NamedLiteral(name, value) => VECTOR_COMPONENTS
-                .iter()
-                .map(|comp| LegacyOutcome::Declaration {
-                    name: (AMDILNameRef::NamedLiteral(name.clone()), *comp).into(),
-                    value: Some((AMDILNameRef::Literal(*value), *comp).into()),
-                })
-                .collect(),
-            AMDILDeclaration::NamedBuffer { .. } => {
-                // TODO Declare all of the values in the array?
-                vec![]
+            AMDILDeclaration::TextureResource(id) => {
+                vec![Outcome::Declare(AMDILNameRef::Texture(*id))]
+            }
+            AMDILDeclaration::NamedLiteral(name, value) => {
+                let name = AMDILNameRef::NamedLiteral(name.clone());
+                let input_name = AMDILNameRef::Literal(*value);
+                vec![
+                    Outcome::Declare(name.clone()),
+                    Outcome::Assign {
+                        output: AMDILDataRef {
+                            name,
+                            swizzle: MaskedSwizzle::identity(4),
+                        }
+                        .into(),
+                        op: HLSLOperator::Assign,
+                        inputs: vec![
+                            AMDILDataRef::literal(*value, MaskedSwizzle::identity(4)).into()
+                        ],
+                        dep_rel: SimpleDependencyRelation::PerComponent,
+                    },
+                ]
             }
             AMDILDeclaration::NamedInputRegister {
                 name,
                 len,
                 reg_type: _,
-            } => VECTOR_COMPONENTS
-                .iter()
-                .take(*len as usize)
-                .map(|comp| LegacyOutcome::Declaration {
-                    name: (AMDILNameRef::NamedInputRegister(name.clone()), *comp).into(),
-                    value: None,
-                })
-                .collect(),
+            } => vec![Outcome::Declare(AMDILNameRef::NamedInputRegister(
+                name.clone(),
+            ))],
             AMDILDeclaration::NamedOutputRegister {
                 name,
                 len,
                 reg_type: _,
-            } => VECTOR_COMPONENTS
-                .iter()
-                .take(*len as usize)
-                .map(|comp| LegacyOutcome::Declaration {
-                    name: (AMDILNameRef::NamedOutputRegister(name.clone()), *comp).into(),
-                    value: None,
-                })
-                .collect(),
+            } => vec![Outcome::Declare(AMDILNameRef::NamedOutputRegister(
+                name.clone(),
+            ))],
+            _ => vec![],
+            // TODO re-enable this
+            // AMDILDeclaration::NamedBuffer { name, len } => {
+            //     vec![Outcome::Declaration {
+            //         name: HLSLDeclarationSpec {
+            //             base_name_ref: AMDILNameRef::NamedOutputRegister(name.clone()),
+            //             kind: DataKind::Hole,
+            //             n_components: 4,
+            //             decl_type: HLSLDeclarationSpecType::Array {
+            //                 of: Box::new(HLSLDeclarationSpecType::ShaderInput(name.clone())),
+            //                 len: *len,
+            //             },
+            //             name: name.clone(),
+            //         },
+            //         literal_value: None,
+            //     }]
+            // }
         }
     }
 }

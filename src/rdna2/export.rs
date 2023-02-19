@@ -4,9 +4,10 @@ use std::convert::TryFrom;
 use bitutils::bits;
 
 use crate::{
-    abstract_machine::DataWidth,
+    abstract_machine::{instructions::SimpleDependencyRelation, DataWidth},
+    hlsl::syntax::HLSLOperator,
     rdna2::vm::{RDNA2AbstractVM, RDNA2DataRef, RDNA2Outcome, RDNA2Output},
-    Action, LegacyOutcome,
+    Action, Outcome,
 };
 
 use super::{utils::extract_u32, Decodable, RDNA2DecodeError};
@@ -116,7 +117,9 @@ impl Action<RDNA2AbstractVM> for EXPORT {
                 DataWidth::E32
             };
 
-            deps.push(LegacyOutcome::Dependency {
+            deps.push(Outcome::Assign {
+                op: HLSLOperator::Assign,
+                dep_rel: SimpleDependencyRelation::PerComponent,
                 inputs: vec![
                     RDNA2DataRef::GeneralPurposeRegister(possible_exports[i] as u64).into(),
                 ],

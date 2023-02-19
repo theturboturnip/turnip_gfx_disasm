@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use crate::{
     abstract_machine::{
-        instructions::{DependencyRelation, InstrArgs, SimpleDependencyRelation},
+        instructions::{InstrArgs, SimpleDependencyRelation},
         vector::MaskedSwizzle,
         Refinable, RefinableVMDataRef,
     },
@@ -11,11 +11,10 @@ use crate::{
         vm::{AMDILAbstractVM, AMDILDataRef, AMDILNameRef},
     },
     hlsl::{
-        compat::{HLSLCompatibleAction, HLSLCompatibleOutcome},
         syntax::{ArithmeticOp, FauxBooleanOp, HLSLOperator, NumericIntrinsic, SampleIntrinsic},
         types::{HLSLConcreteType, HLSLHoleTypeMask, HLSLNumericType, HLSLType},
     },
-    Action, LegacyOutcome,
+    Action, Outcome,
 };
 use lazy_static::lazy_static;
 
@@ -266,24 +265,11 @@ pub fn decode_alu(
 }
 
 impl Action<AMDILAbstractVM> for ALUInstruction {
-    // This implementation is really bad but it will go away once we change how Outcome works
-    fn outcomes(&self) -> Vec<LegacyOutcome<AMDILAbstractVM>> {
-        self.dep_relation
-            .determine_dependencies(&self.args)
-            .into_iter()
-            .map(|(output, inputs)| LegacyOutcome::Dependency {
-                output: output.into(),
-                inputs: inputs.into_iter().map(|input| input.into()).collect(),
-            })
-            .collect()
-    }
-}
-impl HLSLCompatibleAction<AMDILAbstractVM> for ALUInstruction {
-    fn hlsl_outcomes(&self) -> Vec<HLSLCompatibleOutcome<AMDILAbstractVM>> {
+    fn outcomes(&self) -> Vec<Outcome<AMDILAbstractVM>> {
         self.args
             .outputs
             .iter()
-            .map(|output| HLSLCompatibleOutcome::Assign {
+            .map(|output| Outcome::Assign {
                 op: self.op,
                 inputs: self.args.inputs.clone(),
                 output: output.clone(),

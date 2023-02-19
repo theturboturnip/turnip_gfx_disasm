@@ -5,14 +5,11 @@
 //! Usually, each instruction in the original language should map to a single [Action], but this isn't required.
 //!
 //! Each [Action] has a set of [Outcome]s.
-//! These outcomes could be a [Outcome::Declaration] that some scalar value exists,
-//! or a set of [Outcome::Dependency]s from sets of input scalar values to output scalar values.
+//! These outcomes could [Outcome::Declare] that some vector value exists,
+//! or [Outcome::Assign] an output vector to a value calculated from input vectors.
 //!
-//! The aforementioned scalar values are represented with types implementing [VMDataRef] (a reference to a known piece of data inside the abstract VM),
-//! and in some cases with [TypedVMRef]s enclosing them for extra metadata.
-//! Vector-based virtual machines with more complicated analysis can separate the concept of a "name"
-//! (a reference to a known vector, which may be subscripted, referenced with [VMNameRef])
-//! from the scalar values represented by [VMDataRef].
+//! The aforementioned scalar values are represented with types implementing [VMVectorDataRef] (a reference to a known piece of data inside the abstract VM),
+//! and in some cases with [abstract_machine::RefinableVMDataRef]s enclosing them for extra metadata.
 //!
 //! At time of writing, scalar machines can have dependency analysis through [abstract_machine::analysis::dependency::ScalarDependencies],
 //! and through the implementation of extra traits a VM can take advantage of [abstract_machine::analysis::variable::VariableAbstractMachine],
@@ -32,6 +29,6 @@ pub mod hlsl;
 pub mod rdna2;
 
 pub use abstract_machine::{
-    AbstractVM, Action, DataWidth, Decoder, LegacyOutcome, Program, VMRef, VMVectorDataRef,
+    AbstractVM, Action, DataWidth, Decoder, Outcome, Program, VMRef, VMVectorDataRef,
     VMVectorNameRef,
 };

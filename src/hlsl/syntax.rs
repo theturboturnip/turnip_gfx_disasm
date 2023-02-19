@@ -162,6 +162,7 @@ pub enum HLSLOperator {
     SampleI(SampleIntrinsic),
     NumericI(NumericIntrinsic),
     FauxBoolean(FauxBooleanOp),
+    Constructor(ConstructorOp),
 }
 impl Operator for HLSLOperator {
     fn get_typespec(&self) -> OperatorTypeSpec {
@@ -178,6 +179,7 @@ impl Operator for HLSLOperator {
             HLSLOperator::SampleI(x) => x.get_typespec(),
             HLSLOperator::NumericI(x) => x.get_typespec(),
             HLSLOperator::FauxBoolean(x) => x.get_typespec(),
+            HLSLOperator::Constructor(x) => x.get_typespec(),
         }
     }
 
@@ -191,6 +193,7 @@ impl Operator for HLSLOperator {
             HLSLOperator::SampleI(x) => x.n_inputs(),
             HLSLOperator::NumericI(x) => x.n_inputs(),
             HLSLOperator::FauxBoolean(x) => x.n_inputs(),
+            HLSLOperator::Constructor(x) => x.n_inputs(),
         }
     }
 }
@@ -419,6 +422,54 @@ impl Operator for FauxBooleanOp {
         match self {
             Self::Lt | Self::Le | Self::Gt | Self::Ge => 2,
             Self::Ternary => 3,
+        }
+    }
+}
+
+/// For constructing new vectors from old scalars
+/// e.g. Vec2 => float2(a.x, b.y)
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ConstructorOp {
+    Vec2,
+    Vec3,
+    Vec4,
+}
+impl Operator for ConstructorOp {
+    fn get_typespec(&self) -> OperatorTypeSpec {
+        match self {
+            // TODO force all inputs to be scalar
+            Self::Vec2 => OperatorTypeSpec::new(
+                vec![HLSLOperandType::Hole(0), HLSLOperandType::Hole(0)],
+                HLSLOperandType::Hole(0),
+                vec![HLSLHoleTypeMask::NUMERIC.into()],
+            ),
+            Self::Vec3 => OperatorTypeSpec::new(
+                vec![
+                    HLSLOperandType::Hole(0),
+                    HLSLOperandType::Hole(0),
+                    HLSLOperandType::Hole(0),
+                ],
+                HLSLOperandType::Hole(0),
+                vec![HLSLHoleTypeMask::NUMERIC.into()],
+            ),
+            Self::Vec4 => OperatorTypeSpec::new(
+                vec![
+                    HLSLOperandType::Hole(0),
+                    HLSLOperandType::Hole(0),
+                    HLSLOperandType::Hole(0),
+                    HLSLOperandType::Hole(0),
+                ],
+                HLSLOperandType::Hole(0),
+                vec![HLSLHoleTypeMask::NUMERIC.into()],
+            ),
+        }
+    }
+
+    fn n_inputs(&self) -> usize {
+        match self {
+            Self::Vec2 => 2,
+            Self::Vec3 => 3,
+            Self::Vec4 => 4,
         }
     }
 }

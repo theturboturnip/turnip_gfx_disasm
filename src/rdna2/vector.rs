@@ -1,7 +1,7 @@
 #![allow(non_camel_case_types)]
 use bitutils::bits;
 
-use crate::{Action, LegacyOutcome};
+use crate::{Action, Outcome};
 
 use super::{
     opcodes::{
@@ -146,20 +146,22 @@ impl Action<RDNA2AbstractVM> for VOP {
     fn outcomes(&self) -> Vec<RDNA2Outcome> {
         match self {
             Self::VOP1 {
-                OP: _,
+                OP,
                 VDST,
                 SRC0,
                 extra,
             } => {
                 // TODO data kind and width
                 // While refactoring, I assumed these actions could only access numeric types. TODO check if that's the case
-                vec![LegacyOutcome::Dependency {
+                vec![Outcome::Assign {
+                    op: todo!(),
+                    dep_rel: todo!(),
                     inputs: vec![VOP::operand_to_dataref(*SRC0, *extra).into()],
                     output: RDNA2DataRef::GeneralPurposeRegister(*VDST as u64).into(),
                 }]
             }
             Self::VOP2 {
-                OP: _,
+                OP,
                 VDST,
                 VSRC1,
                 SRC0,
@@ -167,7 +169,9 @@ impl Action<RDNA2AbstractVM> for VOP {
             } => {
                 // TODO data kind and width
                 // While refactoring, I assumed these actions could only access numeric types. TODO check if that's the case
-                vec![LegacyOutcome::Dependency {
+                vec![Outcome::Assign {
+                    op: todo!(),
+                    dep_rel: todo!(),
                     inputs: vec![
                         VOP::operand_to_dataref(*SRC0, *extra).into(),
                         RDNA2DataRef::GeneralPurposeRegister(*VSRC1 as u64).into(),

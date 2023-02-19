@@ -1,4 +1,4 @@
-use std::{collections::HashMap, hash::Hash};
+use std::hash::Hash;
 
 use crate::hlsl::{syntax::HLSLOperator, types::HLSLType};
 
@@ -185,31 +185,16 @@ pub trait AbstractVM: std::fmt::Debug + Sized {
 }
 
 pub trait Action<TVM: AbstractVM> {
-    fn outcomes(&self) -> Vec<LegacyOutcome<TVM>>;
+    fn outcomes(&self) -> Vec<Outcome<TVM>>;
 }
 /// Helper implementation for VMs which want to type-erase their actions
 impl<TVM: AbstractVM> Action<TVM> for Box<dyn Action<TVM>> {
-    fn outcomes(&self) -> Vec<LegacyOutcome<TVM>> {
+    fn outcomes(&self) -> Vec<Outcome<TVM>> {
         self.as_ref().outcomes()
     }
 }
 
 #[derive(Debug, Clone)]
-pub enum LegacyOutcome<TVM: AbstractVM> {
-    /// Declare that some named element exists, and optionally has a known value.
-    Declaration {
-        name: TVM::TScalarDataRef,
-        value: Option<TVM::TScalarDataRef>,
-    },
-    /// Declare that an output scalar has a new value, based on many input scalars.
-    Dependency {
-        output: TVM::TScalarDataRef,
-        inputs: Vec<TVM::TScalarDataRef>,
-    },
-    /// Declare that program flow may end early due to a set of input scalars.
-    EarlyOut { inputs: Vec<TVM::TScalarDataRef> },
-}
-
 pub enum Outcome<TVM: AbstractVM> {
     /// Declare a name exists
     Declare(TVM::TVectorNameRef),
@@ -217,6 +202,7 @@ pub enum Outcome<TVM: AbstractVM> {
     ///
     /// The names for all inputs and output must have been previously declared.
     Assign {
+        // TODO move to using InstrArgs
         output: TVM::TVectorDataRef,
         op: HLSLOperator,
         inputs: Vec<TVM::TVectorDataRef>,

@@ -1,6 +1,6 @@
 use crate::abstract_machine::vector::{MaskedSwizzle, VectorComponent};
 use crate::hlsl::types::HLSLHoleTypeMask;
-use crate::{Action, LegacyOutcome, VMVectorNameRef};
+use crate::{Action, Outcome, VMVectorNameRef};
 
 use crate::abstract_machine::{
     AbstractVM, VMDataRef, VMRef, VMScalarDataRef, VMScalarNameRef, VMVectorDataRef,
@@ -16,7 +16,7 @@ impl AbstractVM for RDNA2AbstractVM {
     type TVectorDataRef = RDNA2DataRef;
     type TScalarDataRef = RDNA2DataRef;
 }
-pub type RDNA2Outcome = LegacyOutcome<RDNA2AbstractVM>;
+pub type RDNA2Outcome = Outcome<RDNA2AbstractVM>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum RDNA2Output {
