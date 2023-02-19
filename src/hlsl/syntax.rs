@@ -4,44 +4,31 @@
 //! i.e. the Structure and Array operators are not implemented because they should be handled in [HLSLVectorName],
 //! and pre/postfix operators are not implemented because their more complex usages are not possible in assembly.
 //!
-//! Plan to implement
-//! - Arithmetic operators (including bitwise arithmetic): +, -, *, /, %, <<, >>, &, |, ^
-//! - Binary casts/cast operator
-//! - Unary operators (including bitwise) (except !, becuase it's boolean) -, +, ~
+//! Implements
+//! - [ArithmeticOp], [BinaryArithmeticOp], Arithmetic operators (including bitwise arithmetic): +, -, *, /, %, <<, >>, &, |, ^
+//! - [NumericCastTo] Binary casts/cast operator
+//! - [UnaryOp] Unary operators (including bitwise) (except !, becuase it's boolean) -, +, ~
+//! - [FauxBooleanOp] Comparison operators
+//! - [HLSLOperator::Assign] Assignment (i.e. identity function)
+//! - [SampleIntrinsic] tex2D (more to follow)
+//! - [NumericIntrinsic] dot(), min(), max()
+//! - [ConstructorOp] Construction of new vectors from arbitrary inputs {float,uint,int}{2,3,4}
+//!
 //!
 //! Not planned for now:
 //! - Binary/numeric assignment operators +=, -=, *=, /=, %=, <<=, >>=, &=, |=, ^=
 //! - Booleans &&, ||, ?:, including unary operator !
 //! - Array [i]
 //! - Comma ,
-//! - Comparison operators (they're boolean)
 //! - Prefix/Postfix ++, --
 //! - Structure .
-//! - Assignment (this is implicitly represented in Outcome types)
 //!
-//! TODO need a way for a hole to have multiple possible values but not all of them,
-//! e.g. float/int but NOT uint.
-//! Operations do this a lot (e.g. bit shifts only work on uint or int)
 //!
 //! ## Usage Plan
-//! Virtual machines that implement [HLSLCompatibleAbstractVM] provide actions that support [HLSLCompatibleAction] returning [HLSLCompatibleOutcome]s.
-//! [HLSLCompatibleOutcome] will use `Box<dyn OperatorTarget>`? to represent values, or something along those lines, which allows for e.g. negation of scalar values in Definitions.
-//! [HLSLCompatibleOutcome::Operation] will use [UnconcreteOpResult] or some compat-equivalent instead of (opname, input_datarefs, output_datarefs).
-//! Essentially, the VM will be responsible for converting its own actions into HLSL operations, rather than retrofitting that later.
+//! Virtual machines generate [crate::Outcome]s and [crate::VMDataRef]s in terms of [HLSLType]s and [HLSLOperator]s.
 //!
-//! This comes with its own problems when performing type coersion:
-//!     1) Coercing to concrete types is not necessarily possible initially, as some operations are extremely agnostic and only have their types known later.
-//!         e.g. in AMDIL, after declaring input v1.xyz (which may be any numeric type), the operation `mov r0.xyz, v1.xyz` does not provide clarification on what types are involved
-//!         and the only way to tell the types of v1 and r0 is to see how `r0` is used later.
-//!     2) VM operations may have less permissive type holes than HLSL.
-//!         e.g. in AMDIL addition has separate instructions for (float add), (int add), (uint add); but HLSL just has [ArithmeticOp::Plus] which allows Float, Int, or Uint.
-//!     3) VM operations may have more permissive type holes than HLSL?
-//!     4) VM operations may have mismatching type holes compared to HLSL.
-//!         e.g. a VM operation *may* have issues where, say, a shift instruction requires all operands to be the same (uint << uint = uint, or int << int = int),
-//!         which is equivalent to `Hole(0, INTEGER) << Hole(0, INTEGER) = Hole(0, INTEGER)`,
-//!         but the HLSL version may have two holes `Hole(0, INTEGER) << Hole(1, INTEGER) = Hole(0, INTEGER).
-//!         I'm not sure we will encounter this problem, but we need a safety check for it at least.
-//!         
+//! Virtual machines may have more information in terms of types, e.g. AMDIL has separate add(float), add(uint), add(int) instructions
+//! while [ArithmeticOp::Plus] allows float|uint|int. Analysis machines (e.g. [VariableAbstractMachine]) should be aware of this.
 
 use std::cmp::max;
 
@@ -64,7 +51,7 @@ pub trait Operator: std::fmt::Debug {
 /// The "typespec" for an operator - the input and output types that it accepts, and the accepted types for any referenced type holes.
 #[derive(Debug)]
 pub struct OperatorTypeSpec {
-    // The final element of operand_types is the
+    /// [inputs..., output]
     operand_types: Vec<HLSLOperandType>,
     holes: Vec<HLSLType>,
 }
@@ -149,9 +136,6 @@ impl OperatorTypeSpec {
     }
 }
 
-// TODO: FUCK WE NEED A SINGLE CATCH-ALL HLSLOperator ENUM
-// WE NEED TO BE ABLE TO STORE THEM CONSISTENTLY
-// AND IT MEANS WE DONT NEED THE RC BULLSHIT ANYMORE
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum HLSLOperator {
     Assign,
@@ -369,6 +353,7 @@ pub enum NumericIntrinsic {
 impl Operator for NumericIntrinsic {
     fn get_typespec(&self) -> OperatorTypeSpec {
         match self {
+            // TODO apparently not valid for uint? need to check further
             Self::Min | Self::Max | Self::Dot => OperatorTypeSpec::new(
                 vec![HLSLOperandType::Hole(0), HLSLOperandType::Hole(0)],
                 HLSLOperandType::Hole(0),
@@ -503,78 +488,4 @@ impl<TData: UnconcreteOpTarget> UnconcreteOpResult<TData> {
         }
         Self { op, inputs, output }
     }
-
-    /*
-    pub fn get_current_typespec(&self, output_type: Option<HLSLType>) -> OperatorTypeSpec {
-        let typespec = self.op.get_typespec();
-        let mut new_holes = typespec.holes.clone();
-        for (input, input_typespec) in self.inputs.iter().zip(typespec.input_types.iter()) {
-            let input_variable_type = input.unconcrete_type();
-            // 1. check that the input_variable_type is compatible with the input_typespec
-            if input_variable_type
-                .intersection(input_typespec.as_hlsltype(&typespec.holes))
-                .is_none()
-            {
-                panic!("Value {:?} has unconcrete type {:?} that is incompatible with op {:?}'s typespec {:?}", input, input_variable_type, self.op, typespec)
-            }
-            // 2. for each non-concrete type i.e. type hole in the typespec, intersect it with the inputs that map to it
-            match input_typespec {
-                HLSLOperandType::Hole(idx) => {
-                    new_holes[*idx] = new_holes[*idx]
-                        .intersection(input_variable_type)
-                        .expect("Intersection error during hole resolution :(");
-                }
-                _ => {}
-            }
-        }
-        if let Some(output_type) = output_type {
-            if typespec
-                .output_type
-                .as_hlsltype(&typespec.holes)
-                .intersection(output_type)
-                .is_none()
-            {
-                panic!("Output of {:?} has been assigned unconcrete type {:?} that is incompatible with typespec {:?}", self.op, output_type, typespec)
-            }
-            // 2. for each non-concrete type i.e. type hole in the typespec, intersect it with the inputs that map to it
-            match &typespec.output_type {
-                HLSLOperandType::Hole(idx) => {
-                    new_holes[*idx] = new_holes[*idx]
-                        .intersection(output_type)
-                        .expect("Intersection error during hole resolution :(");
-                }
-                _ => {}
-            }
-        }
-
-        // The holes have now been modified, go back and check they're compatible with the inputs
-
-        // Go back through and check the holes still work now that they've been changed
-        for (input, input_typespec) in self.inputs.iter().zip(typespec.input_types.iter()) {
-            let input_variable_type = input.unconcrete_type();
-            // The type of the variable (e.g. Hole) may be more general than the newly reduced value
-            // That's fine, as long as the newly reduced value is within the original bounds
-            // Basically, check that this input variable could be treated as
-            if input_variable_type
-                .intersection(input_typespec.as_hlsltype(&typespec.holes))
-                .is_none()
-            {
-                panic!("During hole resolution, value {:?} has unconcrete type {:?} that was made incompatible with op {:?}'s typespec {:?} (new holes {:?})", input, input_variable_type, self.op, input_typespec, new_holes)
-            }
-        }
-        if let Some(output_type) = output_type {
-            if typespec
-                .output_type
-                .as_hlsltype(&typespec.holes)
-                .intersection(output_type)
-                .is_none()
-            {
-                panic!("During hole resolution, output of {:?} has unconcrete type {:?} that is incompatible with typespec {:?} and new holes {:?}", self.op, output_type, typespec, new_holes)
-            }
-        }
-
-        // TODO does the constructor need to do any more typechecking? I don't think so
-        OperatorTypeSpec::new(typespec.input_types, typespec.output_type, new_holes)
-    }
-    */
 }

@@ -21,7 +21,7 @@ use crate::abstract_machine::VMRef;
 /// The type of Action held by Programs for the [AMDILAbstractVM]
 pub type AMDILAction = super::decode::Instruction;
 
-/// Type for the AMDIL abstract VM. Implements [ScalarAbstractVM] and [HLSLCompatibleAbstractVM]
+/// Type for the AMDIL abstract VM. Implements [AbstractVM] and [HLSLCompatibleAbstractVM]
 #[derive(Debug, Clone)]
 pub enum AMDILAbstractVM {}
 impl AbstractVM for AMDILAbstractVM {

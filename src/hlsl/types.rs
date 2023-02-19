@@ -142,21 +142,3 @@ impl HLSLHoleTypeMask {
         }
     }
 }
-
-// TODO rename
-#[derive(Debug)]
-pub enum TypeCoersionError {
-    /// Intersection of X and Y had no common ground :(
-    IntersectionFail(HLSLType, HLSLType),
-}
-
-// pub fn simple_type_coerce<const N_IN: usize, T: OperatorTarget>(
-//     input_kinds: &[T; N_IN],
-//     allowed_input_kinds: &[HLSLType; N_IN],
-//     allowed_output_kind: HLSLType,
-// ) -> Result<([HLSLType; N_IN], HLSLType), TypeCoersionError> {
-//     // Notes:
-//     // First step has to be to resolve type holes.
-//     // If the input we're given has holes [ Hole { id: 0, NUMERIC } ]
-//     let final_holes = ;
-// }
