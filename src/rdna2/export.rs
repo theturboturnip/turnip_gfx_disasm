@@ -4,7 +4,7 @@ use std::convert::TryFrom;
 use bitutils::bits;
 
 use crate::{
-    abstract_machine::{instructions::SimpleDependencyRelation, DataWidth},
+    abstract_machine::DataWidth,
     hlsl::syntax::HLSLOperator,
     rdna2::vm::{RDNA2AbstractVM, RDNA2DataRef, RDNA2Outcome, RDNA2Output},
     Action, Outcome,
@@ -119,7 +119,6 @@ impl Action<RDNA2AbstractVM> for EXPORT {
 
             deps.push(Outcome::Assign {
                 op: HLSLOperator::Assign,
-                dep_rel: SimpleDependencyRelation::PerComponent,
                 inputs: vec![
                     RDNA2DataRef::GeneralPurposeRegister(possible_exports[i] as u64).into(),
                 ],

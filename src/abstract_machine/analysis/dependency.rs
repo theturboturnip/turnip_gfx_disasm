@@ -5,7 +5,8 @@ use crate::{
         instructions::{DependencyRelation, InstrArgs},
         AbstractVM, VMRef, VMScalarDataRef, VMScalarNameRef,
     },
-    Action, Outcome, VMVectorDataRef,
+    hlsl::syntax::Operator,
+    Action, Outcome,
 };
 
 /// Dependency solver for scalar-based abstract VMs
@@ -52,12 +53,7 @@ impl<TVM: AbstractVM> ScalarDependencies<TVM> {
                 Outcome::Declare { .. } => {
                     // Irrelevant because no values are being assigned
                 }
-                Outcome::Assign {
-                    output,
-                    inputs,
-                    dep_rel,
-                    ..
-                } => {
+                Outcome::Assign { output, inputs, op } => {
                     if output.is_pure_input() {
                         println!(
                                 "Weird! Someone is writing to a pure input. Ignoring dependency {:?} -> {:?}",
@@ -69,7 +65,7 @@ impl<TVM: AbstractVM> ScalarDependencies<TVM> {
                         outputs: vec![output],
                         inputs: inputs,
                     };
-                    for (output_scl, input_scls) in dep_rel.determine_dependencies(&args) {
+                    for (output_scl, input_scls) in op.dep_rel().determine_dependencies(&args) {
                         // TODO Resolve NamedLiteral to Literal for vectors?
 
                         let mut resolved_inputs = HashSet::new();

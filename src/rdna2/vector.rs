@@ -155,7 +155,6 @@ impl Action<RDNA2AbstractVM> for VOP {
                 // While refactoring, I assumed these actions could only access numeric types. TODO check if that's the case
                 vec![Outcome::Assign {
                     op: todo!(),
-                    dep_rel: todo!(),
                     inputs: vec![VOP::operand_to_dataref(*SRC0, *extra).into()],
                     output: RDNA2DataRef::GeneralPurposeRegister(*VDST as u64).into(),
                 }]
@@ -171,7 +170,6 @@ impl Action<RDNA2AbstractVM> for VOP {
                 // While refactoring, I assumed these actions could only access numeric types. TODO check if that's the case
                 vec![Outcome::Assign {
                     op: todo!(),
-                    dep_rel: todo!(),
                     inputs: vec![
                         VOP::operand_to_dataref(*SRC0, *extra).into(),
                         RDNA2DataRef::GeneralPurposeRegister(*VSRC1 as u64).into(),

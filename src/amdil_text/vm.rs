@@ -5,7 +5,6 @@
 //! All data is represented as 4-component vectors.
 //! Inputs to instructions can be swizzled i.e. can have their components reordered or reused (v0.xyxx, v3.wzwx etc. are valid)
 
-use crate::abstract_machine::instructions::SimpleDependencyRelation;
 use crate::abstract_machine::vector::{MaskedSwizzle, VectorComponent};
 use crate::abstract_machine::{
     AbstractVM, RefinableVMDataRef, VMDataRef, VMVectorDataRef, VMVectorNameRef,
@@ -235,7 +234,6 @@ impl Action<AMDILAbstractVM> for AMDILDeclaration {
                         inputs: vec![
                             AMDILDataRef::literal(*value, MaskedSwizzle::identity(4)).into()
                         ],
-                        dep_rel: SimpleDependencyRelation::PerComponent,
                     },
                 ]
             }

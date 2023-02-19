@@ -32,6 +32,8 @@
 
 use std::cmp::max;
 
+use crate::abstract_machine::instructions::SimpleDependencyRelation;
+
 use super::types::{HLSLConcreteKind, HLSLKind, HLSLKindBitmask, HLSLNumericKind, HLSLOperandType};
 
 /// Trait implemented for HLSL operators and intrinsic functions which take 1..N inputs and output 1 value.
@@ -44,6 +46,11 @@ pub trait Operator: std::fmt::Debug {
 
     /// Return the number of input arguments the operator takes.
     fn n_inputs(&self) -> usize;
+
+    /// Return the dependency relation - how the input arguments are connected to the output
+    ///
+    /// Mapping of (input data ref) -> (output data refs affected by input data ref)
+    fn dep_rel(&self) -> SimpleDependencyRelation;
 }
 
 /// The "typespec" for an operator - the input and output types that it accepts, and the accepted types for any referenced type holes.
@@ -178,6 +185,20 @@ impl Operator for HLSLOperator {
             HLSLOperator::Constructor(x) => x.n_inputs(),
         }
     }
+
+    fn dep_rel(&self) -> SimpleDependencyRelation {
+        match self {
+            HLSLOperator::Assign => SimpleDependencyRelation::PerComponent,
+            HLSLOperator::Unary(x) => x.dep_rel(),
+            HLSLOperator::Arithmetic(x) => x.dep_rel(),
+            HLSLOperator::BinaryArithmetic(x) => x.dep_rel(),
+            HLSLOperator::NumericCast(x) => x.dep_rel(),
+            HLSLOperator::SampleI(x) => x.dep_rel(),
+            HLSLOperator::NumericI(x) => x.dep_rel(),
+            HLSLOperator::FauxBoolean(x) => x.dep_rel(),
+            HLSLOperator::Constructor(x) => x.dep_rel(),
+        }
+    }
 }
 
 /// Unary operations that operate on a single value and return a single value
@@ -213,6 +234,10 @@ impl Operator for UnaryOp {
 
     fn n_inputs(&self) -> usize {
         1
+    }
+
+    fn dep_rel(&self) -> SimpleDependencyRelation {
+        SimpleDependencyRelation::PerComponent
     }
 }
 
@@ -252,6 +277,10 @@ impl Operator for ArithmeticOp {
 
     fn n_inputs(&self) -> usize {
         2
+    }
+
+    fn dep_rel(&self) -> SimpleDependencyRelation {
+        SimpleDependencyRelation::PerComponent
     }
 }
 
@@ -297,6 +326,10 @@ impl Operator for BinaryArithmeticOp {
     fn n_inputs(&self) -> usize {
         2
     }
+
+    fn dep_rel(&self) -> SimpleDependencyRelation {
+        SimpleDependencyRelation::PerComponent
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -312,6 +345,10 @@ impl Operator for NumericCastTo {
 
     fn n_inputs(&self) -> usize {
         1
+    }
+
+    fn dep_rel(&self) -> SimpleDependencyRelation {
+        SimpleDependencyRelation::PerComponent
     }
 }
 
@@ -339,6 +376,10 @@ impl Operator for SampleIntrinsic {
             Self::Tex2D => 2,
         }
     }
+
+    fn dep_rel(&self) -> SimpleDependencyRelation {
+        SimpleDependencyRelation::AllToAll
+    }
 }
 
 /// Numeric intrinsic functions
@@ -364,6 +405,12 @@ impl Operator for NumericIntrinsic {
         match self {
             Self::Min | Self::Max | Self::Dot => 2,
         }
+    }
+
+    fn dep_rel(&self) -> SimpleDependencyRelation {
+        // v3 = max(v1, v2)
+        // implies v3.x = max(v1.x, v2.x) etc
+        SimpleDependencyRelation::PerComponent
     }
 }
 
@@ -406,6 +453,10 @@ impl Operator for FauxBooleanOp {
             Self::Lt | Self::Le | Self::Gt | Self::Ge => 2,
             Self::Ternary => 3,
         }
+    }
+
+    fn dep_rel(&self) -> SimpleDependencyRelation {
+        SimpleDependencyRelation::PerComponent
     }
 }
 
@@ -454,6 +505,11 @@ impl Operator for ConstructorOp {
             Self::Vec3 => 3,
             Self::Vec4 => 4,
         }
+    }
+
+    fn dep_rel(&self) -> SimpleDependencyRelation {
+        // TODO need something better than this
+        SimpleDependencyRelation::AllToAll
     }
 }
 

@@ -7,9 +7,7 @@ use std::{
 
 use crate::{
     abstract_machine::{
-        instructions::{InstrArgs, SimpleDependencyRelation},
-        vector::VectorComponent,
-        VMDataRef, VMScalarNameRef,
+        instructions::InstrArgs, vector::VectorComponent, VMDataRef, VMScalarNameRef,
     },
     hlsl::{
         compat::HLSLCompatibleAbstractVM,
@@ -53,8 +51,6 @@ pub enum HLSLOutcome {
     /// State that the output of an operation has been assigned to some components of a variable
     Operation {
         op: UnconcreteOpResult<HLSLVectorVarRef>,
-        // Mapping of each individual scalar output to each individual scalar input
-        dep_rel: SimpleDependencyRelation,
     },
     /// State that the program flow may end early due to some vector components
     EarlyOut { inputs: Vec<HLSLScalarVarRef> },
@@ -450,7 +446,6 @@ impl<TVM: HLSLCompatibleAbstractVM> VariableAbstractMachine<TVM> {
                             MaskedSwizzle::identity(expected_number_of_comps),
                         ),
                     ),
-                    dep_rel: SimpleDependencyRelation::AllToAll, // TODO fix - can't do PerComponent here because each of the inputs is only one component
                 });
 
                 (variable, MaskedSwizzle::identity(expected_number_of_comps))
@@ -494,12 +489,7 @@ impl<TVM: HLSLCompatibleAbstractVM> VariableAbstractMachine<TVM> {
                         new_var: var.clone(),
                     });
                 }
-                Outcome::Assign {
-                    op,
-                    inputs,
-                    output,
-                    dep_rel,
-                } => {
+                Outcome::Assign { op, inputs, output } => {
                     let typespec = op.get_typespec();
 
                     // Convert the input elements into variables
@@ -558,7 +548,7 @@ impl<TVM: HLSLCompatibleAbstractVM> VariableAbstractMachine<TVM> {
 
                     let op = UnconcreteOpResult::new(op, input_datarefs, output_dataref);
 
-                    self.add_outcome(HLSLOutcome::Operation { op, dep_rel })
+                    self.add_outcome(HLSLOutcome::Operation { op })
                 }
                 Outcome::EarlyOut { inputs } => {
                     let scalar_input_vars: Vec<_> = inputs
@@ -589,7 +579,7 @@ impl<TVM: HLSLCompatibleAbstractVM> VariableAbstractMachine<TVM> {
                 HLSLOutcome::Declaration { new_var } => {
                     HLSLAction::Declare(self.variables.concretize_var(new_var))
                 }
-                HLSLOutcome::Operation { op, dep_rel } => {
+                HLSLOutcome::Operation { op } => {
                     let inputs = op
                         .inputs
                         .iter()
@@ -607,7 +597,6 @@ impl<TVM: HLSLCompatibleAbstractVM> VariableAbstractMachine<TVM> {
                         op: op.op,
                         inputs: args.inputs,
                         output: output,
-                        dep_rel: *dep_rel,
                     }
                 }
                 HLSLOutcome::EarlyOut { inputs } => HLSLAction::EarlyOut {

@@ -2,9 +2,7 @@ use std::collections::HashMap;
 
 use crate::{
     abstract_machine::{
-        instructions::{InstrArgs, SimpleDependencyRelation},
-        vector::MaskedSwizzle,
-        Refinable, RefinableVMDataRef,
+        instructions::InstrArgs, vector::MaskedSwizzle, Refinable, RefinableVMDataRef,
     },
     amdil_text::{
         grammar,
@@ -33,7 +31,6 @@ enum InputMask {
 #[derive(Debug, Clone)]
 pub struct ALUInstruction {
     args: InstrArgs<AMDILAbstractVM>,
-    dep_relation: SimpleDependencyRelation,
     op: HLSLOperator,
 }
 
@@ -84,17 +81,15 @@ impl ALUArgsSpec {
         InstrArgs { outputs, inputs }
     }
 }
-type ALUInstructionSet =
-    HashMap<&'static str, (ALUArgsSpec, SimpleDependencyRelation, HLSLOperator)>;
+type ALUInstructionSet = HashMap<&'static str, (ALUArgsSpec, HLSLOperator)>;
 
-fn float_arith(op: ArithmeticOp) -> (ALUArgsSpec, SimpleDependencyRelation, HLSLOperator) {
+fn float_arith(op: ArithmeticOp) -> (ALUArgsSpec, HLSLOperator) {
     (
         ALUArgsSpec {
             input_kinds: vec![HLSLNumericKind::Float.into(), HLSLNumericKind::Float.into()],
             input_mask: InputMask::InheritFromFirstOutput,
             output_kinds: vec![HLSLNumericKind::Float.into()],
         },
-        SimpleDependencyRelation::PerComponent,
         HLSLOperator::Arithmetic(op),
     )
 }
@@ -107,7 +102,6 @@ lazy_static! {
                 input_mask: InputMask::InheritFromFirstOutput,
                 output_kinds: vec![HLSLKindBitmask::all().into()]
             },
-            SimpleDependencyRelation::PerComponent,
             HLSLOperator::Assign,
         )),
         ("dp4_ieee", (
@@ -116,7 +110,6 @@ lazy_static! {
                 input_mask: InputMask::TruncateTo(4),
                 output_kinds: vec![HLSLNumericKind::Float.into()],
             },
-            SimpleDependencyRelation::AllToAll,
             HLSLOperator::NumericI(NumericIntrinsic::Dot),
         )),
         ("dp3_ieee", (
@@ -125,7 +118,6 @@ lazy_static! {
                 input_mask: InputMask::TruncateTo(3),
                 output_kinds: vec![HLSLNumericKind::Float.into()],
             },
-            SimpleDependencyRelation::AllToAll,
             HLSLOperator::NumericI(NumericIntrinsic::Dot),
         )),
         ("min_ieee", (
@@ -134,7 +126,6 @@ lazy_static! {
                 input_mask: InputMask::InheritFromFirstOutput,
                 output_kinds: vec![HLSLNumericKind::Float.into()],
             },
-            SimpleDependencyRelation::PerComponent,
             HLSLOperator::NumericI(NumericIntrinsic::Min),
         )),
         ("max_ieee", (
@@ -143,7 +134,6 @@ lazy_static! {
                 input_mask: InputMask::InheritFromFirstOutput,
                 output_kinds: vec![HLSLNumericKind::Float.into()],
             },
-            SimpleDependencyRelation::PerComponent,
             HLSLOperator::NumericI(NumericIntrinsic::Max),
         )),
 
@@ -158,7 +148,6 @@ lazy_static! {
                 input_mask: InputMask::InheritFromFirstOutput,
                 output_kinds: vec![HLSLKindBitmask::INTEGER.into()],
             },
-            SimpleDependencyRelation::PerComponent,
             HLSLOperator::FauxBoolean(FauxBooleanOp::Lt),
         )),
         ("le", (
@@ -167,7 +156,6 @@ lazy_static! {
                 input_mask: InputMask::InheritFromFirstOutput,
                 output_kinds: vec![HLSLKindBitmask::INTEGER.into()],
             },
-            SimpleDependencyRelation::PerComponent,
             HLSLOperator::FauxBoolean(FauxBooleanOp::Le),
         )),
         ("gt", (
@@ -176,7 +164,6 @@ lazy_static! {
                 input_mask: InputMask::InheritFromFirstOutput,
                 output_kinds: vec![HLSLKindBitmask::INTEGER.into()],
             },
-            SimpleDependencyRelation::PerComponent,
             HLSLOperator::FauxBoolean(FauxBooleanOp::Gt),
         )),
         ("ge", (
@@ -185,7 +172,6 @@ lazy_static! {
                 input_mask: InputMask::InheritFromFirstOutput,
                 output_kinds: vec![HLSLKindBitmask::INTEGER.into()],
             },
-            SimpleDependencyRelation::PerComponent,
             HLSLOperator::FauxBoolean(FauxBooleanOp::Ge),
         )),
 
@@ -197,7 +183,6 @@ lazy_static! {
                 input_mask: InputMask::TruncateTo(3),
                 output_kinds: vec![HLSLKindBitmask::all().into()],
             },
-            SimpleDependencyRelation::AllToAll,
             HLSLOperator::FauxBoolean(FauxBooleanOp::Ternary)
         )),
     ]);
@@ -236,7 +221,6 @@ pub fn decode_alu(
 
             return Ok(Some(ALUInstruction {
                 args: arg_spec.sanitize_arguments(args),
-                dep_relation: SimpleDependencyRelation::AllToAll,
                 op: HLSLOperator::SampleI(SampleIntrinsic::Tex2D),
             }));
         }
@@ -256,8 +240,7 @@ pub fn decode_alu(
             // ok, produce the instruction
             Ok(Some(ALUInstruction {
                 args,
-                dep_relation: instr_spec.1,
-                op: instr_spec.2,
+                op: instr_spec.1,
             }))
         }
         (None, _) => Ok(None),
@@ -273,7 +256,6 @@ impl Action<AMDILAbstractVM> for ALUInstruction {
                 op: self.op,
                 inputs: self.args.inputs.clone(),
                 output: output.clone(),
-                dep_rel: self.dep_relation,
             })
             .collect()
     }

@@ -2,9 +2,7 @@ use std::hash::Hash;
 
 use crate::hlsl::{syntax::HLSLOperator, types::HLSLKind};
 
-use self::{
-    instructions::SimpleDependencyRelation, vector::MaskedSwizzle, vector::VectorComponent,
-};
+use self::{vector::MaskedSwizzle, vector::VectorComponent};
 
 pub mod analysis;
 pub mod display;
@@ -206,8 +204,6 @@ pub enum Outcome<TVM: AbstractVM> {
         output: TVM::TVectorDataRef,
         op: HLSLOperator,
         inputs: Vec<TVM::TVectorDataRef>,
-        /// Mapping of (input data ref) -> (output data refs affected by input data ref)
-        dep_rel: SimpleDependencyRelation,
     },
     /// Early out based on a set of inputs
     EarlyOut { inputs: Vec<TVM::TScalarDataRef> },
