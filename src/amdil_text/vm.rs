@@ -11,6 +11,7 @@ use crate::abstract_machine::{
 };
 use crate::hlsl::compat::HLSLCompatibleAbstractVM;
 use crate::hlsl::types::{HLSLHoleTypeMask, HLSLType};
+use crate::hlsl::HLSLVectorName;
 use crate::{Action, LegacyOutcome};
 
 use crate::abstract_machine::VMRef;
@@ -26,10 +27,48 @@ pub enum AMDILAbstractVM {}
 impl AbstractVM for AMDILAbstractVM {
     type Action = AMDILAction;
     type TVectorNameRef = AMDILNameRef;
-    type TVectorDataRef = AMDILDataRef;
+    type TVectorDataRef = RefinableVMDataRef<AMDILDataRef>;
     type TScalarDataRef = RefinableVMDataRef<(AMDILNameRef, VectorComponent)>;
 }
-impl HLSLCompatibleAbstractVM for AMDILAbstractVM {}
+impl HLSLCompatibleAbstractVM for AMDILAbstractVM {
+    fn vector_name_to_hlsl(name: &Self::TVectorNameRef) -> (HLSLVectorName, HLSLType, u8) {
+        let kind = name.base_type_mask();
+        let n_components = name.n_components();
+        let name = match name {
+            AMDILNameRef::NamedRegister(name) | AMDILNameRef::NamedLiteral(name) => {
+                HLSLVectorName::GenericRegister(name.clone())
+            }
+            AMDILNameRef::Literal(data) => HLSLVectorName::Literal(*data),
+            AMDILNameRef::NamedBuffer { name, idx } => HLSLVectorName::ArrayElement {
+                of: Box::new(HLSLVectorName::ShaderInput(name.clone())),
+                idx: *idx,
+            },
+            AMDILNameRef::NamedInputRegister(name) => HLSLVectorName::ShaderInput(name.clone()),
+            AMDILNameRef::NamedOutputRegister(name) => HLSLVectorName::ShaderOutput(name.clone()),
+            AMDILNameRef::Texture(idx) => HLSLVectorName::Texture(*idx),
+        };
+        (name, kind, n_components)
+    }
+
+    fn vector_data_to_hlsl(data: &Self::TVectorDataRef) -> (HLSLVectorName, HLSLType, u8) {
+        let kind = data.kind;
+        let n_components = data.swizzle().num_used_components();
+        let name = match data.name() {
+            AMDILNameRef::NamedRegister(name) | AMDILNameRef::NamedLiteral(name) => {
+                HLSLVectorName::GenericRegister(name.clone())
+            }
+            AMDILNameRef::Literal(data) => HLSLVectorName::Literal(*data),
+            AMDILNameRef::NamedBuffer { name, idx } => HLSLVectorName::ArrayElement {
+                of: Box::new(HLSLVectorName::ShaderInput(name.clone())),
+                idx: *idx,
+            },
+            AMDILNameRef::NamedInputRegister(name) => HLSLVectorName::ShaderInput(name.clone()),
+            AMDILNameRef::NamedOutputRegister(name) => HLSLVectorName::ShaderOutput(name.clone()),
+            AMDILNameRef::Texture(idx) => HLSLVectorName::Texture(*idx),
+        };
+        (name, kind, n_components)
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum AMDILNameRef {
@@ -130,6 +169,20 @@ impl VMDataRef<AMDILNameRef> for AMDILDataRef {
 impl VMVectorDataRef<AMDILNameRef> for AMDILDataRef {
     fn swizzle(&self) -> MaskedSwizzle {
         self.swizzle
+    }
+}
+impl VMDataRef<AMDILNameRef> for RefinableVMDataRef<AMDILDataRef> {
+    fn name(&self) -> &AMDILNameRef {
+        &self.data.name
+    }
+
+    fn type_mask(&self) -> HLSLType {
+        self.kind
+    }
+}
+impl VMVectorDataRef<AMDILNameRef> for RefinableVMDataRef<AMDILDataRef> {
+    fn swizzle(&self) -> MaskedSwizzle {
+        self.data.swizzle
     }
 }
 impl From<AMDILDataRef> for RefinableVMDataRef<AMDILDataRef> {

@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use crate::{
     abstract_machine::{
-        instructions::{ArgsSpec, DependencyRelation, InstrArgs, SimpleDependencyRelation},
+        instructions::{DependencyRelation, InstrArgs, SimpleDependencyRelation},
         vector::MaskedSwizzle,
         Refinable, RefinableVMDataRef,
     },
@@ -12,10 +12,7 @@ use crate::{
     },
     hlsl::{
         compat::{HLSLCompatibleAction, HLSLCompatibleOutcome},
-        syntax::{
-            ArithmeticOp, FauxBooleanOp, HLSLOperator, NumericIntrinsic, SampleIntrinsic,
-            UnconcreteOpResult,
-        },
+        syntax::{ArithmeticOp, FauxBooleanOp, HLSLOperator, NumericIntrinsic, SampleIntrinsic},
         types::{HLSLConcreteType, HLSLHoleTypeMask, HLSLNumericType, HLSLType},
     },
     Action, LegacyOutcome,
@@ -48,7 +45,7 @@ struct ALUArgsSpec {
     input_mask: InputMask,
     output_kinds: Vec<HLSLType>,
 }
-impl ArgsSpec<AMDILAbstractVM> for ALUArgsSpec {
+impl ALUArgsSpec {
     fn sanitize_arguments(&self, args: Vec<AMDILDataRef>) -> InstrArgs<AMDILAbstractVM> {
         let (output_elems, input_elems) = args.split_at(self.output_kinds.len());
         assert_eq!(output_elems.len(), self.output_kinds.len());
@@ -299,56 +296,15 @@ impl Action<AMDILAbstractVM> for ALUInstruction {
 }
 impl HLSLCompatibleAction<AMDILAbstractVM> for ALUInstruction {
     fn hlsl_outcomes(&self) -> Vec<HLSLCompatibleOutcome<AMDILAbstractVM>> {
-        let comp_outcomes = Self::outcomes(&self);
         self.args
             .outputs
             .iter()
-            .map(|output| HLSLCompatibleOutcome::Operation {
-                op: UnconcreteOpResult::new(
-                    self.op,
-                    self.args
-                        .inputs
-                        .iter()
-                        .map(|src| src.data.clone().into_hlsl(src.kind))
-                        .collect(),
-                    output.data.clone().into_hlsl(output.kind),
-                ),
-                component_deps: comp_outcomes
-                    .iter()
-                    .filter_map(|out| match out {
-                        LegacyOutcome::Dependency {
-                            output: output_comp,
-                            inputs: inputs_comps,
-                        } => {
-                            if output_comp.data.0 == output.data.name {
-                                Some((output_comp.clone(), inputs_comps.clone()))
-                            } else {
-                                None
-                            }
-                        }
-                        _ => panic!("ALUInstruction::outcomes returned a not-dependency"),
-                    })
-                    .collect(),
+            .map(|output| HLSLCompatibleOutcome::Assign {
+                op: self.op,
+                inputs: self.args.inputs.clone(),
+                output: output.clone(),
+                dep_rel: todo!(),
             })
             .collect()
-        // vec![HLSLCompatibleOutcome::Operation {
-        //     opname: self.name.to_owned(),
-        //     output_dataspec: self.dst.clone().into_hlsl(self.data_kind),
-        //     input_dataspecs: self
-        //         .srcs
-        //         .iter()
-        //         .map(|src| src.clone().into_hlsl(self.data_kind))
-        //         .collect(),
-        //     component_deps: comp_outcomes
-        //         .into_iter()
-        //         .map(|out| match out {
-        //             Outcome::Dependency {
-        //                 output: output_comps,
-        //                 inputs: inputs_comps,
-        //             }, (output_comps, inputs_comps),
-        //             _, panic!("ALUInstruction::outcomes returned a not-dependency"),
-        //         })
-        //         .collect(),
-        // }]
     }
 }

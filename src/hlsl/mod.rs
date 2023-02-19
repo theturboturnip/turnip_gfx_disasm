@@ -41,7 +41,7 @@ impl VMVectorNameRef for HLSLVector {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum HLSLVectorName {
     Texture(u64),
-    GenericRegister(u64),
+    GenericRegister(String),
     ShaderInput(String),
     ShaderOutput(String),
     Literal([u64; 4]),

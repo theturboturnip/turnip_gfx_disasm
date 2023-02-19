@@ -1,17 +1,8 @@
 //! This module contains generic structures useful for defining and displaying large instruction sets.
 //!
-//! Each instruction has X inputs and Y outputs.
-//! Each input/output should have a kind, which may be a [HLSLType::Hole],
-//! in which case the kind may be dynamically decided based on context
-//! (TODO: Allow Holes to be numbered, i.e. Hole(1) and Hole(2) are not necessarily the same type, for more complicated expressions?)
-//!
-//! Each instruction, at least for vector machines, may modify the arguments e.g. mask off elements? for correctness.
-//! This masking may be dependent on other arguments e.g. if the output has certain elements masked out, those elements could be masked out in the inputs.
-//!
-//! TODO should this be in crate::abstract_machine, or at the top level?
-//!
+//!  TODO Merge hole handling with hlsl::syntax setup
 
-use super::{vector::VectorComponent, AbstractVM, RefinableVMDataRef, VMVectorDataRef};
+use super::{vector::VectorComponent, AbstractVM, VMVectorDataRef};
 
 /// Trait for a type that manages a set of possible instructions
 pub trait InstructionSet<TVM: AbstractVM>: Sized {
@@ -54,8 +45,8 @@ impl<TVM: AbstractVM, TArgsSpec: ArgsSpec<TVM>, TDepRelation: DependencyRelation
 /// Struct holding the arguments to an instruction for a given VM
 #[derive(Debug, Clone)]
 pub struct InstrArgs<TVM: AbstractVM> {
-    pub outputs: Vec<RefinableVMDataRef<TVM::TVectorDataRef>>,
-    pub inputs: Vec<RefinableVMDataRef<TVM::TVectorDataRef>>,
+    pub outputs: Vec<TVM::TVectorDataRef>,
+    pub inputs: Vec<TVM::TVectorDataRef>,
 }
 
 /// Trait for types which can map the indivdual output scalars of an instruction to the input scalars that affect them.
@@ -87,18 +78,16 @@ impl<TVM: AbstractVM> DependencyRelation<TVM> for SimpleDependencyRelation {
     ) -> Vec<((usize, VectorComponent), Vec<(usize, VectorComponent)>)> {
         // for output in outputs
         //     for component in output
-        let expanded_outs = args.outputs.iter().enumerate().map(|(i, elem)| {
-            elem.data
-                .decompose()
-                .into_iter()
-                .map(move |(_, comp)| (i, comp))
-        });
-        let expanded_inputs = args.inputs.iter().enumerate().map(|(i, elem)| {
-            elem.data
-                .decompose()
-                .into_iter()
-                .map(move |(_, comp)| (i, comp))
-        });
+        let expanded_outs = args
+            .outputs
+            .iter()
+            .enumerate()
+            .map(|(i, elem)| elem.decompose().into_iter().map(move |(_, comp)| (i, comp)));
+        let expanded_inputs = args
+            .inputs
+            .iter()
+            .enumerate()
+            .map(|(i, elem)| elem.decompose().into_iter().map(move |(_, comp)| (i, comp)));
         match self {
             Self::AllToAll => {
                 // Put all inputs in a vector

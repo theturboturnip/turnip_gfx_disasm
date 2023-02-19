@@ -1,9 +1,9 @@
-use crate::hlsl::{
-    compat::{
-        HLSLCompatibleAction, HLSLCompatibleOutcome, HLSLDataRefSpec, HLSLDeclarationSpec,
-        HLSLDeclarationSpecType, HLSLNameRefType,
+use crate::{
+    abstract_machine::vector::{MaskedSwizzle, VectorComponent},
+    hlsl::{
+        compat::{HLSLCompatibleAction, HLSLCompatibleOutcome},
+        syntax::HLSLOperator,
     },
-    types::{HLSLConcreteType, HLSLHoleTypeMask, HLSLType},
 };
 
 use super::{AMDILAbstractVM, AMDILDataRef, AMDILDeclaration, AMDILNameRef};
@@ -11,56 +11,46 @@ use super::{AMDILAbstractVM, AMDILDataRef, AMDILDeclaration, AMDILNameRef};
 impl HLSLCompatibleAction<AMDILAbstractVM> for AMDILDeclaration {
     fn hlsl_outcomes(&self) -> Vec<HLSLCompatibleOutcome<AMDILAbstractVM>> {
         match self {
-            AMDILDeclaration::TextureResource(id) => vec![HLSLCompatibleOutcome::Declaration {
-                declspec: HLSLDeclarationSpec {
-                    vm_name_ref: AMDILNameRef::Texture(*id),
-                    kind: HLSLConcreteType::Texture2D.into(),
-                    n_components: 1,
-                    decl_type: HLSLDeclarationSpecType::Texture(*id),
-                    name: format!("tex{:>03}", id),
-                },
-                literal_value: None,
-            }],
+            AMDILDeclaration::TextureResource(id) => {
+                vec![HLSLCompatibleOutcome::Declare(AMDILNameRef::Texture(*id))]
+            }
             AMDILDeclaration::NamedLiteral(name, value) => {
-                vec![HLSLCompatibleOutcome::Declaration {
-                    declspec: HLSLDeclarationSpec {
-                        vm_name_ref: AMDILNameRef::NamedLiteral(name.clone()),
-                        kind: HLSLHoleTypeMask::NUMERIC.into(),
-                        n_components: 4,
-                        decl_type: HLSLDeclarationSpecType::GenericRegister,
-                        name: name.clone(),
+                let name = AMDILNameRef::NamedLiteral(name.clone());
+                vec![
+                    HLSLCompatibleOutcome::Declare(name.clone()),
+                    HLSLCompatibleOutcome::Assign {
+                        output: AMDILDataRef {
+                            name,
+                            swizzle: MaskedSwizzle::identity(4),
+                        }
+                        .into(),
+                        op: HLSLOperator::Assign,
+                        inputs: vec![
+                            AMDILDataRef::literal(*value, MaskedSwizzle::identity(4)).into()
+                        ],
+                        dep_rel: vec![
+                            (VectorComponent::X, vec![(0, VectorComponent::X)]),
+                            (VectorComponent::Y, vec![(0, VectorComponent::Y)]),
+                            (VectorComponent::Z, vec![(0, VectorComponent::Z)]),
+                            (VectorComponent::W, vec![(0, VectorComponent::W)]),
+                        ],
                     },
-                    literal_value: Some(*value),
-                }]
+                ]
             }
             AMDILDeclaration::NamedInputRegister {
                 name,
                 len,
                 reg_type: _,
-            } => vec![HLSLCompatibleOutcome::Declaration {
-                declspec: HLSLDeclarationSpec {
-                    vm_name_ref: AMDILNameRef::NamedInputRegister(name.clone()),
-                    kind: HLSLHoleTypeMask::NUMERIC_FLOAT.into(),
-                    n_components: *len,
-                    decl_type: HLSLDeclarationSpecType::ShaderInput(name.clone()),
-                    name: name.clone(),
-                },
-                literal_value: None,
-            }],
+            } => vec![HLSLCompatibleOutcome::Declare(
+                AMDILNameRef::NamedInputRegister(name.clone()),
+            )],
             AMDILDeclaration::NamedOutputRegister {
                 name,
                 len,
                 reg_type: _,
-            } => vec![HLSLCompatibleOutcome::Declaration {
-                declspec: HLSLDeclarationSpec {
-                    vm_name_ref: AMDILNameRef::NamedOutputRegister(name.clone()),
-                    kind: HLSLHoleTypeMask::NUMERIC_FLOAT.into(),
-                    n_components: *len,
-                    decl_type: HLSLDeclarationSpecType::ShaderOutput(name.clone()),
-                    name: name.clone(),
-                },
-                literal_value: None,
-            }],
+            } => vec![HLSLCompatibleOutcome::Declare(
+                AMDILNameRef::NamedOutputRegister(name.clone()),
+            )],
             _ => vec![],
             // TODO re-enable this
             // AMDILDeclaration::NamedBuffer { name, len } => {
@@ -78,30 +68,6 @@ impl HLSLCompatibleAction<AMDILAbstractVM> for AMDILDeclaration {
             //         literal_value: None,
             //     }]
             // }
-        }
-    }
-}
-
-impl AMDILDataRef {
-    pub fn into_hlsl(self, kind: HLSLType) -> HLSLDataRefSpec<AMDILNameRef> {
-        let ref_type = match &self.name {
-            AMDILNameRef::Texture(id) => HLSLNameRefType::Texture(*id),
-            AMDILNameRef::Literal(data) => HLSLNameRefType::Literal(*data),
-            AMDILNameRef::NamedBuffer { name, idx } => HLSLNameRefType::ArrayElement {
-                of: Box::new(HLSLNameRefType::ShaderInput(name.clone())),
-                idx: *idx,
-            },
-            AMDILNameRef::NamedLiteral(_) | AMDILNameRef::NamedRegister(_) => {
-                HLSLNameRefType::GenericRegister
-            }
-            AMDILNameRef::NamedInputRegister(name) => HLSLNameRefType::ShaderInput(name.clone()),
-            AMDILNameRef::NamedOutputRegister(name) => HLSLNameRefType::ShaderOutput(name.clone()),
-        };
-        HLSLDataRefSpec {
-            vm_name_ref: self.name,
-            swizzle: self.swizzle,
-            name_ref_type: ref_type,
-            kind,
         }
     }
 }

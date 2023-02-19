@@ -125,7 +125,7 @@ impl<TData: VMRef> Refinable for RefinableVMDataRef<TData> {
         })
     }
 }
-impl<T: VMVectorNameRef> VMRef for RefinableVMDataRef<VMScalarNameRef<T>> {
+impl<T: VMRef> VMRef for RefinableVMDataRef<T> {
     fn is_pure_input(&self) -> bool {
         self.data.is_pure_input()
     }
@@ -219,16 +219,16 @@ pub enum Outcome<TVM: AbstractVM> {
         op: HLSLOperator,
         inputs: Vec<TVM::TVectorDataRef>,
         /// ```python
-        /// for i in len(dep_rel)
-        ///     output.decompose()[i] depends on [
+        /// for (comp, inputs) in dep_rel
+        ///     (output.name(), comp) depends on [
         ///         (inputs[input_idx], input_comp)
-        ///         for (input_idx, input_comp) in dep_rel[i]
+        ///         for (input_idx, input_comp) in inputs
         ///     ]
         /// ```
-        dep_rel: Vec<Vec<(usize, VectorComponent)>>,
+        dep_rel: Vec<(VectorComponent, Vec<(usize, VectorComponent)>)>,
     },
     /// Early out based on a set of inputs
-    EarlyOut { inputs: Vec<TVM::TVectorDataRef> },
+    EarlyOut { inputs: Vec<TVM::TScalarDataRef> },
 }
 
 /// Trait for programs that run on an abstract VM

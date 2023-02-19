@@ -3,10 +3,7 @@ use crate::{
     AbstractVM, Action, LegacyOutcome,
 };
 
-use super::{
-    compat::HLSLCompatibleAbstractVM, syntax::HLSLOperator, HLSLScalarDataRef, HLSLVector,
-    HLSLVectorDataRef,
-};
+use super::{syntax::HLSLOperator, HLSLScalarDataRef, HLSLVector, HLSLVectorDataRef};
 
 /// The type of Action held by Programs for the [HLSLAbstractVM]
 #[derive(Debug)]
@@ -44,7 +41,6 @@ impl AbstractVM for HLSLAbstractVM {
     type TVectorDataRef = HLSLVectorDataRef;
     type TScalarDataRef = HLSLScalarDataRef;
 }
-impl HLSLCompatibleAbstractVM for HLSLAbstractVM {}
 
 impl VMDataRef<HLSLVector> for HLSLScalarDataRef {
     fn name(&self) -> &HLSLVector {
