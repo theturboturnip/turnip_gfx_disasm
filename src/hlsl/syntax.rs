@@ -410,7 +410,10 @@ impl Operator for NumericIntrinsic {
     fn dep_rel(&self) -> SimpleDependencyRelation {
         // v3 = max(v1, v2)
         // implies v3.x = max(v1.x, v2.x) etc
-        SimpleDependencyRelation::PerComponent
+        match self {
+            Self::Min | Self::Max => SimpleDependencyRelation::PerComponent,
+            Self::Dot => SimpleDependencyRelation::AllToAll,
+        }
     }
 }
 
@@ -456,7 +459,11 @@ impl Operator for FauxBooleanOp {
     }
 
     fn dep_rel(&self) -> SimpleDependencyRelation {
-        SimpleDependencyRelation::PerComponent
+        match self {
+            // TODO something better
+            Self::Ternary => SimpleDependencyRelation::AllToAll,
+            _ => SimpleDependencyRelation::PerComponent,
+        }
     }
 }
 
