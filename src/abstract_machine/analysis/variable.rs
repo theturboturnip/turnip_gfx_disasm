@@ -16,7 +16,7 @@ use crate::{
         vm::{HLSLAbstractVM, HLSLAction},
         HLSLScalarDataRef, HLSLVector, HLSLVectorDataRef, HLSLVectorName,
     },
-    Action, Outcome, VMVectorDataRef, VMVectorNameRef,
+    Action, Outcome, VMRef, VMVectorDataRef, VMVectorNameRef,
 };
 use crate::{
     abstract_machine::{
@@ -30,7 +30,7 @@ use crate::{
 /// See [HLSLVariableInfo].
 ///
 /// TODO HLSLVariable has a fixed lifetime (the lifetime of the variable store). We really don't need to Rc it, but we might want to RefCell it still
-pub type HLSLVariable = Rc<RefCell<HLSLVariableInfo>>;
+pub type HLSLVariableRef = usize;
 
 /// Metadata of [HLSLVariable] i.e. an unswizzled vector available to operations in the HLSL virtual machine
 #[derive(Debug)]
@@ -47,7 +47,7 @@ pub struct HLSLVariableInfo {
 #[derive(Debug, Clone)]
 pub enum HLSLOutcome {
     /// State that a new variable exists without setting its value
-    Declaration { new_var: HLSLVariable },
+    Declaration { new_var: HLSLVariableRef },
     /// State that the output of an operation has been assigned to some components of a variable
     Operation {
         op: UnconcreteOpResult<HLSLVectorVarRef>,
@@ -57,19 +57,20 @@ pub enum HLSLOutcome {
 }
 
 /// A reference to a single scalar in the HLSL virtual machine
-pub type HLSLScalarVarRef = (HLSLVariable, VectorComponent);
+pub type HLSLScalarVarRef = (HLSLVariableRef, VectorComponent);
 /// A reference to a swizzled vector in the HLSL virtual machine
-pub type HLSLVectorVarRef = (HLSLVariable, MaskedSwizzle);
+pub type HLSLVectorVarRef = (HLSLVariableRef, MaskedSwizzle);
 impl UnconcreteOpTarget for HLSLVectorVarRef {}
 
 #[derive(Debug)]
 struct VariableStore<TVM: HLSLCompatibleAbstractVM> {
-    general_variables: HashMap<HLSLVectorName, HLSLVariable>,
-    inputs: HashMap<HLSLVectorName, HLSLVariable>,
-    outputs: HashMap<HLSLVectorName, HLSLVariable>,
+    general_variables: HashMap<HLSLVectorName, HLSLVariableRef>,
+    inputs: HashMap<HLSLVectorName, HLSLVariableRef>,
+    outputs: HashMap<HLSLVectorName, HLSLVariableRef>,
     next_general_var_id: u64,
     kind_mask_vec: Vec<HLSLKind>,
-    all_variables: Vec<HLSLVariable>,
+    /// Keeper of all variables that have ever existed. Must always grow and never have elements removed, to keep [HLSLVariableRef] indices stable
+    all_variables: Vec<HLSLVariableInfo>,
     _phantom: PhantomData<TVM>,
 }
 impl<TVM: HLSLCompatibleAbstractVM> VariableStore<TVM> {
@@ -93,7 +94,7 @@ impl<TVM: HLSLCompatibleAbstractVM> VariableStore<TVM> {
         vector_name: HLSLVectorName,
         initial_kind: HLSLKind,
         n_components: u8,
-    ) -> HLSLVariable {
+    ) -> HLSLVariableRef {
         let vector_ref = vector_name.clone();
         // Push a new kind to the vec
         let kind_idx = {
@@ -102,12 +103,12 @@ impl<TVM: HLSLCompatibleAbstractVM> VariableStore<TVM> {
             kind_idx
         };
         // Create the variable info by referencing the previously pushed kind
-        let variable = Rc::new(RefCell::new(HLSLVariableInfo {
+        let variable = self.all_variables.len();
+        self.all_variables.push(HLSLVariableInfo {
             vector_name,
             kind_idx,
             n_components,
-        }));
-        self.all_variables.push(variable.clone());
+        });
         let insert_in = match vector_ref {
             HLSLVectorName::ShaderInput(_)
             | HLSLVectorName::ArrayElement { .. }
@@ -124,7 +125,7 @@ impl<TVM: HLSLCompatibleAbstractVM> VariableStore<TVM> {
             }
             HLSLVectorName::GenericRegister(_) => &mut self.general_variables,
         };
-        let preexisting_variable = insert_in.insert(vector_ref.clone(), variable.clone());
+        let preexisting_variable = insert_in.insert(vector_ref.clone(), variable);
         if let Some(x) = preexisting_variable {
             panic!(
                 "Inserting variable {:?} with key {:?} into VariableStore failed - already occupied by {:?}",
@@ -142,7 +143,7 @@ impl<TVM: HLSLCompatibleAbstractVM> VariableStore<TVM> {
     pub fn add_new_variable_from_compat_name(
         &mut self,
         var_name: &TVM::TVectorNameRef,
-    ) -> HLSLVariable {
+    ) -> HLSLVariableRef {
         let (vector_name, vector_kind, n_components) = TVM::vector_name_to_hlsl(&var_name);
         self.add_new_variable_from_info(vector_name, vector_kind, n_components)
     }
@@ -153,7 +154,7 @@ impl<TVM: HLSLCompatibleAbstractVM> VariableStore<TVM> {
         old_name: HLSLVectorName,
         kind: HLSLKind,
         n_components: u8,
-    ) -> HLSLVariable {
+    ) -> HLSLVariableRef {
         let vector_name = self.remap_generic_name(old_name);
         self.add_new_variable_from_info(vector_name, kind, n_components)
     }
@@ -176,21 +177,28 @@ impl<TVM: HLSLCompatibleAbstractVM> VariableStore<TVM> {
         }
     }
 
+    pub fn deref_var(&self, var: HLSLVariableRef) -> &HLSLVariableInfo {
+        &self.all_variables[var]
+    }
+    fn deref_mut_var(&mut self, var: HLSLVariableRef) -> &HLSLVariableInfo {
+        &mut self.all_variables[var]
+    }
+
     /// Given an HLSLVariable, get its kind by indexing into the kind_mask_vec
-    pub fn get_variable_kind(&mut self, var: &HLSLVariable) -> HLSLKind {
-        self.kind_mask_vec[var.borrow().kind_idx]
+    pub fn get_variable_kind(&mut self, var: HLSLVariableRef) -> HLSLKind {
+        self.kind_mask_vec[self.deref_var(var).kind_idx]
     }
 
     /// Given a set of HLSLVariables, rewrite them all to use the same index in the kind_mask_vec
     /// while applying an additional constraint to that mask.
     ///
     /// Borrows the first element of the iterator immutably, then borrows the rest mutably.
-    pub fn constrain_var_types<I: Iterator<Item = HLSLVariable>>(
+    pub fn constrain_var_types<I: Iterator<Item = HLSLVariableRef>>(
         &mut self,
         vars: I,
         extra_constraint: HLSLKind,
     ) -> Result<(), Vec<HLSLKind>> {
-        let new_mask_idx = self.combine_mask_indices(vars.map(|v| v.borrow().kind_idx))?;
+        let new_mask_idx = self.combine_mask_indices(vars.map(|v| self.deref_var(v).kind_idx))?;
         match new_mask_idx {
             None => return Ok(()),
             Some(new_mask_idx) => {
@@ -236,17 +244,16 @@ impl<TVM: HLSLCompatibleAbstractVM> VariableStore<TVM> {
         }
         self.kind_mask_vec[first_idx] = new_mask;
         // Rewrite all the kind_idx values in all variables referencing the other masks
-        for var in self.all_variables.iter() {
-            // TODO ugh this is awful!!!
-            if indices_set.contains(&var.borrow().kind_idx) {
-                var.borrow_mut().kind_idx = first_idx;
+        for var in self.all_variables.iter_mut() {
+            if indices_set.contains(&var.kind_idx) {
+                var.kind_idx = first_idx;
             }
         }
         Ok(Some(first_idx))
     }
 
-    fn concretize_var(&self, var: &HLSLVariable) -> HLSLVector {
-        let var = var.borrow();
+    fn concretize_var(&self, var: HLSLVariableRef) -> HLSLVector {
+        let var = self.deref_var(var);
         HLSLVector {
             vector_name: var.vector_name.clone(),
             kind: self.kind_mask_vec[var.kind_idx],
@@ -254,10 +261,10 @@ impl<TVM: HLSLCompatibleAbstractVM> VariableStore<TVM> {
         }
     }
     pub fn concretize_scalar_var_ref(&self, var: &HLSLScalarVarRef) -> HLSLScalarDataRef {
-        (self.concretize_var(&var.0), var.1)
+        (self.concretize_var(var.0), var.1)
     }
     pub fn concretize_vector_var_ref(&self, var: &HLSLVectorVarRef) -> HLSLVectorDataRef {
-        (self.concretize_var(&var.0), var.1)
+        (self.concretize_var(var.0), var.1)
     }
 }
 
@@ -293,9 +300,9 @@ impl<TVM: HLSLCompatibleAbstractVM> VariableAbstractMachine<TVM> {
         &mut self,
         vm_name_ref: &TVM::TVectorNameRef,
         swizzle: &MaskedSwizzle,
-        variable: &HLSLVariable,
+        variable: HLSLVariableRef,
     ) {
-        let expected_n_components = variable.borrow().n_components as usize;
+        let expected_n_components = self.variables.deref_var(variable).n_components as usize;
         // Filter-map over the components of the swizzle to remove None
         swizzle
             .0
@@ -318,11 +325,11 @@ impl<TVM: HLSLCompatibleAbstractVM> VariableAbstractMachine<TVM> {
         old_name: HLSLVectorName,
         kind: HLSLKind,
         n_components: u8,
-    ) -> HLSLVariable {
+    ) -> HLSLVariableRef {
         let variable = self
             .variables
             .add_new_variable_from_dataspec(old_name, kind, n_components);
-        self.map_dataspec_directly_to_variable(&var_data.name(), &var_data.swizzle(), &variable);
+        self.map_dataspec_directly_to_variable(&var_data.name(), &var_data.swizzle(), variable);
         variable
     }
 
@@ -365,7 +372,7 @@ impl<TVM: HLSLCompatibleAbstractVM> VariableAbstractMachine<TVM> {
                     None => true,
                     // 2) at least one component has a different type to it's previous usage
                     Some((old_var, _)) => {
-                        let old_kind = self.variables.get_variable_kind(old_var);
+                        let old_kind = self.variables.get_variable_kind(*old_var);
                         // If the new kind and the old kind don't intersect, must be a new variable
                         dataspec_kind.intersection(old_kind).is_none()
                     }
@@ -391,7 +398,7 @@ impl<TVM: HLSLCompatibleAbstractVM> VariableAbstractMachine<TVM> {
 
             let mut old_var_iter = scalar_comps_as_vars.iter(); //Rc::ptr_eq
             let (expected_old_var, _) = old_var_iter.next().unwrap();
-            if old_var_iter.any(|(old_var, _)| !Rc::ptr_eq(expected_old_var, old_var)) {
+            if old_var_iter.any(|(old_var, _)| *expected_old_var != *old_var) {
                 // 3) not all components map to the same old vector variable
                 // make a new variable that doesn't depend on any previous values
                 let variable = self.add_and_map_new_variable_from_info(
@@ -482,12 +489,10 @@ impl<TVM: HLSLCompatibleAbstractVM> VariableAbstractMachine<TVM> {
                     self.map_dataspec_directly_to_variable(
                         &var_name,
                         &MaskedSwizzle::identity(n_components as usize),
-                        &var,
+                        var,
                     );
 
-                    self.add_outcome(HLSLOutcome::Declaration {
-                        new_var: var.clone(),
-                    });
+                    self.add_outcome(HLSLOutcome::Declaration { new_var: var });
                 }
                 Outcome::Assign { op, inputs, output } => {
                     let typespec = op.get_typespec();
@@ -577,7 +582,7 @@ impl<TVM: HLSLCompatibleAbstractVM> VariableAbstractMachine<TVM> {
             .iter()
             .map(|(_, outcome)| match outcome {
                 HLSLOutcome::Declaration { new_var } => {
-                    HLSLAction::Declare(self.variables.concretize_var(new_var))
+                    HLSLAction::Declare(self.variables.concretize_var(*new_var))
                 }
                 HLSLOutcome::Operation { op } => {
                     let inputs = op

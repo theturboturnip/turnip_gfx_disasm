@@ -5,9 +5,9 @@
 //! All data is represented as 4-component vectors.
 //! Inputs to instructions can be swizzled i.e. can have their components reordered or reused (v0.xyxx, v3.wzwx etc. are valid)
 
-use crate::abstract_machine::vector::{MaskedSwizzle, VectorComponent};
+use crate::abstract_machine::vector::MaskedSwizzle;
 use crate::abstract_machine::{
-    AbstractVM, RefinableVMDataRef, VMDataRef, VMVectorDataRef, VMVectorNameRef,
+    AbstractVM, RefinableVMDataRef, VMDataRef, VMScalarNameRef, VMVectorDataRef, VMVectorNameRef,
 };
 use crate::hlsl::compat::HLSLCompatibleAbstractVM;
 use crate::hlsl::syntax::HLSLOperator;
@@ -27,16 +27,15 @@ impl AbstractVM for AMDILAbstractVM {
     type Action = AMDILAction;
     type TVectorNameRef = AMDILNameRef;
     type TVectorDataRef = RefinableVMDataRef<AMDILDataRef>;
-    type TScalarDataRef = RefinableVMDataRef<(AMDILNameRef, VectorComponent)>;
+    type TScalarDataRef = RefinableVMDataRef<VMScalarNameRef<AMDILNameRef>>;
 }
 impl HLSLCompatibleAbstractVM for AMDILAbstractVM {
     fn vector_name_to_hlsl(name: &Self::TVectorNameRef) -> (HLSLVectorName, HLSLKind, u8) {
         let kind = name.base_type_mask();
         let n_components = name.n_components();
         let name = match name {
-            AMDILNameRef::NamedRegister(name) | AMDILNameRef::NamedLiteral(name) => {
-                HLSLVectorName::GenericRegister(name.clone())
-            }
+            AMDILNameRef::NamedRegister(name) => HLSLVectorName::GenericRegister(name.clone()),
+            AMDILNameRef::NamedLiteral(name) => HLSLVectorName::ShaderInput(name.clone()),
             AMDILNameRef::Literal(data) => HLSLVectorName::Literal(*data),
             AMDILNameRef::NamedBuffer { name, idx } => HLSLVectorName::ArrayElement {
                 of: Box::new(HLSLVectorName::ShaderInput(name.clone())),
