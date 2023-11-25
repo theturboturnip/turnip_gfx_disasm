@@ -72,9 +72,6 @@ impl<TVM: AbstractVM> ScalarDependencies<TVM> {
                         for input_scl in input_scls.iter() {
                             self.resolve_input_on(&mut resolved_inputs, &input_scl);
                         }
-                        for input_scl in &self.discard_dependencies {
-                            self.resolve_input_on(&mut resolved_inputs, input_scl);
-                        }
                         self.dependents.insert(output_scl, resolved_inputs);
                     }
                 }
