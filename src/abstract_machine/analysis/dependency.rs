@@ -2,8 +2,8 @@ use std::collections::{HashMap, HashSet};
 
 use crate::{
     abstract_machine::{
-        instructions::{DependencyRelation, InstrArgs},
-        AbstractVM, VMRef, VMScalarDataRef, VMScalarNameRef,
+        instructions::{DependencyRelation, InstrArgs, SimpleDependencyRelation},
+        AbstractVM, VMName
     },
     hlsl::syntax::Operator,
     Action, Outcome,
@@ -11,10 +11,10 @@ use crate::{
 
 /// Dependency solver for scalar-based abstract VMs
 pub struct ScalarDependencies<TVM: AbstractVM> {
-    discard_dependencies: HashSet<VMScalarNameRef<TVM::TVectorNameRef>>,
+    discard_dependencies: HashSet<TVM::Scalar>,
     dependents: HashMap<
-        VMScalarNameRef<TVM::TVectorNameRef>,
-        HashSet<VMScalarNameRef<TVM::TVectorNameRef>>,
+        TVM::Scalar,
+        HashSet<TVM::Scalar>,
     >,
 }
 impl<TVM: AbstractVM> ScalarDependencies<TVM> {
@@ -27,8 +27,8 @@ impl<TVM: AbstractVM> ScalarDependencies<TVM> {
 
     fn resolve_input_on(
         &self,
-        resolved_inputs: &mut HashSet<VMScalarNameRef<TVM::TVectorNameRef>>,
-        input: &VMScalarNameRef<TVM::TVectorNameRef>,
+        resolved_inputs: &mut HashSet<TVM::Scalar>,
+        input: &TVM::Scalar,
     ) {
         if input.is_pure_input() {
             // Pure inputs are not resolved into their dependencies
@@ -61,11 +61,11 @@ impl<TVM: AbstractVM> ScalarDependencies<TVM> {
                             );
                         continue;
                     }
-                    let args = InstrArgs::<TVM> {
+                    let args = InstrArgs::<TVM::Vector> {
                         outputs: vec![output],
                         inputs: inputs,
                     };
-                    for (output_scl, input_scls) in op.dep_rel().determine_dependencies(&args) {
+                    for (output_scl, input_scls) in <SimpleDependencyRelation as DependencyRelation<TVM>>::determine_dependencies(&op.dep_rel(), &args){
                         // TODO Resolve NamedLiteral to Literal for vectors?
 
                         let mut resolved_inputs = HashSet::new();
@@ -81,7 +81,7 @@ impl<TVM: AbstractVM> ScalarDependencies<TVM> {
                 Outcome::EarlyOut { inputs } => {
                     let mut resolved_inputs = HashSet::new();
                     for input in inputs {
-                        self.resolve_input_on(&mut resolved_inputs, &input.scalar_name());
+                        self.resolve_input_on(&mut resolved_inputs, &input);
                     }
                     self.discard_dependencies.extend(resolved_inputs)
                 }
@@ -91,7 +91,7 @@ impl<TVM: AbstractVM> ScalarDependencies<TVM> {
 
     pub fn dependents(
         &self,
-    ) -> &HashMap<VMScalarNameRef<TVM::TVectorNameRef>, HashSet<VMScalarNameRef<TVM::TVectorNameRef>>>
+    ) -> &HashMap<TVM::Scalar, HashSet<TVM::Scalar>>
     {
         &self.dependents
     }

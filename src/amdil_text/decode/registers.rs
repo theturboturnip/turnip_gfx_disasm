@@ -1,11 +1,11 @@
 //! This module maps [super::MatchableArg] values to [crate::abstract_machine::vector::VectorDataRef].
 //!
 
-use crate::{abstract_machine::vector::MaskedSwizzle, amdil_text::vm::AMDILDataRef};
+use crate::{abstract_machine::vector::MaskedSwizzle, amdil_text::vm::AMDILMaskSwizVector};
 
 use super::{AMDILTextDecodeError, MatchableArg};
 
-pub fn arg_as_vector_data_ref(arg: &MatchableArg) -> Result<AMDILDataRef, AMDILTextDecodeError> {
+pub fn arg_as_vector_data_ref(arg: &MatchableArg) -> Result<AMDILMaskSwizVector, AMDILTextDecodeError> {
     let vdr = match arg {
         MatchableArg::Named(name) => {
             swizzled_name_to_named_vector_data_ref(name, MaskedSwizzle::identity(4))?
@@ -33,12 +33,12 @@ pub fn arg_as_vector_data_ref(arg: &MatchableArg) -> Result<AMDILDataRef, AMDILT
 fn swizzled_name_to_named_vector_data_ref(
     name: &String,
     swizzle: MaskedSwizzle,
-) -> Result<AMDILDataRef, AMDILTextDecodeError> {
+) -> Result<AMDILMaskSwizVector, AMDILTextDecodeError> {
     let vdr = match name.chars().nth(0) {
-        Some('l') => AMDILDataRef::named_literal(name.clone(), swizzle),
-        Some('v') => AMDILDataRef::named_input_register(name.clone(), swizzle),
-        Some('o') => AMDILDataRef::named_output_register(name.clone(), swizzle),
-        Some('r') => AMDILDataRef::named_register(name.clone(), swizzle),
+        Some('l') => AMDILMaskSwizVector::named_literal(name.clone(), swizzle),
+        Some('v') => AMDILMaskSwizVector::named_input_register(name.clone(), swizzle),
+        Some('o') => AMDILMaskSwizVector::named_output_register(name.clone(), swizzle),
+        Some('r') => AMDILMaskSwizVector::named_register(name.clone(), swizzle),
         _ => {
             return Err(AMDILTextDecodeError::Generic(format!(
                 "unexpected argument name '{}'",
@@ -53,9 +53,9 @@ fn indexed_swizzled_name_to_named_vector_data_ref(
     name: &String,
     idx: u64,
     swizzle: MaskedSwizzle,
-) -> Result<AMDILDataRef, AMDILTextDecodeError> {
+) -> Result<AMDILMaskSwizVector, AMDILTextDecodeError> {
     if name.starts_with("cb") {
-        Ok(AMDILDataRef::named_buffer(name.clone(), idx, swizzle))
+        Ok(AMDILMaskSwizVector::named_buffer(name.clone(), idx, swizzle))
     } else {
         Err(AMDILTextDecodeError::Generic(format!(
             "unexpected indexable argument name '{}'",

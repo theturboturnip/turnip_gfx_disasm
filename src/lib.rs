@@ -26,9 +26,8 @@ extern crate num_derive;
 pub mod abstract_machine;
 pub mod amdil_text;
 pub mod hlsl;
-pub mod rdna2;
+// pub mod rdna2;
 
 pub use abstract_machine::{
-    AbstractVM, Action, DataWidth, Decoder, Outcome, Program, VMRef, VMVectorDataRef,
-    VMVectorNameRef,
+    AbstractVM, Action, DataWidth, Decoder, Outcome, Program
 };

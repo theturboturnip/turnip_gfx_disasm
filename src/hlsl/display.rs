@@ -1,16 +1,15 @@
 use std::fmt::{Display, Formatter};
 
-use crate::abstract_machine::vector::VectorComponent;
+use crate::abstract_machine::{vector::VectorComponent, VMName, VMVector};
 
 use super::{
     types::{HLSLConcreteKind, HLSLKind, HLSLKindBitmask, HLSLNumericKind},
-    vm::HLSLAction,
-    HLSLScalarDataRef, HLSLVectorDataRef, HLSLVectorName,
+    vm::HLSLAction, HLSLSingleVectorName, HLSLScalarName, HLSLVector,
 };
 
 pub struct DWrap<T>(pub T);
 
-impl std::fmt::Display for HLSLVectorName {
+impl std::fmt::Display for HLSLSingleVectorName {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         // TODO have a formatter that takes type into account
         match self {
@@ -27,33 +26,52 @@ impl std::fmt::Display for HLSLVectorName {
     }
 }
 
-impl std::fmt::Display for DWrap<&HLSLScalarDataRef> {
+impl std::fmt::Display for DWrap<&HLSLScalarName> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        let (v, c) = &self.0;
-        if let HLSLVectorName::Literal(vals) = v.vector_name {
+        let v = &self.0.vec;
+        let c = self.0.comp;
+        let v_kind = v.type_mask();
+        if let HLSLSingleVectorName::Literal(vals) = v {
             let val: u64 = vals[c.into_index()];
-            return match v.kind.mask() {
+            match v_kind.mask() {
                 HLSLKindBitmask::NUMERIC_FLOAT => write!(f, "{:?}f", f32::from_bits(val as u32)),
                 HLSLKindBitmask::NUMERIC_SINT => write!(f, "{}", val),
                 HLSLKindBitmask::NUMERIC_UINT => write!(f, "{}u", val),
                 HLSLKindBitmask::NUMERIC => write!(f, "(num?)0x{:x}", val),
                 HLSLKindBitmask::INTEGER => write!(f, "(u?int)0x{:x}", val),
-                _ => write!(f, "({})0x{:x}", v.kind, val),
-            };
-        }
-        write!(f, "({}){}.", v.kind, v.vector_name)?;
-        match c {
-            VectorComponent::X => write!(f, "x"),
-            VectorComponent::Y => write!(f, "y"),
-            VectorComponent::Z => write!(f, "z"),
-            VectorComponent::W => write!(f, "w"),
+                _ => write!(f, "({})0x{:x}", v_kind, val),
+            }
+        } else {
+            write!(f, "({}){}.", v_kind, v)?;
+            match c {
+                VectorComponent::X => write!(f, "x"),
+                VectorComponent::Y => write!(f, "y"),
+                VectorComponent::Z => write!(f, "z"),
+                VectorComponent::W => write!(f, "w"),
+            }
         }
     }
 }
-impl std::fmt::Display for DWrap<&HLSLVectorDataRef> {
+
+impl std::fmt::Display for DWrap<&HLSLVector> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        let (v, cs) = &self.0;
-        write!(f, "{}{}", v.vector_name, cs)
+        // let (v, cs) = &self.0;
+        // write!(f, "{}{}", v.vector_name, cs)
+        let common_origin = &self.0.ts[0].vec;
+        if self.0.ts.iter().all(|t| &t.vec == common_origin) {
+            write!(f, "{common_origin}.")?;
+            for t in self.0.ts.iter() {
+                write!(f, "{}", t.comp)?;
+            }
+            Ok(())
+        } else {
+            write!(f, "{}{}(", self.0.type_mask(), self.0.n_components())?;
+            for t in self.0.ts.iter() {
+                // TODO correct comma joining
+                write!(f, "{}.{}, ", t.vec, t.comp)?;
+            }
+            write!(f, ")")
+        }
     }
 }
 
@@ -64,14 +82,14 @@ impl std::fmt::Display for HLSLAction {
                 write!(
                     f,
                     "{}{} {};",
-                    new_var.kind, new_var.n_components, new_var.vector_name
+                    new_var.type_mask(), new_var.n_components(), new_var
                 )
             }
             Self::Assign {
                 op, output, inputs, ..
             } => {
                 {
-                    write!(f, "{}{} = {:?}(", output.0.vector_name, output.1, op)?;
+                    write!(f, "{} = {:?}(", DWrap(output), op)?;
                 }
                 for i in inputs {
                     write!(f, "{}, ", DWrap(i))?;
@@ -115,6 +133,16 @@ impl Display for HLSLKind {
             HLSLKindBitmask::NUMERIC => write!(f, "num?"),
             HLSLKindBitmask::INTEGER => write!(f, "u?int"),
             _ => write!(f, "{:?}", self),
+        }
+    }
+}
+impl Display for VectorComponent {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            VectorComponent::X => write!(f, "x"),
+            VectorComponent::Y => write!(f, "y"),
+            VectorComponent::Z => write!(f, "z"),
+            VectorComponent::W => write!(f, "w"),
         }
     }
 }

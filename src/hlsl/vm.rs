@@ -1,11 +1,9 @@
 use crate::{
-    abstract_machine::{
-        vector::VectorComponent, Outcome, VMDataRef, VMScalarDataRef, VMScalarNameRef,
-    },
+    abstract_machine::Outcome,
     AbstractVM, Action,
 };
 
-use super::{HLSLScalarDataRef, HLSLVector, HLSLVectorDataRef};
+use super::{HLSLVector, HLSLScalarName, HLSLSingleVectorName};
 
 pub type HLSLAction = Outcome<HLSLAbstractVM>;
 
@@ -14,27 +12,12 @@ pub type HLSLAction = Outcome<HLSLAbstractVM>;
 pub enum HLSLAbstractVM {}
 impl AbstractVM for HLSLAbstractVM {
     type Action = HLSLAction;
-    type TVectorNameRef = HLSLVector;
-    type TVectorDataRef = HLSLVectorDataRef;
-    type TScalarDataRef = HLSLScalarDataRef;
-}
+    type Register = HLSLSingleVectorName;
+    type Scalar = HLSLScalarName;
+    type Vector = HLSLVector;
 
-impl VMDataRef<HLSLVector> for HLSLScalarDataRef {
-    fn name(&self) -> &HLSLVector {
-        &self.0
-    }
-
-    fn type_mask(&self) -> super::types::HLSLKind {
-        self.0.kind
-    }
-}
-impl VMScalarDataRef<HLSLVector> for HLSLScalarDataRef {
-    fn comp(&self) -> VectorComponent {
-        self.1
-    }
-
-    fn scalar_name(&self) -> VMScalarNameRef<HLSLVector> {
-        self.clone()
+    fn decompose(v: &Self::Vector) -> Vec<Self::Scalar> {
+        v.ts.clone()
     }
 }
 

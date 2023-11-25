@@ -2,6 +2,214 @@
 
 use std::ops::Index;
 
+use crate::hlsl::types::{HLSLKind, HLSLKindBitmask};
+
+use super::{VMScalar, VMVector, VMName};
+
+/*
+impl<T: VMVectorNameRef> VMDataRef<T> for RefinableVMDataRef<VMScalarNameRef<T>> {
+    fn name(&self) -> &T {
+        &self.data.0
+    }
+
+    fn type_mask(&self) -> HLSLKind {
+        self.kind
+    }
+}
+impl<T: VMVectorNameRef> VMScalarDataRef<T> for RefinableVMDataRef<VMScalarNameRef<T>> {
+    fn comp(&self) -> VectorComponent {
+        self.data.1
+    }
+
+    fn scalar_name(&self) -> VMScalarNameRef<T> {
+        self.data.clone()
+    }
+}
+impl<T: VMVectorNameRef> From<VMScalarNameRef<T>> for RefinableVMDataRef<VMScalarNameRef<T>> {
+    fn from(data: VMScalarNameRef<T>) -> Self {
+        Self {
+            kind: data.0.base_type_mask(),
+            data,
+        }
+    }
+}
+
+/// Trait for types referencing the *name* of a VM element, e.g. a vector which could be subscripted.
+/// May only be able to store a subset of [HLSLKind], but does not have any information about
+///
+/// For scalar machines, the same type may implement [VMVectorNameRef] and [VMDataRef].
+pub trait VMVectorName: VMName {
+    /// Number of components in the vector
+    fn n_components(&self) -> u8;
+    /// Base type - the lowest common denominator [HLSLKind] that could this name could possibly hold.
+    fn base_type_mask(&self) -> HLSLKind;
+}
+impl VMRef for [u64; 4] {
+    fn is_pure_input(&self) -> bool {
+        true
+    }
+}
+impl VMVectorNameRef for [u64; 4] {
+    fn n_components(&self) -> u8 {
+        4
+    }
+    fn base_type_mask(&self) -> HLSLKind {
+        HLSLKindBitmask::NUMERIC.into()
+    }
+}
+
+/// A VMRef referring to a specific scalar within a VM
+pub type VMScalarNameRef<T: VMVectorNameRef> = (T, VectorComponent);
+impl<T: VMVectorNameRef> VMRef for VMScalarNameRef<T> {
+    fn is_pure_input(&self) -> bool {
+        self.0.is_pure_input()
+    }
+}
+
+/// Marker trait for types referencing a scalar component within a named vector
+pub trait VMScalarDataRef<T: VMVectorNameRef>: VMDataRef<T> {
+    fn comp(&self) -> VectorComponent;
+    fn scalar_name(&self) -> VMScalarNameRef<T>;
+}
+
+/// A VMDataRef that represents a VM's "element" - the main unit of computation for instructions.
+pub trait VMVectorDataRef<T: VMVectorNameRef>: VMDataRef<T> {
+    fn swizzle(&self) -> MaskedSwizzle;
+    /// Returns a list of the components that were actually used from self
+    ///
+    /// e.g. for r0.x_w_, (r0, x) and (r0, w) will be returned
+    fn decompose(&self) -> Vec<VMScalarNameRef<T>> {
+        self.swizzle()
+            .0
+            .iter()
+            .filter_map(|comp| match comp {
+                Some(comp) => Some((self.name().clone(), *comp)),
+                None => None,
+            })
+            .collect()
+    }
+}
+impl<T: VMVectorNameRef> VMRef for (T, MaskedSwizzle) {
+    fn is_pure_input(&self) -> bool {
+        self.0.is_pure_input()
+    }
+}
+impl<T: VMVectorNameRef> VMDataRef<T> for (T, MaskedSwizzle) {
+    fn name(&self) -> &T {
+        &self.0
+    }
+
+    fn type_mask(&self) -> HLSLKind {
+        self.name().base_type_mask()
+    }
+}
+impl<T: VMVectorNameRef> VMVectorDataRef<T> for (T, MaskedSwizzle) {
+    fn swizzle(&self) -> MaskedSwizzle {
+        self.1
+    }
+}
+*/
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct VectorOf<T: VMScalar> {
+    pub ts: Vec<T>,
+    kind: HLSLKind
+}
+impl<T: VMScalar> VectorOf<T> {
+    pub fn new(ts: &[T]) -> Option<Self> {
+        assert!(ts.len() > 0);
+        let kind_mask = ts.iter().fold(Some(HLSLKindBitmask::all().into()), |kind, t| {
+            HLSLKind::intersection(kind?, t.type_mask())
+        });
+        Some(Self { ts: ts.iter().map(|t| t.clone()).collect(), kind: kind_mask?.into() })
+    }
+}
+impl<T: VMScalar> VMName for VectorOf<T> {
+    fn is_pure_input(&self) -> bool {
+        self.ts.iter().all(T::is_pure_input)
+    }
+
+    fn type_mask(&self) -> HLSLKind {
+        self.kind
+    }
+}
+impl<T: VMScalar> VMVector for VectorOf<T> {
+    fn n_components(&self) -> usize {
+        self.ts.len()
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct HoleyVectorOf<T: VMScalar> {
+    pub ts: Vec<Option<T>>,
+    kind: HLSLKind
+}
+impl<T: VMScalar> HoleyVectorOf<T> {
+    pub fn new(ts: &[Option<T>]) -> Option<Self> {
+        let kind_mask = ts.iter().fold(Some(HLSLKindBitmask::all().into()), |kind, t| {
+            if let Some(t) = t {
+                HLSLKind::intersection(kind?, t.type_mask())
+            } else {
+                kind
+            }
+        });
+        Some(Self { ts: ts.iter().map(|t| t.clone()).collect(), kind: kind_mask?.into() })
+    }
+}
+impl<T: VMScalar> VMName for HoleyVectorOf<T> {
+    fn is_pure_input(&self) -> bool {
+        self.ts.iter().all(|t| match t {
+            Some(t) => t.is_pure_input(),
+            None => true
+        })
+    }
+
+    fn type_mask(&self) -> HLSLKind {
+        self.kind
+    }
+}
+impl<T: VMScalar> VMVector for HoleyVectorOf<T> {
+    fn n_components(&self) -> usize {
+        self.ts.len()
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct ComponentOf<T: VMVector> {
+    pub vec: T,
+    pub comp: VectorComponent
+}
+impl<T: VMVector> ComponentOf<T> {
+    pub fn new(vec: T, comp: VectorComponent) -> Self {
+        assert!(comp.into_index() < vec.n_components());
+        Self {
+            vec, comp
+        }
+    }
+}
+impl<T: VMVector> VMName for ComponentOf<T> {
+    fn is_pure_input(&self) -> bool {
+        self.vec.is_pure_input()
+    }
+
+    fn type_mask(&self) -> HLSLKind {
+        self.vec.type_mask()
+    }
+}
+impl<T: VMVector> VMScalar for ComponentOf<T> {}
+
+impl<T: VMVector> HoleyVectorOf<ComponentOf<T>> {
+    pub fn from_vector_swizzle(v: T, swizzle: MaskedSwizzle) -> Self {
+        let ts: Vec<_> = swizzle.0.iter().map(|comp| {
+            match comp {
+                Some(comp) => Some(ComponentOf::new(v.clone(), *comp)),
+                None => None,
+            }
+        }).collect();
+        Self::new(&ts).expect("Using the same base vector should always result in a consistent kind.")
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum VectorComponent {
     X,
@@ -110,7 +318,7 @@ impl MaskedSwizzle {
         ])
     }
 
-    pub fn num_used_components(&self) -> u8 {
+    pub fn num_used_components(&self) -> usize {
         self.0.iter().fold(0, |num_used, comp| {
             if comp.is_some() {
                 num_used + 1

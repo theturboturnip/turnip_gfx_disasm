@@ -2,11 +2,11 @@ use std::collections::HashMap;
 
 use crate::{
     abstract_machine::{
-        instructions::InstrArgs, vector::MaskedSwizzle, Refinable, RefinableVMDataRef,
+        instructions::InstrArgs, vector::MaskedSwizzle, Refinable, RefinableRef,
     },
     amdil_text::{
         grammar,
-        vm::{AMDILAbstractVM, AMDILDataRef, AMDILNameRef},
+        vm::{AMDILAbstractVM, AMDILMaskSwizVector, AMDILRegister},
     },
     hlsl::{
         syntax::{ArithmeticOp, FauxBooleanOp, HLSLOperator, NumericIntrinsic, SampleIntrinsic},
@@ -30,7 +30,7 @@ enum InputMask {
 
 #[derive(Debug, Clone)]
 pub struct ALUInstruction {
-    args: InstrArgs<AMDILAbstractVM>,
+    args: InstrArgs<AMDILMaskSwizVector>,
     op: HLSLOperator,
 }
 
@@ -42,13 +42,13 @@ struct ALUArgsSpec {
     output_kinds: Vec<HLSLKind>,
 }
 impl ALUArgsSpec {
-    fn sanitize_arguments(&self, args: Vec<AMDILDataRef>) -> InstrArgs<AMDILAbstractVM> {
+    fn sanitize_arguments(&self, args: Vec<AMDILMaskSwizVector>) -> InstrArgs<AMDILMaskSwizVector> {
         let (output_elems, input_elems) = args.split_at(self.output_kinds.len());
         assert_eq!(output_elems.len(), self.output_kinds.len());
         assert_eq!(input_elems.len(), self.input_kinds.len());
 
         let mask_to_apply_to_input = match self.input_mask {
-            InputMask::InheritFromFirstOutput => output_elems[0].swizzle.copy_mask(),
+            InputMask::InheritFromFirstOutput => output_elems[0].swizzle().copy_mask(),
             InputMask::TruncateTo(n) => MaskedSwizzle::identity(n.into()),
         };
 
@@ -56,8 +56,7 @@ impl ALUArgsSpec {
             .into_iter()
             .zip(self.output_kinds.iter())
             .map(|(data, kind)| {
-                let refinable: RefinableVMDataRef<_> = data.clone().into();
-                refinable.refine_type(*kind).unwrap()
+                data.refine_type(*kind).unwrap()
             })
             .collect();
 
@@ -65,13 +64,9 @@ impl ALUArgsSpec {
             .into_iter()
             .zip(self.input_kinds.iter())
             .map(|(data, kind)| {
-                let swizzle = data.swizzle.masked_out(mask_to_apply_to_input);
-                let data = AMDILDataRef {
-                    name: data.name.clone(),
-                    swizzle,
-                };
-                let refinable: RefinableVMDataRef<_> = data.into();
-                refinable.refine_type(*kind).unwrap()
+                let swizzle = data.swizzle().masked_out(mask_to_apply_to_input);
+                let data = AMDILMaskSwizVector::new(data.register().clone(), swizzle);
+                data.refine_type(*kind).unwrap()
             })
             .collect();
 
@@ -198,16 +193,16 @@ pub fn decode_alu(
         &matchable_args,
     ) {
         ("sample", [("resource", tex_id), ("sampler", _sampler_id)], matchable_args) => {
-            let args: Result<Vec<AMDILDataRef>, AMDILTextDecodeError> =
+            let args: Result<Vec<AMDILMaskSwizVector>, AMDILTextDecodeError> =
                 matchable_args.iter().map(arg_as_vector_data_ref).collect();
             let mut args = args?;
             // Insert the argument at index 1 (index 0 = the output)
             args.insert(
                 1,
-                AMDILDataRef {
-                    name: AMDILNameRef::Texture(tex_id.parse().unwrap()),
-                    swizzle: MaskedSwizzle::identity(1),
-                },
+                AMDILMaskSwizVector::new(
+                    AMDILRegister::Texture(tex_id.parse().unwrap()),
+                    MaskedSwizzle::identity(1),
+                ),
             );
 
             let arg_spec = ALUArgsSpec {
@@ -232,7 +227,7 @@ pub fn decode_alu(
     ) {
         (Some((_static_name, instr_spec)), matchable_args) => {
             // Map matchable_args into VectorDataRefs
-            let args: Result<Vec<AMDILDataRef>, AMDILTextDecodeError> =
+            let args: Result<Vec<AMDILMaskSwizVector>, AMDILTextDecodeError> =
                 matchable_args.iter().map(arg_as_vector_data_ref).collect();
 
             let args = instr_spec.0.sanitize_arguments(args?);

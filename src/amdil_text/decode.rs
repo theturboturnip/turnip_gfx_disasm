@@ -1,10 +1,10 @@
-use crate::{abstract_machine::vector::MaskedSwizzle, Action, Outcome};
+use crate::{abstract_machine::vector::MaskedSwizzle, Action, Outcome, AbstractVM};
 
 use self::registers::arg_as_vector_data_ref;
 
 use super::{
     grammar,
-    vm::{AMDILAbstractVM, AMDILDataRef, AMDILDeclaration},
+    vm::{AMDILAbstractVM, AMDILMaskSwizVector, AMDILDeclaration},
 };
 
 pub mod alu;
@@ -42,17 +42,13 @@ impl Action<AMDILAbstractVM> for Instruction {
             Instruction::Decl(decl) => decl.outcomes(),
             Instruction::Alu(alu) => alu.outcomes(),
             Instruction::EarlyOut(inputs) => {
-                let args: Result<Vec<AMDILDataRef>, AMDILTextDecodeError> =
+                let args: Result<Vec<AMDILMaskSwizVector>, AMDILTextDecodeError> =
                     inputs.iter().map(arg_as_vector_data_ref).collect();
                 let args = args.unwrap();
                 let scalar_args = args
                     .iter()
                     .map(|v_arg| {
-                        v_arg
-                            .swizzle
-                            .0
-                            .iter()
-                            .filter_map(|comp| comp.map(|comp| (v_arg.name.clone(), comp)))
+                        AMDILAbstractVM::decompose(v_arg)
                     })
                     .flatten()
                     .map(|comp_ref| comp_ref.into())

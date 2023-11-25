@@ -1,9 +1,6 @@
-use crate::{
-    abstract_machine::vector::{MaskedSwizzle, VectorComponent},
-    VMRef, VMVectorNameRef,
-};
+use crate::abstract_machine::{vector::{VectorOf, ComponentOf}, VMName, VMVector};
 
-use self::{syntax::UnconcreteOpTarget, types::HLSLKind};
+use self::types::{HLSLKind, HLSLKindBitmask};
 
 pub mod compat;
 pub mod display;
@@ -11,35 +8,10 @@ pub mod syntax;
 pub mod types;
 pub mod vm;
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct HLSLVector {
-    pub vector_name: HLSLVectorName,
-    pub kind: HLSLKind,
-    pub n_components: u8,
-}
-impl HLSLVector {
-    pub fn identity_swizzle(&self) -> MaskedSwizzle {
-        MaskedSwizzle::identity(self.n_components as usize)
-    }
-}
-impl VMRef for HLSLVector {
-    fn is_pure_input(&self) -> bool {
-        self.vector_name.is_pure_input()
-    }
-}
-impl VMVectorNameRef for HLSLVector {
-    fn n_components(&self) -> u8 {
-        self.n_components
-    }
-
-    fn base_type_mask(&self) -> HLSLKind {
-        self.kind
-    }
-}
 
 /// The name of an unswizzled vector in the HLSL virtual machine
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum HLSLVectorName {
+pub enum HLSLSingleVectorName {
     Texture(u64),
     GenericRegister(String),
     ShaderInput(String),
@@ -48,7 +20,7 @@ pub enum HLSLVectorName {
     // TODO read/write permissions for ArrayElement?
     ArrayElement { of: Box<Self>, idx: u64 },
 }
-impl VMRef for HLSLVectorName {
+impl VMName for HLSLSingleVectorName {
     fn is_pure_input(&self) -> bool {
         match self {
             Self::ShaderInput(_) | Self::Literal(_) | Self::Texture(_) => true, // assuming textures are read-only
@@ -56,11 +28,34 @@ impl VMRef for HLSLVectorName {
             _ => false,
         }
     }
+
+    fn type_mask(&self) -> HLSLKind {
+        // TODO store this in a value for the variable machine to shrink it?
+        match self {
+            HLSLSingleVectorName::Texture(_) => HLSLKindBitmask::TEXTURE2D.into(),
+            HLSLSingleVectorName::GenericRegister(_) => HLSLKindBitmask::NUMERIC.into(),
+            HLSLSingleVectorName::ShaderInput(_) => HLSLKindBitmask::NUMERIC.into(),
+            HLSLSingleVectorName::ShaderOutput(_) => HLSLKindBitmask::NUMERIC.into(),
+            HLSLSingleVectorName::Literal(_) => HLSLKindBitmask::NUMERIC.into(),
+            HLSLSingleVectorName::ArrayElement { of, idx } => of.type_mask(),
+        }
+    }
+}
+impl VMVector for HLSLSingleVectorName {
+    fn n_components(&self) -> usize {
+        match self {
+            HLSLSingleVectorName::Texture(_) => 1,
+            _ => 4 // TODO how to decide?
+        }
+    }
 }
 
 /// A reference to a single scalar in the HLSL virtual machine
-pub type HLSLScalarDataRef = (HLSLVector, VectorComponent);
+pub type HLSLScalarName = ComponentOf<HLSLSingleVectorName>;
 
-/// A reference to a swizzled vector in the HLSL virtual machine
-pub type HLSLVectorDataRef = (HLSLVector, MaskedSwizzle);
-impl UnconcreteOpTarget for HLSLVectorDataRef {}
+
+pub type HLSLVector = VectorOf<HLSLScalarName>;
+
+// /// A reference to a swizzled vector in the HLSL virtual machine
+// pub type HLSLVectorDataRef = (HLSLVector, MaskedSwizzle);
+// impl UnconcreteOpTarget for HLSLVectorDataRef {}

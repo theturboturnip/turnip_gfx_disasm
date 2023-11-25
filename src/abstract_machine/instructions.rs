@@ -2,7 +2,7 @@
 //!
 //!  TODO Merge hole handling with hlsl::syntax setup
 
-use super::{AbstractVM, VMScalarNameRef, VMVectorDataRef};
+use super::{AbstractVM, VMVector};
 
 /// Trait for a type that manages a set of possible instructions
 pub trait InstructionSet<TVM: AbstractVM>: Sized {
@@ -23,26 +23,26 @@ pub trait InstructionSpec<TVM: AbstractVM> {
     /// [DependencyRelation::determine_dependencies]
     fn determine_dependencies(
         &self,
-        args: &InstrArgs<TVM>,
+        args: &InstrArgs<TVM::Vector>,
     ) -> Vec<(
-        VMScalarNameRef<TVM::TVectorNameRef>,
-        Vec<VMScalarNameRef<TVM::TVectorNameRef>>,
+        TVM::Scalar,
+        Vec<TVM::Scalar>,
     )>;
     /// [ArgsSpec::sanitize_arguments]
-    fn sanitize_arguments(&self, args: Vec<TVM::TVectorDataRef>) -> InstrArgs<TVM>;
+    fn sanitize_arguments(&self, args: Vec<TVM::Vector>) -> InstrArgs<TVM::Vector>;
 }
 impl<TVM: AbstractVM, TArgsSpec: ArgsSpec<TVM>, TDepRelation: DependencyRelation<TVM>>
     InstructionSpec<TVM> for (TArgsSpec, TDepRelation)
 {
-    fn sanitize_arguments(&self, args: Vec<TVM::TVectorDataRef>) -> InstrArgs<TVM> {
+    fn sanitize_arguments(&self, args: Vec<TVM::Vector>) -> InstrArgs<TVM::Vector> {
         self.0.sanitize_arguments(args)
     }
     fn determine_dependencies(
         &self,
-        args: &InstrArgs<TVM>,
+        args: &InstrArgs<TVM::Vector>,
     ) -> Vec<(
-        VMScalarNameRef<TVM::TVectorNameRef>,
-        Vec<VMScalarNameRef<TVM::TVectorNameRef>>,
+        TVM::Scalar,
+        Vec<TVM::Scalar>,
     )> {
         self.1.determine_dependencies(args)
     }
@@ -50,9 +50,9 @@ impl<TVM: AbstractVM, TArgsSpec: ArgsSpec<TVM>, TDepRelation: DependencyRelation
 
 /// Struct holding the arguments to an instruction for a given VM
 #[derive(Debug, Clone)]
-pub struct InstrArgs<TVM: AbstractVM> {
-    pub outputs: Vec<TVM::TVectorDataRef>,
-    pub inputs: Vec<TVM::TVectorDataRef>,
+pub struct InstrArgs<V: VMVector> {
+    pub outputs: Vec<V>,
+    pub inputs: Vec<V>,
 }
 
 /// Trait for types which can map the indivdual output scalars of an instruction to the input scalars that affect them.
@@ -61,10 +61,10 @@ pub trait DependencyRelation<TVM: AbstractVM> {
     ///     (output scalar, inputs affecting that output)
     fn determine_dependencies(
         &self,
-        args: &InstrArgs<TVM>,
+        args: &InstrArgs<TVM::Vector>,
     ) -> Vec<(
-        VMScalarNameRef<TVM::TVectorNameRef>,
-        Vec<VMScalarNameRef<TVM::TVectorNameRef>>,
+        TVM::Scalar,
+        Vec<TVM::Scalar>,
     )>;
 }
 
@@ -83,10 +83,10 @@ pub enum SimpleDependencyRelation {
 impl<TVM: AbstractVM> DependencyRelation<TVM> for SimpleDependencyRelation {
     fn determine_dependencies(
         &self,
-        args: &InstrArgs<TVM>,
+        args: &InstrArgs<TVM::Vector>,
     ) -> Vec<(
-        VMScalarNameRef<TVM::TVectorNameRef>,
-        Vec<VMScalarNameRef<TVM::TVectorNameRef>>,
+        TVM::Scalar,
+        Vec<TVM::Scalar>,
     )> {
         // for output in outputs
         //     for component in output
@@ -94,12 +94,12 @@ impl<TVM: AbstractVM> DependencyRelation<TVM> for SimpleDependencyRelation {
             .outputs
             .iter()
             .enumerate()
-            .map(|(i, elem)| elem.decompose().into_iter());
+            .map(|(i, elem)| TVM::decompose(elem));
         let expanded_inputs = args
             .inputs
             .iter()
             .enumerate()
-            .map(|(i, elem)| elem.decompose().into_iter());
+            .map(|(i, elem)| TVM::decompose(elem));
         match self {
             Self::AllToAll => {
                 // Put all inputs in a vector
@@ -113,9 +113,7 @@ impl<TVM: AbstractVM> DependencyRelation<TVM> for SimpleDependencyRelation {
 
             Self::PerComponent => {
                 // Vector of inputs => Vector of (Vector of input scalar)
-                let in_vecs: Vec<Vec<_>> = expanded_inputs
-                    .map(|in_vec| in_vec.collect::<Vec<_>>())
-                    .collect();
+                let in_vecs: Vec<Vec<_>> = expanded_inputs.collect();
                 let mut deps = vec![];
                 // For each output
                 for output in expanded_outs {
@@ -146,5 +144,5 @@ pub trait ArgsSpec<TVM: AbstractVM> {
     /// Given a set of arguments to an instruction, split them into (outputs, inputs) and clean them up
     ///
     /// TODO Result<> type, probably just use anyhow
-    fn sanitize_arguments(&self, args: Vec<TVM::TVectorDataRef>) -> InstrArgs<TVM>;
+    fn sanitize_arguments(&self, args: Vec<TVM::Vector>) -> InstrArgs<TVM::Vector>;
 }
