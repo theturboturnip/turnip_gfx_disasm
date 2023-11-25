@@ -193,7 +193,7 @@ impl<TVM: HLSLCompatibleAbstractVM> VariableStore<TVM> {
     /// while applying an additional constraint to that mask.
     ///
     /// Borrows the first element of the iterator immutably, then borrows the rest mutably.
-    pub fn constrain_var_types<I: Iterator<Item = HLSLVariableRef>>(
+    pub fn constrain_var_kinds<I: Iterator<Item = HLSLVariableRef>>(
         &mut self,
         vars: I,
         extra_constraint: HLSLKind,
@@ -413,7 +413,7 @@ impl<TVM: HLSLCompatibleAbstractVM> VariableAbstractMachine<TVM> {
                     .map(|(v, _)| v.clone())
                     .collect();
                 composite_variables.push(variable.clone());
-                match self.variables.constrain_var_types(
+                match self.variables.constrain_var_kinds(
                     composite_variables.clone().into_iter(),
                     dataspec_kind,
                 ){
@@ -495,10 +495,10 @@ impl<TVM: HLSLCompatibleAbstractVM> VariableAbstractMachine<TVM> {
                     self.add_outcome(HLSLOutcome::Declaration { new_var: var });
                 }
                 Outcome::Assign { op, inputs, output } => {
-                    let typespec = op.get_typespec();
+                    let kindspec = op.get_kindspec();
 
                     // Convert the input elements into variables
-                    let basic_op_input_types = typespec.get_basic_input_types();
+                    let basic_op_input_types = kindspec.get_basic_input_types();
                     let input_datarefs: Vec<HLSLVectorVarRef> = inputs
                         .into_iter()
                         .enumerate()
@@ -524,12 +524,12 @@ impl<TVM: HLSLCompatibleAbstractVM> VariableAbstractMachine<TVM> {
 
                     let output_dataref = self.map_dataspec_to_dataref(
                         &output,
-                        typespec.get_basic_output_type(),
+                        kindspec.get_basic_output_type(),
                         true,
                     );
 
                     // Apply the type constraints from this operation
-                    for (type_constraint, constrained_operand_is) in typespec.get_type_constraints()
+                    for (type_constraint, constrained_operand_is) in kindspec.get_type_constraints()
                     {
                         let constrained_operand_refs =
                             constrained_operand_is.into_iter().map(|i| {
@@ -541,7 +541,7 @@ impl<TVM: HLSLCompatibleAbstractVM> VariableAbstractMachine<TVM> {
                             });
                         match self
                             .variables
-                            .constrain_var_types(constrained_operand_refs, type_constraint)
+                            .constrain_var_kinds(constrained_operand_refs, type_constraint)
                         {
                             Ok(()) => {}
                             Err(bad_combo) => panic!(

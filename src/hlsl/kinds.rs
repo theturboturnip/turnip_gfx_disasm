@@ -64,21 +64,21 @@ impl From<HLSLNumericKind> for HLSLKind {
 /// because there may be correlations between different argument's type holes,
 /// so this enum uses zero-indexed IDs for correlated holes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum HLSLOperandType {
+pub enum HLSLOperandKind {
     Concrete(HLSLConcreteKind),
     Hole(usize),
 }
-impl From<HLSLConcreteKind> for HLSLOperandType {
+impl From<HLSLConcreteKind> for HLSLOperandKind {
     fn from(c: HLSLConcreteKind) -> Self {
         Self::Concrete(c)
     }
 }
-impl From<HLSLNumericKind> for HLSLOperandType {
+impl From<HLSLNumericKind> for HLSLOperandKind {
     fn from(num: HLSLNumericKind) -> Self {
         Self::Concrete(num.into())
     }
 }
-impl HLSLOperandType {
+impl HLSLOperandKind {
     pub fn as_hlslkind(&self, holes: &[HLSLKind]) -> HLSLKind {
         match self {
             Self::Concrete(c) => (*c).into(),

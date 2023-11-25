@@ -34,7 +34,7 @@ use std::cmp::max;
 
 use crate::abstract_machine::instructions::SimpleDependencyRelation;
 
-use super::types::{HLSLConcreteKind, HLSLKind, HLSLKindBitmask, HLSLNumericKind, HLSLOperandType};
+use super::kinds::{HLSLConcreteKind, HLSLKind, HLSLKindBitmask, HLSLNumericKind, HLSLOperandKind};
 
 /// Trait implemented for HLSL operators and intrinsic functions which take 1..N inputs and output 1 value.
 ///
@@ -42,7 +42,7 @@ use super::types::{HLSLConcreteKind, HLSLKind, HLSLKindBitmask, HLSLNumericKind,
 pub trait Operator: std::fmt::Debug {
     /// Return the "type-spec" for the operator - the set of input types and output type.
     /// These are not concretized, and may involve type holes.
-    fn get_typespec(&self) -> OperatorTypeSpec;
+    fn get_kindspec(&self) -> OperatorKindspec;
 
     /// Return the number of input arguments the operator takes.
     fn n_inputs(&self) -> usize;
@@ -53,27 +53,27 @@ pub trait Operator: std::fmt::Debug {
     fn dep_rel(&self) -> SimpleDependencyRelation;
 }
 
-/// The "typespec" for an operator - the input and output types that it accepts, and the accepted types for any referenced type holes.
+/// The "kindspec" for an operator - the input and output types that it accepts, and the accepted types for any referenced type holes.
 #[derive(Debug)]
-pub struct OperatorTypeSpec {
+pub struct OperatorKindspec {
     /// [inputs..., output]
-    operand_types: Vec<HLSLOperandType>,
+    operand_types: Vec<HLSLOperandKind>,
     holes: Vec<HLSLKind>,
 }
-impl OperatorTypeSpec {
-    /// Creates a new OperatorTypeSpec while checking the number of holes is correct
+impl OperatorKindspec {
+    /// Creates a new OperatorKindspec while checking the number of holes is correct
     fn new(
-        input_types: Vec<HLSLOperandType>,
-        output_type: HLSLOperandType,
+        input_types: Vec<HLSLOperandKind>,
+        output_type: HLSLOperandKind,
         holes: Vec<HLSLKind>,
     ) -> Self {
         let mut operand_types = input_types;
         operand_types.push(output_type);
 
-        // Sanity check - make sure the maximum hole ID referenced in any HLSLOperandType::Hole(id) == the number of elements in `holes`
+        // Sanity check - make sure the maximum hole ID referenced in any HLSLOperandKind::Hole(id) == the number of elements in `holes`
         let mut max_referenced_hole = None;
         for operand in operand_types.iter() {
-            if let HLSLOperandType::Hole(id) = operand {
+            if let HLSLOperandKind::Hole(id) = operand {
                 max_referenced_hole =
                     Some(max_referenced_hole.map_or(*id, |max_hole_id| max(max_hole_id, *id)));
             }
@@ -85,7 +85,7 @@ impl OperatorTypeSpec {
             }
         }
 
-        OperatorTypeSpec {
+        OperatorKindspec {
             operand_types,
             holes,
         }
@@ -98,8 +98,8 @@ impl OperatorTypeSpec {
             .iter()
             .map(|t| -> HLSLKind {
                 match t {
-                    HLSLOperandType::Concrete(c) => (*c).into(),
-                    HLSLOperandType::Hole(h) => self.holes[*h],
+                    HLSLOperandKind::Concrete(c) => (*c).into(),
+                    HLSLOperandKind::Hole(h) => self.holes[*h],
                 }
             })
             .collect()
@@ -108,8 +108,8 @@ impl OperatorTypeSpec {
     /// [get_basic_input_types] but for the output type.
     pub fn get_basic_output_type(&self) -> HLSLKind {
         match self.output_type() {
-            HLSLOperandType::Concrete(c) => (*c).into(),
-            HLSLOperandType::Hole(h) => self.holes[*h],
+            HLSLOperandKind::Concrete(c) => (*c).into(),
+            HLSLOperandKind::Hole(h) => self.holes[*h],
         }
     }
 
@@ -121,22 +121,22 @@ impl OperatorTypeSpec {
     ///
     /// The second type implies all of the operands should have the same hole type.
     pub fn get_type_constraints(&self) -> Vec<(HLSLKind, Vec<usize>)> {
-        // Create hole mappings at the same indices HLSLOperandType::Hole will refer to
+        // Create hole mappings at the same indices HLSLOperandKind::Hole will refer to
         let mut mappings: Vec<_> = self.holes.iter().map(|t| (*t, vec![])).collect();
         for (i, t) in self.operand_types.iter().enumerate() {
             match t {
-                HLSLOperandType::Hole(h) => mappings[*h].1.push(i),
-                HLSLOperandType::Concrete(c) => mappings.push(((*c).into(), vec![i])),
+                HLSLOperandKind::Hole(h) => mappings[*h].1.push(i),
+                HLSLOperandKind::Concrete(c) => mappings.push(((*c).into(), vec![i])),
             }
         }
 
         mappings
     }
 
-    pub fn input_types(&self) -> &[HLSLOperandType] {
+    pub fn input_types(&self) -> &[HLSLOperandKind] {
         &self.operand_types[0..(self.operand_types.len() - 1)]
     }
-    pub fn output_type(&self) -> &HLSLOperandType {
+    pub fn output_type(&self) -> &HLSLOperandKind {
         self.operand_types.last().unwrap()
     }
 }
@@ -154,21 +154,21 @@ pub enum HLSLOperator {
     Constructor(ConstructorOp),
 }
 impl Operator for HLSLOperator {
-    fn get_typespec(&self) -> OperatorTypeSpec {
+    fn get_kindspec(&self) -> OperatorKindspec {
         match self {
-            HLSLOperator::Assign => OperatorTypeSpec::new(
-                vec![HLSLOperandType::Hole(0)],
-                HLSLOperandType::Hole(0),
+            HLSLOperator::Assign => OperatorKindspec::new(
+                vec![HLSLOperandKind::Hole(0)],
+                HLSLOperandKind::Hole(0),
                 vec![HLSLKindBitmask::all().into()],
             ),
-            HLSLOperator::Unary(x) => x.get_typespec(),
-            HLSLOperator::Arithmetic(x) => x.get_typespec(),
-            HLSLOperator::BinaryArithmetic(x) => x.get_typespec(),
-            HLSLOperator::NumericCast(x) => x.get_typespec(),
-            HLSLOperator::SampleI(x) => x.get_typespec(),
-            HLSLOperator::NumericI(x) => x.get_typespec(),
-            HLSLOperator::FauxBoolean(x) => x.get_typespec(),
-            HLSLOperator::Constructor(x) => x.get_typespec(),
+            HLSLOperator::Unary(x) => x.get_kindspec(),
+            HLSLOperator::Arithmetic(x) => x.get_kindspec(),
+            HLSLOperator::BinaryArithmetic(x) => x.get_kindspec(),
+            HLSLOperator::NumericCast(x) => x.get_kindspec(),
+            HLSLOperator::SampleI(x) => x.get_kindspec(),
+            HLSLOperator::NumericI(x) => x.get_kindspec(),
+            HLSLOperator::FauxBoolean(x) => x.get_kindspec(),
+            HLSLOperator::Constructor(x) => x.get_kindspec(),
         }
     }
 
@@ -218,16 +218,16 @@ pub enum UnaryOp {
     Plus,
 }
 impl Operator for UnaryOp {
-    fn get_typespec(&self) -> OperatorTypeSpec {
+    fn get_kindspec(&self) -> OperatorKindspec {
         let hole = match self {
             UnaryOp::BinaryNot => HLSLKindBitmask::INTEGER,
             UnaryOp::Negate => HLSLKindBitmask::NUMERIC_FLOAT | HLSLKindBitmask::NUMERIC_SINT,
             UnaryOp::Plus => HLSLKindBitmask::NUMERIC,
         };
 
-        OperatorTypeSpec::new(
-            vec![HLSLOperandType::Hole(0)],
-            HLSLOperandType::Hole(0),
+        OperatorKindspec::new(
+            vec![HLSLOperandKind::Hole(0)],
+            HLSLOperandKind::Hole(0),
             vec![hole.into()],
         )
     }
@@ -266,11 +266,11 @@ pub enum ArithmeticOp {
     Mod,
 }
 impl Operator for ArithmeticOp {
-    fn get_typespec(&self) -> OperatorTypeSpec {
+    fn get_kindspec(&self) -> OperatorKindspec {
         // All of these operators are compatible with float/int/uint i.e. NUMERIC
-        OperatorTypeSpec::new(
-            vec![HLSLOperandType::Hole(0), HLSLOperandType::Hole(0)],
-            HLSLOperandType::Hole(0),
+        OperatorKindspec::new(
+            vec![HLSLOperandKind::Hole(0), HLSLOperandKind::Hole(0)],
+            HLSLOperandKind::Hole(0),
             vec![HLSLKindBitmask::NUMERIC.into()],
         )
     }
@@ -294,7 +294,7 @@ pub enum BinaryArithmeticOp {
     BitwiseXor,
 }
 impl Operator for BinaryArithmeticOp {
-    fn get_typespec(&self) -> OperatorTypeSpec {
+    fn get_kindspec(&self) -> OperatorKindspec {
         let is_shift = match self {
             BinaryArithmeticOp::LeftShift => true,
             BinaryArithmeticOp::RightShift => true,
@@ -304,20 +304,20 @@ impl Operator for BinaryArithmeticOp {
         };
 
         if !is_shift {
-            OperatorTypeSpec::new(
-                vec![HLSLOperandType::Hole(0), HLSLOperandType::Hole(0)],
-                HLSLOperandType::Hole(0),
+            OperatorKindspec::new(
+                vec![HLSLOperandKind::Hole(0), HLSLOperandKind::Hole(0)],
+                HLSLOperandKind::Hole(0),
                 vec![HLSLKindBitmask::INTEGER.into()],
             )
         } else {
             // Left input = the thing getting modified
             // Right input = the shift amount - must be unsigned int?
-            OperatorTypeSpec::new(
+            OperatorKindspec::new(
                 vec![
-                    HLSLOperandType::Hole(0),
+                    HLSLOperandKind::Hole(0),
                     HLSLNumericKind::UnsignedInt.into(),
                 ],
-                HLSLOperandType::Hole(0),
+                HLSLOperandKind::Hole(0),
                 vec![HLSLKindBitmask::INTEGER.into()],
             )
         }
@@ -335,9 +335,9 @@ impl Operator for BinaryArithmeticOp {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct NumericCastTo(pub HLSLNumericKind);
 impl Operator for NumericCastTo {
-    fn get_typespec(&self) -> OperatorTypeSpec {
-        OperatorTypeSpec::new(
-            vec![HLSLOperandType::Hole(0)],
+    fn get_kindspec(&self) -> OperatorKindspec {
+        OperatorKindspec::new(
+            vec![HLSLOperandKind::Hole(0)],
             self.0.into(),
             vec![HLSLKindBitmask::NUMERIC.into()],
         )
@@ -358,9 +358,9 @@ pub enum SampleIntrinsic {
     Tex2D,
 }
 impl Operator for SampleIntrinsic {
-    fn get_typespec(&self) -> OperatorTypeSpec {
+    fn get_kindspec(&self) -> OperatorKindspec {
         match self {
-            Self::Tex2D => OperatorTypeSpec::new(
+            Self::Tex2D => OperatorKindspec::new(
                 vec![
                     HLSLConcreteKind::Texture2D.into(),
                     HLSLNumericKind::Float.into(),
@@ -390,12 +390,12 @@ pub enum NumericIntrinsic {
     Max,
 }
 impl Operator for NumericIntrinsic {
-    fn get_typespec(&self) -> OperatorTypeSpec {
+    fn get_kindspec(&self) -> OperatorKindspec {
         match self {
             // TODO apparently not valid for uint? need to check further
-            Self::Min | Self::Max | Self::Dot => OperatorTypeSpec::new(
-                vec![HLSLOperandType::Hole(0), HLSLOperandType::Hole(0)],
-                HLSLOperandType::Hole(0),
+            Self::Min | Self::Max | Self::Dot => OperatorKindspec::new(
+                vec![HLSLOperandKind::Hole(0), HLSLOperandKind::Hole(0)],
+                HLSLOperandKind::Hole(0),
                 vec![HLSLKindBitmask::NUMERIC.into()],
             ),
         }
@@ -426,23 +426,23 @@ pub enum FauxBooleanOp {
     Ternary,
 }
 impl Operator for FauxBooleanOp {
-    fn get_typespec(&self) -> OperatorTypeSpec {
+    fn get_kindspec(&self) -> OperatorKindspec {
         match self {
-            Self::Lt | Self::Le | Self::Gt | Self::Ge => OperatorTypeSpec::new(
-                vec![HLSLOperandType::Hole(0), HLSLOperandType::Hole(0)],
-                HLSLOperandType::Hole(1),
+            Self::Lt | Self::Le | Self::Gt | Self::Ge => OperatorKindspec::new(
+                vec![HLSLOperandKind::Hole(0), HLSLOperandKind::Hole(0)],
+                HLSLOperandKind::Hole(1),
                 vec![
                     HLSLKindBitmask::NUMERIC.into(),
                     HLSLKindBitmask::INTEGER.into(),
                 ],
             ),
-            Self::Ternary => OperatorTypeSpec::new(
+            Self::Ternary => OperatorKindspec::new(
                 vec![
-                    HLSLOperandType::Hole(0),
-                    HLSLOperandType::Hole(1),
-                    HLSLOperandType::Hole(1),
+                    HLSLOperandKind::Hole(0),
+                    HLSLOperandKind::Hole(1),
+                    HLSLOperandKind::Hole(1),
                 ],
-                HLSLOperandType::Hole(1),
+                HLSLOperandKind::Hole(1),
                 vec![
                     HLSLKindBitmask::INTEGER.into(),
                     HLSLKindBitmask::NUMERIC.into(),
@@ -476,31 +476,31 @@ pub enum ConstructorOp {
     Vec4,
 }
 impl Operator for ConstructorOp {
-    fn get_typespec(&self) -> OperatorTypeSpec {
+    fn get_kindspec(&self) -> OperatorKindspec {
         match self {
             // TODO force all inputs to be scalar
-            Self::Vec2 => OperatorTypeSpec::new(
-                vec![HLSLOperandType::Hole(0), HLSLOperandType::Hole(0)],
-                HLSLOperandType::Hole(0),
+            Self::Vec2 => OperatorKindspec::new(
+                vec![HLSLOperandKind::Hole(0), HLSLOperandKind::Hole(0)],
+                HLSLOperandKind::Hole(0),
                 vec![HLSLKindBitmask::NUMERIC.into()],
             ),
-            Self::Vec3 => OperatorTypeSpec::new(
+            Self::Vec3 => OperatorKindspec::new(
                 vec![
-                    HLSLOperandType::Hole(0),
-                    HLSLOperandType::Hole(0),
-                    HLSLOperandType::Hole(0),
+                    HLSLOperandKind::Hole(0),
+                    HLSLOperandKind::Hole(0),
+                    HLSLOperandKind::Hole(0),
                 ],
-                HLSLOperandType::Hole(0),
+                HLSLOperandKind::Hole(0),
                 vec![HLSLKindBitmask::NUMERIC.into()],
             ),
-            Self::Vec4 => OperatorTypeSpec::new(
+            Self::Vec4 => OperatorKindspec::new(
                 vec![
-                    HLSLOperandType::Hole(0),
-                    HLSLOperandType::Hole(0),
-                    HLSLOperandType::Hole(0),
-                    HLSLOperandType::Hole(0),
+                    HLSLOperandKind::Hole(0),
+                    HLSLOperandKind::Hole(0),
+                    HLSLOperandKind::Hole(0),
+                    HLSLOperandKind::Hole(0),
                 ],
-                HLSLOperandType::Hole(0),
+                HLSLOperandKind::Hole(0),
                 vec![HLSLKindBitmask::NUMERIC.into()],
             ),
         }

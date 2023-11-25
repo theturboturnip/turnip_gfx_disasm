@@ -11,7 +11,7 @@ use crate::abstract_machine::{
 };
 use crate::hlsl::compat::HLSLCompatibleAbstractVM;
 use crate::hlsl::syntax::HLSLOperator;
-use crate::hlsl::types::{HLSLKind, HLSLKindBitmask};
+use crate::hlsl::kinds::{HLSLKind, HLSLKindBitmask};
 use crate::{Action, Outcome};
 
 /// The type of Action held by Programs for the [AMDILAbstractVM]
@@ -59,7 +59,7 @@ impl VMName for AMDILRegister {
         }
     }
 
-    fn type_mask(&self) -> HLSLKind {
+    fn hlsl_kind(&self) -> HLSLKind {
         match self {
             Self::Texture(_) => HLSLKindBitmask::TEXTURE2D.into(),
             _ => HLSLKindBitmask::NUMERIC.into(),
@@ -79,7 +79,7 @@ impl VMVector for AMDILRegister {
 pub struct AMDILMaskSwizVector(AMDILRegister, MaskedSwizzle, HLSLKind);
 impl AMDILMaskSwizVector {
     pub fn new(reg: AMDILRegister, swizzle: MaskedSwizzle) -> Self {
-        let kind = reg.type_mask();
+        let kind = reg.hlsl_kind();
         Self(reg, swizzle, kind)
     }
 
@@ -114,8 +114,8 @@ impl VMName for AMDILMaskSwizVector {
         self.0.is_pure_input()
     }
 
-    fn type_mask(&self) -> HLSLKind {
-        self.0.type_mask()
+    fn hlsl_kind(&self) -> HLSLKind {
+        self.0.hlsl_kind()
     }
 }
 impl VMVector for AMDILMaskSwizVector {
@@ -124,8 +124,8 @@ impl VMVector for AMDILMaskSwizVector {
     }
 }
 impl Refinable for AMDILMaskSwizVector {
-    fn refine_type(&self, type_mask: HLSLKind) -> Option<Self> {
-        let new_kind = self.2.intersection(type_mask)?;
+    fn refine_kind(&self, hlsl_kind: HLSLKind) -> Option<Self> {
+        let new_kind = self.2.intersection(hlsl_kind)?;
         Some(Self(self.0.clone(), self.1, new_kind))
     }
 }
@@ -139,8 +139,8 @@ impl Refinable for AMDILMaskSwizVector {
 //         &self.name
 //     }
 
-//     fn type_mask(&self) -> HLSLKind {
-//         self.name.base_type_mask()
+//     fn hlsl_kind(&self) -> HLSLKind {
+//         self.name.base_hlsl_kind()
 //     }
 // }
 // impl VMVectorDataRef<AMDILNameRef> for AMDILDataRef {
@@ -153,7 +153,7 @@ impl Refinable for AMDILMaskSwizVector {
 //         &self.name.name
 //     }
 
-//     fn type_mask(&self) -> HLSLKind {
+//     fn hlsl_kind(&self) -> HLSLKind {
 //         self.kind
 //     }
 // }
@@ -165,7 +165,7 @@ impl Refinable for AMDILMaskSwizVector {
 // impl From<AMDILDataRef> for RefinableVMDataRef<AMDILDataRef> {
 //     fn from(data: AMDILDataRef) -> Self {
 //         Self {
-//             kind: data.type_mask(),
+//             kind: data.hlsl_kind(),
 //             name: data,
 //         }
 //     }

@@ -1,6 +1,6 @@
 use std::hash::Hash;
 
-use crate::hlsl::{syntax::HLSLOperator, types::{HLSLKind, HLSLKindBitmask}};
+use crate::hlsl::{syntax::HLSLOperator, kinds::{HLSLKind, HLSLKindBitmask}};
 
 use self::{vector::MaskedSwizzle, vector::VectorComponent, instructions::InstrArgs};
 
@@ -15,7 +15,7 @@ pub trait VMName: Clone + PartialEq + Eq + Hash + std::fmt::Debug {
     fn is_pure_input(&self) -> bool;
     // TODO all names and data must refer to values of known width
     // fn data_width(&self) -> DataWidth;
-    fn type_mask(&self) -> HLSLKind;
+    fn hlsl_kind(&self) -> HLSLKind;
 }
 
 /// A name of a scalar item referenced by some VM
@@ -29,7 +29,7 @@ pub trait VMVector: VMName {
 
 /// A [VMName] may also be [Refinable] - i.e. can have its type refined with further context
 pub trait Refinable: Sized {
-    fn refine_type(&self, type_mask: HLSLKind) -> Option<Self>;
+    fn refine_kind(&self, hlsl_kind: HLSLKind) -> Option<Self>;
 }
 
 /// The width in bits of a piece of data.
@@ -53,10 +53,10 @@ pub struct RefinableRef<TName: VMName> {
 impl<TName: VMName> Refinable for RefinableRef<TName> {
     /// Return a copy of this data ref with the intersection of the given type mask and your actual type mask,
     /// or None if the masks are incompatible.
-    fn refine_type(&self, type_mask: HLSLKind) -> Option<Self> {
+    fn refine_kind(&self, hlsl_kind: HLSLKind) -> Option<Self> {
         Some(Self {
             name: self.name.clone(),
-            kind: self.kind.intersection(type_mask)?,
+            kind: self.kind.intersection(hlsl_kind)?,
         })
     }
 }
@@ -65,7 +65,7 @@ impl<T: VMName> VMName for RefinableRef<T> {
         self.name.is_pure_input()
     }
 
-    fn type_mask(&self) -> HLSLKind {
+    fn hlsl_kind(&self) -> HLSLKind {
         self.kind
     }
 }

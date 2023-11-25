@@ -1,11 +1,11 @@
 use crate::abstract_machine::{vector::{VectorOf, ComponentOf}, VMName, VMVector};
 
-use self::types::{HLSLKind, HLSLKindBitmask};
+use self::kinds::{HLSLKind, HLSLKindBitmask};
 
 pub mod compat;
 pub mod display;
 pub mod syntax;
-pub mod types;
+pub mod kinds;
 pub mod vm;
 
 
@@ -29,7 +29,7 @@ impl VMName for HLSLSingleVectorName {
         }
     }
 
-    fn type_mask(&self) -> HLSLKind {
+    fn hlsl_kind(&self) -> HLSLKind {
         // TODO store this in a value for the variable machine to shrink it?
         match self {
             HLSLSingleVectorName::Texture(_) => HLSLKindBitmask::TEXTURE2D.into(),
@@ -37,7 +37,7 @@ impl VMName for HLSLSingleVectorName {
             HLSLSingleVectorName::ShaderInput(_) => HLSLKindBitmask::NUMERIC.into(),
             HLSLSingleVectorName::ShaderOutput(_) => HLSLKindBitmask::NUMERIC.into(),
             HLSLSingleVectorName::Literal(_) => HLSLKindBitmask::NUMERIC.into(),
-            HLSLSingleVectorName::ArrayElement { of, idx } => of.type_mask(),
+            HLSLSingleVectorName::ArrayElement { of, idx } => of.hlsl_kind(),
         }
     }
 }

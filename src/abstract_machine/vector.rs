@@ -2,7 +2,7 @@
 
 use std::ops::Index;
 
-use crate::hlsl::types::{HLSLKind, HLSLKindBitmask};
+use crate::hlsl::kinds::{HLSLKind, HLSLKindBitmask};
 
 use super::{VMScalar, VMVector, VMName};
 
@@ -12,7 +12,7 @@ impl<T: VMVectorNameRef> VMDataRef<T> for RefinableVMDataRef<VMScalarNameRef<T>>
         &self.data.0
     }
 
-    fn type_mask(&self) -> HLSLKind {
+    fn hlsl_kind(&self) -> HLSLKind {
         self.kind
     }
 }
@@ -28,7 +28,7 @@ impl<T: VMVectorNameRef> VMScalarDataRef<T> for RefinableVMDataRef<VMScalarNameR
 impl<T: VMVectorNameRef> From<VMScalarNameRef<T>> for RefinableVMDataRef<VMScalarNameRef<T>> {
     fn from(data: VMScalarNameRef<T>) -> Self {
         Self {
-            kind: data.0.base_type_mask(),
+            kind: data.0.base_hlsl_kind(),
             data,
         }
     }
@@ -42,7 +42,7 @@ pub trait VMVectorName: VMName {
     /// Number of components in the vector
     fn n_components(&self) -> u8;
     /// Base type - the lowest common denominator [HLSLKind] that could this name could possibly hold.
-    fn base_type_mask(&self) -> HLSLKind;
+    fn base_hlsl_kind(&self) -> HLSLKind;
 }
 impl VMRef for [u64; 4] {
     fn is_pure_input(&self) -> bool {
@@ -53,7 +53,7 @@ impl VMVectorNameRef for [u64; 4] {
     fn n_components(&self) -> u8 {
         4
     }
-    fn base_type_mask(&self) -> HLSLKind {
+    fn base_hlsl_kind(&self) -> HLSLKind {
         HLSLKindBitmask::NUMERIC.into()
     }
 }
@@ -99,8 +99,8 @@ impl<T: VMVectorNameRef> VMDataRef<T> for (T, MaskedSwizzle) {
         &self.0
     }
 
-    fn type_mask(&self) -> HLSLKind {
-        self.name().base_type_mask()
+    fn hlsl_kind(&self) -> HLSLKind {
+        self.name().base_hlsl_kind()
     }
 }
 impl<T: VMVectorNameRef> VMVectorDataRef<T> for (T, MaskedSwizzle) {
@@ -119,7 +119,7 @@ impl<T: VMScalar> VectorOf<T> {
     pub fn new(ts: &[T]) -> Option<Self> {
         assert!(ts.len() > 0);
         let kind_mask = ts.iter().fold(Some(HLSLKindBitmask::all().into()), |kind, t| {
-            HLSLKind::intersection(kind?, t.type_mask())
+            HLSLKind::intersection(kind?, t.hlsl_kind())
         });
         Some(Self { ts: ts.iter().map(|t| t.clone()).collect(), kind: kind_mask?.into() })
     }
@@ -129,7 +129,7 @@ impl<T: VMScalar> VMName for VectorOf<T> {
         self.ts.iter().all(T::is_pure_input)
     }
 
-    fn type_mask(&self) -> HLSLKind {
+    fn hlsl_kind(&self) -> HLSLKind {
         self.kind
     }
 }
@@ -148,7 +148,7 @@ impl<T: VMScalar> HoleyVectorOf<T> {
     pub fn new(ts: &[Option<T>]) -> Option<Self> {
         let kind_mask = ts.iter().fold(Some(HLSLKindBitmask::all().into()), |kind, t| {
             if let Some(t) = t {
-                HLSLKind::intersection(kind?, t.type_mask())
+                HLSLKind::intersection(kind?, t.hlsl_kind())
             } else {
                 kind
             }
@@ -164,7 +164,7 @@ impl<T: VMScalar> VMName for HoleyVectorOf<T> {
         })
     }
 
-    fn type_mask(&self) -> HLSLKind {
+    fn hlsl_kind(&self) -> HLSLKind {
         self.kind
     }
 }
@@ -192,8 +192,8 @@ impl<T: VMVector> VMName for ComponentOf<T> {
         self.vec.is_pure_input()
     }
 
-    fn type_mask(&self) -> HLSLKind {
-        self.vec.type_mask()
+    fn hlsl_kind(&self) -> HLSLKind {
+        self.vec.hlsl_kind()
     }
 }
 impl<T: VMVector> VMScalar for ComponentOf<T> {}

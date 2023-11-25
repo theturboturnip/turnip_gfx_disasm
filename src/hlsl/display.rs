@@ -3,7 +3,7 @@ use std::fmt::{Display, Formatter};
 use crate::abstract_machine::{vector::VectorComponent, VMName, VMVector};
 
 use super::{
-    types::{HLSLConcreteKind, HLSLKind, HLSLKindBitmask, HLSLNumericKind},
+    kinds::{HLSLConcreteKind, HLSLKind, HLSLKindBitmask, HLSLNumericKind},
     vm::HLSLAction, HLSLSingleVectorName, HLSLScalarName, HLSLVector,
 };
 
@@ -30,7 +30,7 @@ impl std::fmt::Display for DWrap<&HLSLScalarName> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         let v = &self.0.vec;
         let c = self.0.comp;
-        let v_kind = v.type_mask();
+        let v_kind = v.hlsl_kind();
         if let HLSLSingleVectorName::Literal(vals) = v {
             let val: u64 = vals[c.into_index()];
             match v_kind.mask() {
@@ -65,7 +65,7 @@ impl std::fmt::Display for DWrap<&HLSLVector> {
             }
             Ok(())
         } else {
-            write!(f, "{}{}(", self.0.type_mask(), self.0.n_components())?;
+            write!(f, "{}{}(", self.0.hlsl_kind(), self.0.n_components())?;
             for t in self.0.ts.iter() {
                 // TODO correct comma joining
                 write!(f, "{}.{}, ", t.vec, t.comp)?;
@@ -82,7 +82,7 @@ impl std::fmt::Display for HLSLAction {
                 write!(
                     f,
                     "{}{} {};",
-                    new_var.type_mask(), new_var.n_components(), new_var
+                    new_var.hlsl_kind(), new_var.n_components(), new_var
                 )
             }
             Self::Assign {

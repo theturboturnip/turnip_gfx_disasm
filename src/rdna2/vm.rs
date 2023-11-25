@@ -70,7 +70,7 @@ impl VMVectorNameRef for RDNA2DataRef {
         1
     }
 
-    fn base_type_mask(&self) -> crate::hlsl::types::HLSLKind {
+    fn base_hlsl_kind(&self) -> crate::hlsl::types::HLSLKind {
         // TODO check this is right
         HLSLKindBitmask::NUMERIC.into()
     }
@@ -80,8 +80,8 @@ impl VMDataRef<RDNA2DataRef> for RDNA2DataRef {
         self
     }
 
-    fn type_mask(&self) -> crate::hlsl::types::HLSLKind {
-        self.base_type_mask()
+    fn hlsl_kind(&self) -> crate::hlsl::types::HLSLKind {
+        self.base_hlsl_kind()
     }
 }
 impl VMVectorDataRef<RDNA2DataRef> for RDNA2DataRef {

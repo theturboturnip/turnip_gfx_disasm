@@ -10,7 +10,7 @@ use crate::{
     },
     hlsl::{
         syntax::{ArithmeticOp, FauxBooleanOp, HLSLOperator, NumericIntrinsic, SampleIntrinsic},
-        types::{HLSLConcreteKind, HLSLKind, HLSLKindBitmask, HLSLNumericKind},
+        kinds::{HLSLConcreteKind, HLSLKind, HLSLKindBitmask, HLSLNumericKind},
     },
     Action, Outcome,
 };
@@ -34,7 +34,7 @@ pub struct ALUInstruction {
     op: HLSLOperator,
 }
 
-// TODO Should this use HLSLOperandType and have a separate hole vector? probably not - we don't need to encode the type dependency here
+// TODO Should this use HLSLOperandKind and have a separate hole vector? probably not - we don't need to encode the type dependency here
 #[derive(Debug, Clone)]
 struct ALUArgsSpec {
     input_kinds: Vec<HLSLKind>,
@@ -56,7 +56,7 @@ impl ALUArgsSpec {
             .into_iter()
             .zip(self.output_kinds.iter())
             .map(|(data, kind)| {
-                data.refine_type(*kind).unwrap()
+                data.refine_kind(*kind).unwrap()
             })
             .collect();
 
@@ -66,7 +66,7 @@ impl ALUArgsSpec {
             .map(|(data, kind)| {
                 let swizzle = data.swizzle().masked_out(mask_to_apply_to_input);
                 let data = AMDILMaskSwizVector::new(data.register().clone(), swizzle);
-                data.refine_type(*kind).unwrap()
+                data.refine_kind(*kind).unwrap()
             })
             .collect();
 
