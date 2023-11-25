@@ -174,8 +174,10 @@ lazy_static! {
             ALUArgsSpec {
                 // first input = integer "is zero"?
                 // second and third input could be anything, output kind could be anything
+                // they should all be the same length! (page 7-154)
+                // can do cmov_logical r0.xyz r1.xyz r2.xyz r3.xyz: r3.x = r2.x if r0.x else r1.x and so forth for x,y,z
                 input_kinds: vec![HLSLNumericKind::UnsignedInt.into(), HLSLKindBitmask::all().into(), HLSLKindBitmask::all().into()],
-                input_mask: InputMask::TruncateTo(3),
+                input_mask: InputMask::InheritFromFirstOutput,
                 output_kinds: vec![HLSLKindBitmask::all().into()],
             },
             HLSLOperator::FauxBoolean(FauxBooleanOp::Ternary)

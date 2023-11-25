@@ -459,11 +459,7 @@ impl Operator for FauxBooleanOp {
     }
 
     fn dep_rel(&self) -> SimpleDependencyRelation {
-        match self {
-            // TODO something better
-            Self::Ternary => SimpleDependencyRelation::AllToAll,
-            _ => SimpleDependencyRelation::PerComponent,
-        }
+        SimpleDependencyRelation::PerComponent
     }
 }
 
