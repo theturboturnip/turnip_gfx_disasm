@@ -59,6 +59,13 @@ impl VMName for AMDILRegister {
         }
     }
 
+    fn is_output(&self) -> bool {
+        match self {
+            Self::NamedOutputRegister(String) => true,
+            _ => false,
+        }
+    }
+
     fn hlsl_kind(&self) -> HLSLKind {
         match self {
             Self::Texture(_) => HLSLKindBitmask::TEXTURE2D.into(),
@@ -112,6 +119,10 @@ impl AMDILMaskSwizVector {
 impl VMName for AMDILMaskSwizVector {
     fn is_pure_input(&self) -> bool {
         self.0.is_pure_input()
+    }
+
+    fn is_output(&self) -> bool {
+        self.0.is_output()
     }
 
     fn hlsl_kind(&self) -> HLSLKind {

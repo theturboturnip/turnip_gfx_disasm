@@ -29,6 +29,14 @@ impl VMName for HLSLSingleVectorName {
         }
     }
 
+    fn is_output(&self) -> bool {
+        match self {
+            Self::ShaderOutput(_) => true, // assuming textures are read-only
+            Self::ArrayElement { of, .. } => of.is_output(),
+            _ => false,
+        }
+    }
+
     fn hlsl_kind(&self) -> HLSLKind {
         // TODO store this in a value for the variable machine to shrink it?
         match self {

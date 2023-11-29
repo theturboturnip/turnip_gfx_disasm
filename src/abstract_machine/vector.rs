@@ -129,6 +129,10 @@ impl<T: VMScalar> VMName for VectorOf<T> {
         self.ts.iter().all(T::is_pure_input)
     }
 
+    fn is_output(&self) -> bool {
+        self.ts.iter().all(T::is_output)
+    }
+
     fn hlsl_kind(&self) -> HLSLKind {
         self.kind
     }
@@ -164,6 +168,13 @@ impl<T: VMScalar> VMName for HoleyVectorOf<T> {
         })
     }
 
+    fn is_output(&self) -> bool {
+        self.ts.iter().all(|t| match t {
+            Some(t) => t.is_output(),
+            None => true
+        })
+    }
+
     fn hlsl_kind(&self) -> HLSLKind {
         self.kind
     }
@@ -190,6 +201,10 @@ impl<T: VMVector> ComponentOf<T> {
 impl<T: VMVector> VMName for ComponentOf<T> {
     fn is_pure_input(&self) -> bool {
         self.vec.is_pure_input()
+    }
+
+    fn is_output(&self) -> bool {
+        self.vec.is_output()
     }
 
     fn hlsl_kind(&self) -> HLSLKind {

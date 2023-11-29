@@ -11,10 +11,22 @@ pub mod vector;
 
 /// A name of an item referenced by some VM.
 pub trait VMName: Clone + PartialEq + Eq + Hash + std::fmt::Debug {
-    /// Returns true if the data is a pure input and should not be expanded into dependencies when passed as a parent.
+    // TODO I should evaluate if these are more useful as is_readable() and is_writable().
+    // is_pure_input() = !is_writable()?
+    // is_output() = !is_readable()?
+
+    /// Returns true if the data is a pure input, i.e. always read and never written.
+    /// The dependency analyser uses this to see if it should be expanded into its dependencies, or whether it should have none.
     fn is_pure_input(&self) -> bool;
+    /// Returns true if the data is an output.
+    /// I'm not confident enough to state this means it isn't ever written, read, then written again, but anything interpreting
+    /// a program will need to know if it's intended to be passed out of the program.
+    fn is_output(&self) -> bool;
+
     // TODO all names and data must refer to values of known width
     // fn data_width(&self) -> DataWidth;
+    
+    /// Returns the possible HLSL kinds this may refer to.
     fn hlsl_kind(&self) -> HLSLKind;
 }
 
@@ -63,6 +75,10 @@ impl<TName: VMName> Refinable for RefinableRef<TName> {
 impl<T: VMName> VMName for RefinableRef<T> {
     fn is_pure_input(&self) -> bool {
         self.name.is_pure_input()
+    }
+
+    fn is_output(&self) -> bool {
+        self.name.is_output()
     }
 
     fn hlsl_kind(&self) -> HLSLKind {
