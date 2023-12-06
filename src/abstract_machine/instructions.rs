@@ -2,6 +2,8 @@
 //!
 //!  TODO Merge hole handling with hlsl::syntax setup
 
+use crate::hlsl::kinds::HLSLKind;
+
 use super::{AbstractVM, VMVector};
 
 /// Trait for a type that manages a set of possible instructions
@@ -51,8 +53,8 @@ impl<TVM: AbstractVM, TArgsSpec: ArgsSpec<TVM>, TDepRelation: DependencyRelation
 /// Struct holding the arguments to an instruction for a given VM
 #[derive(Debug, Clone)]
 pub struct InstrArgs<V: VMVector> {
-    pub outputs: Vec<V>,
-    pub inputs: Vec<V>,
+    pub outputs: Vec<(V, HLSLKind)>,
+    pub inputs: Vec<(V, HLSLKind)>,
 }
 
 /// Trait for types which can map the indivdual output scalars of an instruction to the input scalars that affect them.
@@ -94,12 +96,12 @@ impl<TVM: AbstractVM> DependencyRelation<TVM> for SimpleDependencyRelation {
             .outputs
             .iter()
             .enumerate()
-            .map(|(i, elem)| TVM::decompose(elem));
+            .map(|(i, elem)| TVM::decompose(&elem.0));
         let expanded_inputs = args
             .inputs
             .iter()
             .enumerate()
-            .map(|(i, elem)| TVM::decompose(elem));
+            .map(|(i, elem)| TVM::decompose(&elem.0));
         match self {
             Self::AllToAll => {
                 // Put all inputs in a vector

@@ -37,7 +37,7 @@ impl VMName for HLSLSingleVectorName {
         }
     }
 
-    fn hlsl_kind(&self) -> HLSLKind {
+    fn toplevel_kind(&self) -> HLSLKind {
         // TODO store this in a value for the variable machine to shrink it?
         match self {
             HLSLSingleVectorName::Texture(_) => HLSLKindBitmask::TEXTURE2D.into(),
@@ -45,7 +45,7 @@ impl VMName for HLSLSingleVectorName {
             HLSLSingleVectorName::ShaderInput(_) => HLSLKindBitmask::NUMERIC.into(),
             HLSLSingleVectorName::ShaderOutput(_) => HLSLKindBitmask::NUMERIC.into(),
             HLSLSingleVectorName::Literal(_) => HLSLKindBitmask::NUMERIC.into(),
-            HLSLSingleVectorName::ArrayElement { of, idx } => of.hlsl_kind(),
+            HLSLSingleVectorName::ArrayElement { of, idx } => of.toplevel_kind(),
         }
     }
 }

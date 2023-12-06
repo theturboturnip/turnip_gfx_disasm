@@ -1,6 +1,6 @@
 use std::hash::Hash;
 
-use crate::hlsl::{syntax::HLSLOperator, kinds::{HLSLKind, HLSLKindBitmask}};
+use crate::hlsl::{syntax::HLSLOperator, kinds::{HLSLKind, HLSLKindBitmask}, self};
 
 use self::{vector::MaskedSwizzle, vector::VectorComponent, instructions::InstrArgs};
 
@@ -27,7 +27,9 @@ pub trait VMName: Clone + PartialEq + Eq + Hash + std::fmt::Debug {
     // fn data_width(&self) -> DataWidth;
     
     /// Returns the possible HLSL kinds this may refer to.
-    fn hlsl_kind(&self) -> HLSLKind;
+    /// 
+    /// This should not be mutable/refinable
+    fn toplevel_kind(&self) -> HLSLKind;
 }
 
 /// A name of a scalar item referenced by some VM
@@ -41,6 +43,7 @@ pub trait VMVector: VMName {
 
 /// A [VMName] may also be [Refinable] - i.e. can have its type refined with further context
 pub trait Refinable: Sized {
+    fn refined_kind(&self) -> HLSLKind;
     fn refine_kind(&self, hlsl_kind: HLSLKind) -> Option<Self>;
 }
 
@@ -71,24 +74,9 @@ impl<TName: VMName> Refinable for RefinableRef<TName> {
             kind: self.kind.intersection(hlsl_kind)?,
         })
     }
-}
-impl<T: VMName> VMName for RefinableRef<T> {
-    fn is_pure_input(&self) -> bool {
-        self.name.is_pure_input()
-    }
 
-    fn is_output(&self) -> bool {
-        self.name.is_output()
-    }
-
-    fn hlsl_kind(&self) -> HLSLKind {
+    fn refined_kind(&self) -> HLSLKind {
         self.kind
-    }
-}
-impl<T: VMScalar> VMScalar for RefinableRef<T> {}
-impl<T: VMVector> VMVector for RefinableRef<T> {
-    fn n_components(&self) -> usize {
-        self.name.n_components()
     }
 }
 
@@ -120,6 +108,13 @@ impl<TVM: AbstractVM> Action<TVM> for Box<dyn Action<TVM>> {
     }
 }
 
+struct SimpleAction<TVM: AbstractVM + Clone>(Outcome<TVM>);
+impl<TVM: AbstractVM + Clone> Action<TVM> for SimpleAction<TVM> {
+    fn outcomes(&self) -> Vec<Outcome<TVM>> {
+        vec![self.0.clone()]
+    }
+}
+
 #[derive(Debug, Clone)]
 pub enum Outcome<TVM: AbstractVM> {
     /// Declare a name exists
@@ -129,9 +124,9 @@ pub enum Outcome<TVM: AbstractVM> {
     /// The names for all inputs and output must have been previously declared.
     Assign {
         // TODO move to using InstrArgs
-        output: TVM::Vector,
+        output: (TVM::Vector, HLSLKind),
         op: HLSLOperator,
-        inputs: Vec<TVM::Vector>,
+        inputs: Vec<(TVM::Vector, HLSLKind)>,
     },
     /// Early out based on a set of inputs
     EarlyOut { inputs: Vec<TVM::Scalar> },

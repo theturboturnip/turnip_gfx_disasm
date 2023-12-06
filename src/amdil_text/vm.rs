@@ -7,7 +7,7 @@
 
 use crate::abstract_machine::vector::{MaskedSwizzle, ComponentOf};
 use crate::abstract_machine::{
-    AbstractVM, VMName, VMVector, Refinable
+    AbstractVM, VMName, VMVector
 };
 use crate::hlsl::compat::HLSLCompatibleAbstractVM;
 use crate::hlsl::syntax::HLSLOperator;
@@ -66,7 +66,7 @@ impl VMName for AMDILRegister {
         }
     }
 
-    fn hlsl_kind(&self) -> HLSLKind {
+    fn toplevel_kind(&self) -> HLSLKind {
         match self {
             Self::Texture(_) => HLSLKindBitmask::TEXTURE2D.into(),
             _ => HLSLKindBitmask::NUMERIC.into(),
@@ -83,11 +83,10 @@ impl VMVector for AMDILRegister {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct AMDILMaskSwizVector(AMDILRegister, MaskedSwizzle, HLSLKind);
+pub struct AMDILMaskSwizVector(AMDILRegister, MaskedSwizzle);
 impl AMDILMaskSwizVector {
     pub fn new(reg: AMDILRegister, swizzle: MaskedSwizzle) -> Self {
-        let kind = reg.hlsl_kind();
-        Self(reg, swizzle, kind)
+        Self(reg, swizzle)
     }
 
     pub fn register(&self) -> &AMDILRegister {
@@ -125,8 +124,8 @@ impl VMName for AMDILMaskSwizVector {
         self.0.is_output()
     }
 
-    fn hlsl_kind(&self) -> HLSLKind {
-        self.0.hlsl_kind()
+    fn toplevel_kind(&self) -> HLSLKind {
+        self.0.toplevel_kind()
     }
 }
 impl VMVector for AMDILMaskSwizVector {
@@ -134,12 +133,7 @@ impl VMVector for AMDILMaskSwizVector {
         self.1.num_used_components() // TODO: ???
     }
 }
-impl Refinable for AMDILMaskSwizVector {
-    fn refine_kind(&self, hlsl_kind: HLSLKind) -> Option<Self> {
-        let new_kind = self.2.intersection(hlsl_kind)?;
-        Some(Self(self.0.clone(), self.1, new_kind))
-    }
-}
+
 // impl VMName for AMDILDataRef {
 //     fn is_pure_input(&self) -> bool {
 //         self.name.is_pure_input()
@@ -214,10 +208,10 @@ impl Action<AMDILAbstractVM> for AMDILDeclaration {
                 vec![
                     Outcome::Declare(name.clone()),
                     Outcome::Assign {
-                        output: AMDILMaskSwizVector::new(name, MaskedSwizzle::identity(4)),
+                        output: (AMDILMaskSwizVector::new(name, MaskedSwizzle::identity(4)), HLSLKindBitmask::NUMERIC.into()),
                         op: HLSLOperator::Assign,
                         inputs: vec![
-                            AMDILMaskSwizVector::literal(*value, MaskedSwizzle::identity(4))
+                            (AMDILMaskSwizVector::literal(*value, MaskedSwizzle::identity(4)), HLSLKindBitmask::NUMERIC.into())
                         ],
                     },
                 ]

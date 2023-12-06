@@ -54,7 +54,7 @@ impl<TVM: AbstractVM> ScalarDependencies<TVM> {
                     // Irrelevant because no values are being assigned
                 }
                 Outcome::Assign { output, inputs, op } => {
-                    if output.is_pure_input() {
+                    if output.0.is_pure_input() {
                         println!(
                                 "Weird! Someone is writing to a pure input. Ignoring dependency {:?} -> {:?}",
                                 inputs, output

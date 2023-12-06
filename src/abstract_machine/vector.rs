@@ -119,7 +119,7 @@ impl<T: VMScalar> VectorOf<T> {
     pub fn new(ts: &[T]) -> Option<Self> {
         assert!(ts.len() > 0);
         let kind_mask = ts.iter().fold(Some(HLSLKindBitmask::all().into()), |kind, t| {
-            HLSLKind::intersection(kind?, t.hlsl_kind())
+            HLSLKind::intersection(kind?, t.toplevel_kind())
         });
         Some(Self { ts: ts.iter().map(|t| t.clone()).collect(), kind: kind_mask?.into() })
     }
@@ -133,7 +133,7 @@ impl<T: VMScalar> VMName for VectorOf<T> {
         self.ts.iter().all(T::is_output)
     }
 
-    fn hlsl_kind(&self) -> HLSLKind {
+    fn toplevel_kind(&self) -> HLSLKind {
         self.kind
     }
 }
@@ -152,7 +152,7 @@ impl<T: VMScalar> HoleyVectorOf<T> {
     pub fn new(ts: &[Option<T>]) -> Option<Self> {
         let kind_mask = ts.iter().fold(Some(HLSLKindBitmask::all().into()), |kind, t| {
             if let Some(t) = t {
-                HLSLKind::intersection(kind?, t.hlsl_kind())
+                HLSLKind::intersection(kind?, t.toplevel_kind())
             } else {
                 kind
             }
@@ -175,7 +175,7 @@ impl<T: VMScalar> VMName for HoleyVectorOf<T> {
         })
     }
 
-    fn hlsl_kind(&self) -> HLSLKind {
+    fn toplevel_kind(&self) -> HLSLKind {
         self.kind
     }
 }
@@ -207,8 +207,8 @@ impl<T: VMVector> VMName for ComponentOf<T> {
         self.vec.is_output()
     }
 
-    fn hlsl_kind(&self) -> HLSLKind {
-        self.vec.hlsl_kind()
+    fn toplevel_kind(&self) -> HLSLKind {
+        self.vec.toplevel_kind()
     }
 }
 impl<T: VMVector> VMScalar for ComponentOf<T> {}
@@ -245,6 +245,17 @@ impl VectorComponent {
             VectorComponent::Y => 1,
             VectorComponent::Z => 2,
             VectorComponent::W => 3,
+        }
+    }
+}
+impl From<usize> for VectorComponent {
+    fn from(value: usize) -> Self {
+        match value {
+            0 => Self::X,
+            1 => Self::Y,
+            2 => Self::Z,
+            3 => Self::W,
+            _ => panic!("Invalid usize to VectorComponent: {}", value)
         }
     }
 }

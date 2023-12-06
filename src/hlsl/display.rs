@@ -30,7 +30,7 @@ impl std::fmt::Display for DWrap<&HLSLScalarName> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         let v = &self.0.vec;
         let c = self.0.comp;
-        let v_kind = v.hlsl_kind();
+        let v_kind = v.toplevel_kind();
         if let HLSLSingleVectorName::Literal(vals) = v {
             let val: u64 = vals[c.into_index()];
             match v_kind.mask() {
@@ -53,20 +53,21 @@ impl std::fmt::Display for DWrap<&HLSLScalarName> {
     }
 }
 
-impl std::fmt::Display for DWrap<&HLSLVector> {
+impl std::fmt::Display for DWrap<&(HLSLVector, HLSLKind)> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         // let (v, cs) = &self.0;
         // write!(f, "{}{}", v.vector_name, cs)
-        let common_origin = &self.0.ts[0].vec;
-        if self.0.ts.iter().all(|t| &t.vec == common_origin) {
+        let ts = &self.0.0.ts;
+        let common_origin = &ts[0].vec;
+        if ts.iter().all(|t| &t.vec == common_origin) {
             write!(f, "{common_origin}.")?;
-            for t in self.0.ts.iter() {
+            for t in ts.iter() {
                 write!(f, "{}", t.comp)?;
             }
             Ok(())
         } else {
-            write!(f, "{}{}(", self.0.hlsl_kind(), self.0.n_components())?;
-            for t in self.0.ts.iter() {
+            write!(f, "{}{}(", self.0.1, self.0.0.n_components())?;
+            for t in ts.iter() {
                 // TODO correct comma joining
                 write!(f, "{}.{}, ", t.vec, t.comp)?;
             }
@@ -82,7 +83,7 @@ impl std::fmt::Display for HLSLAction {
                 write!(
                     f,
                     "{}{} {};",
-                    new_var.hlsl_kind(), new_var.n_components(), new_var
+                    new_var.toplevel_kind(), new_var.n_components(), new_var
                 )
             }
             Self::Assign {
