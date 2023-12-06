@@ -128,6 +128,13 @@ pub enum Outcome<TVM: AbstractVM> {
     },
     /// Early out based on a set of inputs
     EarlyOut { inputs: Vec<TVM::Scalar> },
+    // If {
+            // TODO AMDIL uses if_logicalnz, if_logicalz, ifnz, ifc_(relop)
+            // relop = Eq, Ge, Gt, Le, Lt, Ne
+            // Seemingly floating-point
+            // also used in continue/break
+    //     condition: 
+    // }
 }
 
 /// Trait for programs that run on an abstract VM
