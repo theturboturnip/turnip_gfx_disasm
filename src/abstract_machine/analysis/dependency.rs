@@ -50,9 +50,6 @@ impl<TVM: AbstractVM> ScalarDependencies<TVM> {
     pub fn accum_action(&mut self, action: &dyn Action<TVM>) {
         for dep in action.outcomes() {
             match dep {
-                Outcome::Declare { .. } => {
-                    // Irrelevant because no values are being assigned
-                }
                 Outcome::Assign { output, inputs, op } => {
                     if output.0.is_pure_input() {
                         println!(

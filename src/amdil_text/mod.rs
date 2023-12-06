@@ -2,20 +2,26 @@ use std::marker::PhantomData;
 
 use nom::Finish;
 
-use crate::{Decoder, Program};
+use crate::{Decoder, Program, abstract_machine::VMName};
 
 mod decode;
 mod grammar;
 pub mod vm;
 pub use vm::AMDILAction;
 
-use self::{decode::AMDILTextDecodeError, grammar::AMDILTextParseError, vm::AMDILAbstractVM};
+use self::{decode::{AMDILTextDecodeError, Instruction}, grammar::AMDILTextParseError, vm::{AMDILAbstractVM, AMDILRegister}};
 
 /// The type returned by [AMDILDecoder] holding the instructions for a given AMDIL program
-pub type AMDILProgram = Vec<AMDILAction>;
+pub struct AMDILProgram {
+    io_registers: Vec<AMDILRegister>,
+    actions: Vec<AMDILAction>
+}
 impl Program<AMDILAbstractVM> for AMDILProgram {
+    fn io_declarations(&self) -> &Vec<<AMDILAbstractVM as crate::AbstractVM>::Register> {
+        &self.io_registers
+    }
     fn actions(&self) -> &Vec<AMDILAction> {
-        self
+        &self.actions
     }
 }
 
@@ -74,12 +80,22 @@ impl<'a> Decoder<AMDILAbstractVM> for AMDILDecoder<'a> {
         let (_, g_instrs) = grammar::parse_lines(data).finish()?;
 
         // Decode
-        let instrs = g_instrs
+        let actions = g_instrs
             .into_iter()
             .map(decode::decode_instruction)
             .collect::<Result<Vec<AMDILAction>, _>>()?;
 
+        let io_registers = actions.iter().filter_map(|i| match i {
+            Instruction::Decl(decl) => {
+                decl.get_decl().filter(|r| r.is_pure_input() || r.is_output())
+            },
+            _ => None,
+        }).collect();
+
         // Return
-        Ok(instrs)
+        Ok(AMDILProgram {
+            io_registers,
+            actions,
+        })
     }
 }

@@ -117,8 +117,6 @@ impl<TVM: AbstractVM + Clone> Action<TVM> for SimpleAction<TVM> {
 
 #[derive(Debug, Clone)]
 pub enum Outcome<TVM: AbstractVM> {
-    /// Declare a name exists
-    Declare(TVM::Register),
     /// Assign a value derived from a set of inputs using an [HLSLOperator] to an output.
     ///
     /// The names for all inputs and output must have been previously declared.
@@ -134,6 +132,8 @@ pub enum Outcome<TVM: AbstractVM> {
 
 /// Trait for programs that run on an abstract VM
 pub trait Program<TVM: AbstractVM> {
+    /// The list of Registers that are used by the program. Either pure inputs or outputs. 
+    fn io_declarations(&self) -> &Vec<TVM::Register>;
     fn actions(&self) -> &Vec<TVM::Action>;
 }
 

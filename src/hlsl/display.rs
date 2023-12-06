@@ -79,13 +79,6 @@ impl std::fmt::Display for DWrap<&(HLSLVector, HLSLKind)> {
 impl std::fmt::Display for HLSLAction {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
-            Self::Declare(new_var) => {
-                write!(
-                    f,
-                    "{}{} {};",
-                    new_var.toplevel_kind(), new_var.n_components(), new_var
-                )
-            }
             Self::Assign {
                 op, output, inputs, ..
             } => {

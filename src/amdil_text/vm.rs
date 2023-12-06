@@ -197,40 +197,24 @@ pub enum AMDILDeclaration {
         reg_type: String,
     },
 }
-impl Action<AMDILAbstractVM> for AMDILDeclaration {
-    fn outcomes(&self) -> Vec<Outcome<AMDILAbstractVM>> {
+impl AMDILDeclaration {
+    pub fn get_decl(&self) -> Option<AMDILRegister> {
         match self {
-            AMDILDeclaration::TextureResource(id) => {
-                vec![Outcome::Declare(AMDILRegister::Texture(*id))]
-            }
-            AMDILDeclaration::NamedLiteral(name, value) => {
-                let name = AMDILRegister::NamedLiteral(name.clone());
-                vec![
-                    Outcome::Declare(name.clone()),
-                    Outcome::Assign {
-                        output: (AMDILMaskSwizVector::new(name, MaskedSwizzle::identity(4)), HLSLKindBitmask::NUMERIC.into()),
-                        op: HLSLOperator::Assign,
-                        inputs: vec![
-                            (AMDILMaskSwizVector::literal(*value, MaskedSwizzle::identity(4)), HLSLKindBitmask::NUMERIC.into())
-                        ],
-                    },
-                ]
-            }
+            AMDILDeclaration::TextureResource(id) => Some(AMDILRegister::Texture(*id)),
             AMDILDeclaration::NamedInputRegister {
                 name,
-                len,
+                len: _,
                 reg_type: _,
-            } => vec![Outcome::Declare(AMDILRegister::NamedInputRegister(
+            } => Some(AMDILRegister::NamedInputRegister(
                 name.clone(),
-            ))],
+            )),
             AMDILDeclaration::NamedOutputRegister {
                 name,
-                len,
+                len: _,
                 reg_type: _,
-            } => vec![Outcome::Declare(AMDILRegister::NamedOutputRegister(
+            } => Some(AMDILRegister::NamedOutputRegister(
                 name.clone(),
-            ))],
-            _ => vec![],
+            )),
             // TODO re-enable this
             // AMDILDeclaration::NamedBuffer { name, len } => {
             //     vec![Outcome::Declaration {
@@ -247,6 +231,26 @@ impl Action<AMDILAbstractVM> for AMDILDeclaration {
             //         literal_value: None,
             //     }]
             // }
+            _ => None,
+        }
+    }
+}
+impl Action<AMDILAbstractVM> for AMDILDeclaration {
+    fn outcomes(&self) -> Vec<Outcome<AMDILAbstractVM>> {
+        match self {
+            AMDILDeclaration::NamedLiteral(name, value) => {
+                let name = AMDILRegister::NamedLiteral(name.clone());
+                vec![
+                    Outcome::Assign {
+                        output: (AMDILMaskSwizVector::new(name, MaskedSwizzle::identity(4)), HLSLKindBitmask::NUMERIC.into()),
+                        op: HLSLOperator::Assign,
+                        inputs: vec![
+                            (AMDILMaskSwizVector::literal(*value, MaskedSwizzle::identity(4)), HLSLKindBitmask::NUMERIC.into())
+                        ],
+                    },
+                ]
+            }
+            _ => vec![],
         }
     }
 }
