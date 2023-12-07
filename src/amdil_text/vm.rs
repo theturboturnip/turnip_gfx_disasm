@@ -5,6 +5,7 @@
 //! All data is represented as 4-component vectors.
 //! Inputs to instructions can be swizzled i.e. can have their components reordered or reused (v0.xyxx, v3.wzwx etc. are valid)
 
+use crate::Action;
 use crate::abstract_machine::vector::{MaskedSwizzle, ComponentOf};
 use crate::abstract_machine::{
     AbstractVM, VMName, VMVector
@@ -12,16 +13,11 @@ use crate::abstract_machine::{
 use crate::hlsl::compat::HLSLCompatibleAbstractVM;
 use crate::hlsl::syntax::HLSLOperator;
 use crate::hlsl::kinds::{HLSLKind, HLSLKindBitmask};
-use crate::{Action, Outcome};
-
-/// The type of Action held by Programs for the [AMDILAbstractVM]
-pub type AMDILAction = super::decode::Instruction;
 
 /// Type for the AMDIL abstract VM. Implements [AbstractVM] and [HLSLCompatibleAbstractVM]
 #[derive(Debug, Clone)]
 pub enum AMDILAbstractVM {}
 impl AbstractVM for AMDILAbstractVM {
-    type Action = AMDILAction;
     type Register = AMDILRegister;
     type Scalar = ComponentOf<AMDILRegister>;
     type Vector = AMDILMaskSwizVector;
@@ -234,23 +230,22 @@ impl AMDILDeclaration {
             _ => None,
         }
     }
-}
-impl Action<AMDILAbstractVM> for AMDILDeclaration {
-    fn outcomes(&self) -> Vec<Outcome<AMDILAbstractVM>> {
+
+    pub fn push_actions(&self, v: &mut Vec<Action<AMDILAbstractVM>>) {
         match self {
             AMDILDeclaration::NamedLiteral(name, value) => {
                 let name = AMDILRegister::NamedLiteral(name.clone());
-                vec![
-                    Outcome::Assign {
+                v.push(
+                    Action::Assign {
                         output: (AMDILMaskSwizVector::new(name, MaskedSwizzle::identity(4)), HLSLKindBitmask::NUMERIC.into()),
                         op: HLSLOperator::Assign,
                         inputs: vec![
                             (AMDILMaskSwizVector::literal(*value, MaskedSwizzle::identity(4)), HLSLKindBitmask::NUMERIC.into())
                         ],
                     },
-                ]
+                )
             }
-            _ => vec![],
+            _ => {},
         }
     }
 }

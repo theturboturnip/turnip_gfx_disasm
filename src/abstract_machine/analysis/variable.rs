@@ -1,6 +1,6 @@
 use std::{cell::RefCell, rc::Rc, collections::HashMap};
 
-use crate::{hlsl::{kinds::HLSLKind, compat::HLSLCompatibleAbstractVM, HLSLRegister}, abstract_machine::{vector::{VectorComponent, VectorOf}, VMName, VMVector, VMScalar, SimpleAction}, AbstractVM};
+use crate::{hlsl::{kinds::HLSLKind, compat::HLSLCompatibleAbstractVM, HLSLRegister}, abstract_machine::{vector::{VectorComponent, VectorOf}, VMName, VMVector, VMScalar}, AbstractVM};
 
 
 type MutRef<T> = Rc<RefCell<T>>;
@@ -70,8 +70,6 @@ impl VMScalar for ScalarVar {
 #[derive(Debug, Clone)]
 struct VariableVM {}
 impl AbstractVM for VariableVM {
-    type Action = SimpleAction<VariableVM>;
-
     type Scalar = ScalarVar;
 
     type Register = Variable;

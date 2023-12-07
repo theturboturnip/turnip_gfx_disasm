@@ -2,25 +2,24 @@ use std::marker::PhantomData;
 
 use nom::Finish;
 
-use crate::{Decoder, Program, abstract_machine::VMName};
+use crate::{Decoder, Program, abstract_machine::VMName, Action};
 
 mod decode;
 mod grammar;
 pub mod vm;
-pub use vm::AMDILAction;
 
 use self::{decode::{AMDILTextDecodeError, Instruction}, grammar::AMDILTextParseError, vm::{AMDILAbstractVM, AMDILRegister}};
 
 /// The type returned by [AMDILDecoder] holding the instructions for a given AMDIL program
 pub struct AMDILProgram {
     io_registers: Vec<AMDILRegister>,
-    actions: Vec<AMDILAction>
+    actions: Vec<Action<AMDILAbstractVM>>
 }
 impl Program<AMDILAbstractVM> for AMDILProgram {
     fn io_declarations(&self) -> &Vec<<AMDILAbstractVM as crate::AbstractVM>::Register> {
         &self.io_registers
     }
-    fn actions(&self) -> &Vec<AMDILAction> {
+    fn actions(&self) -> &Vec<Action<AMDILAbstractVM>> {
         &self.actions
     }
 }
@@ -80,17 +79,21 @@ impl<'a> Decoder<AMDILAbstractVM> for AMDILDecoder<'a> {
         let (_, g_instrs) = grammar::parse_lines(data).finish()?;
 
         // Decode
-        let actions = g_instrs
-            .into_iter()
-            .map(decode::decode_instruction)
-            .collect::<Result<Vec<AMDILAction>, _>>()?;
-
-        let io_registers = actions.iter().filter_map(|i| match i {
-            Instruction::Decl(decl) => {
-                decl.get_decl().filter(|r| r.is_pure_input() || r.is_output())
-            },
-            _ => None,
-        }).collect();
+        let mut actions = vec![];
+        let mut io_registers = vec![];
+        for g_i in g_instrs {
+            let i = decode::decode_instruction(g_i)?;
+            i.push_actions(&mut actions);
+            match i {
+                Instruction::Decl(decl) => {
+                    match decl.get_decl().filter(|r| r.is_pure_input() || r.is_output()) {
+                        Some(io_reg) => io_registers.push(io_reg),
+                        None => {}
+                    }
+                },
+                _ => {}
+            }
+        }
 
         // Return
         Ok(AMDILProgram {

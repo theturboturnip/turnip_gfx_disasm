@@ -1,8 +1,6 @@
 use std::hash::Hash;
 
-use crate::hlsl::{syntax::HLSLOperator, kinds::{HLSLKind, HLSLKindBitmask}, self};
-
-use self::{vector::MaskedSwizzle, vector::VectorComponent, instructions::InstrArgs};
+use crate::hlsl::{syntax::HLSLOperator, kinds::HLSLKind};
 
 pub mod analysis;
 pub mod display;
@@ -84,8 +82,6 @@ impl<TName: VMName> Refinable for RefinableRef<TName> {
 ///
 /// Defines an abstract machine where each instruction operates on scalar elements.
 pub trait AbstractVM: std::fmt::Debug + Sized {
-    /// The type which [Program]s written for this VM are defined in terms of
-    type Action: Action<Self>;
     /// The smallest element a VM operates on
     type Scalar: VMScalar;
     // Scalars may originate from the same location in the VM's mind: e.g. myVector.xyz all come from myVector.
@@ -98,25 +94,25 @@ pub trait AbstractVM: std::fmt::Debug + Sized {
     fn decompose(v: &Self::Vector) -> Vec<Self::Scalar>;
 }
 
-pub trait Action<TVM: AbstractVM> {
-    fn outcomes(&self) -> Vec<Outcome<TVM>>;
-}
-/// Helper implementation for VMs which want to type-erase their actions
-impl<TVM: AbstractVM> Action<TVM> for Box<dyn Action<TVM>> {
-    fn outcomes(&self) -> Vec<Outcome<TVM>> {
-        self.as_ref().outcomes()
-    }
-}
+// pub trait Action<TVM: AbstractVM> {
+//     fn outcomes(&self) -> Vec<Outcome<TVM>>;
+// }
+// /// Helper implementation for VMs which want to type-erase their actions
+// impl<TVM: AbstractVM> Action<TVM> for Box<dyn Action<TVM>> {
+//     fn outcomes(&self) -> Vec<Outcome<TVM>> {
+//         self.as_ref().outcomes()
+//     }
+// }
 
-struct SimpleAction<TVM: AbstractVM + Clone>(Outcome<TVM>);
-impl<TVM: AbstractVM + Clone> Action<TVM> for SimpleAction<TVM> {
-    fn outcomes(&self) -> Vec<Outcome<TVM>> {
-        vec![self.0.clone()]
-    }
-}
+// struct SimpleAction<TVM: AbstractVM + Clone>(Outcome<TVM>);
+// impl<TVM: AbstractVM + Clone> Action<TVM> for SimpleAction<TVM> {
+//     fn outcomes(&self) -> Vec<Outcome<TVM>> {
+//         vec![self.0.clone()]
+//     }
+// }
 
 #[derive(Debug, Clone)]
-pub enum Outcome<TVM: AbstractVM> {
+pub enum Action<TVM: AbstractVM> {
     /// Assign a value derived from a set of inputs using an [HLSLOperator] to an output.
     ///
     /// The names for all inputs and output must have been previously declared.
@@ -127,21 +123,21 @@ pub enum Outcome<TVM: AbstractVM> {
         inputs: Vec<(TVM::Vector, HLSLKind)>,
     },
     /// Early out based on a set of inputs
+    // TODO don't include inputs here, make discard_nz(blah) => if (Identity(blah)) { discard } else {}
     EarlyOut { inputs: Vec<TVM::Scalar> },
-    // If {
-            // TODO AMDIL uses if_logicalnz, if_logicalz, ifnz, ifc_(relop)
-            // relop = Eq, Ge, Gt, Le, Lt, Ne
-            // Seemingly floating-point
-            // also used in continue/break
-    //     condition: 
-    // }
+    If {
+        inputs: Vec<(TVM::Vector, HLSLKind)>,
+        cond_operator: HLSLOperator,
+        if_true: Vec<Self>,
+        if_fals: Vec<Self>,
+    }
 }
 
 /// Trait for programs that run on an abstract VM
 pub trait Program<TVM: AbstractVM> {
     /// The list of Registers that are used by the program. Either pure inputs or outputs. 
     fn io_declarations(&self) -> &Vec<TVM::Register>;
-    fn actions(&self) -> &Vec<TVM::Action>;
+    fn actions(&self) -> &Vec<Action<TVM>>;
 }
 
 /// Trait for structs that can turn an arbitrary representation of a program (e.g. binary data) into a [Program] for a given [ScalarAbstractVM]

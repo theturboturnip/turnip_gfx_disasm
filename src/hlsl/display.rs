@@ -1,10 +1,9 @@
 use std::fmt::{Display, Formatter};
 
-use crate::abstract_machine::{vector::VectorComponent, VMVector};
+use crate::{abstract_machine::{vector::VectorComponent, VMVector}, Action};
 
 use super::{
-    kinds::{HLSLConcreteKind, HLSLKind, HLSLKindBitmask, HLSLNumericKind},
-    vm::HLSLAction, HLSLRegister, HLSLScalar, HLSLVector,
+    kinds::{HLSLConcreteKind, HLSLKind, HLSLKindBitmask, HLSLNumericKind}, HLSLRegister, HLSLScalar, HLSLVector, vm::HLSLAbstractVM,
 };
 
 pub struct DWrap<T>(pub T);
@@ -92,7 +91,7 @@ impl std::fmt::Display for DWrap<&(HLSLVector, HLSLKind)> {
     }
 }
 
-impl std::fmt::Display for HLSLAction {
+impl std::fmt::Display for Action<HLSLAbstractVM> {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
             Self::Assign {
@@ -112,6 +111,21 @@ impl std::fmt::Display for HLSLAction {
                     write!(f, "{}, ", DWrap((i, HLSLKindBitmask::all().into())))?; // TODO do we need a kind here? maybe not, if this is for early-out
                 }
                 write!(f, ");")
+            }
+            Self::If { inputs, cond_operator, if_true, if_fals } => {
+                write!(f, "if ({:?}(", cond_operator)?;
+                for i in inputs {
+                    write!(f, "{}, ", DWrap(i))?;
+                }
+                write!(f, ")) {{\n")?;
+                for i in if_true {
+                    write!(f, "\t{}\n", i)?;
+                }
+                write!(f, "}} else {{")?;
+                for i in if_fals {
+                    write!(f, "\t{}\n", i)?;
+                }
+                write!(f, "}}")
             }
         }
     }

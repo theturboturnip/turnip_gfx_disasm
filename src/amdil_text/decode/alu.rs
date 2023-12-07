@@ -12,7 +12,7 @@ use crate::{
         syntax::{ArithmeticOp, FauxBooleanOp, HLSLOperator, NumericIntrinsic, SampleIntrinsic},
         kinds::{HLSLConcreteKind, HLSLKind, HLSLKindBitmask, HLSLNumericKind},
     },
-    Action, Outcome,
+    Action,
 };
 use lazy_static::lazy_static;
 
@@ -244,16 +244,15 @@ pub fn decode_alu(
     }
 }
 
-impl Action<AMDILAbstractVM> for ALUInstruction {
-    fn outcomes(&self) -> Vec<Outcome<AMDILAbstractVM>> {
-        self.args
+impl ALUInstruction {
+    pub fn push_actions(&self, v: &mut Vec<Action<AMDILAbstractVM>>) {
+        v.extend(self.args
             .outputs
             .iter()
-            .map(|output| Outcome::Assign {
+            .map(|output| Action::Assign {
                 op: self.op,
                 inputs: self.args.inputs.clone(),
                 output: output.clone(),
-            })
-            .collect()
+            }))
     }
 }

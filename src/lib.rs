@@ -4,10 +4,6 @@
 //! shader text (be it binary or character-based) into [Program] returning a set of [Action]s.
 //! Usually, each instruction in the original language should map to a single [Action], but this isn't required.
 //!
-//! Each [Action] has a set of [Outcome]s.
-//! These outcomes could [Outcome::Declare] that some vector value exists,
-//! or [Outcome::Assign] an output vector to a value calculated from input vectors.
-//!
 //! The aforementioned scalar values are represented with types implementing [VMVectorDataRef] (a reference to a known piece of data inside the abstract VM),
 //! and in some cases with [abstract_machine::RefinableVMDataRef]s enclosing them for extra metadata.
 //!
@@ -29,5 +25,5 @@ pub mod hlsl;
 // pub mod rdna2;
 
 pub use abstract_machine::{
-    AbstractVM, Action, DataWidth, Decoder, Outcome, Program
+    AbstractVM, Action, DataWidth, Decoder, Program
 };

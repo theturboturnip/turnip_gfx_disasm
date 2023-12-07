@@ -1,4 +1,4 @@
-use crate::{abstract_machine::vector::MaskedSwizzle, Action, Outcome, AbstractVM};
+use crate::{abstract_machine::vector::MaskedSwizzle, Action, AbstractVM};
 
 use self::registers::arg_as_vector_data_ref;
 
@@ -25,22 +25,19 @@ pub enum Instruction {
     /// Early out based on the a set of args
     EarlyOut(Vec<MatchableArg>),
 }
-impl Action<AMDILAbstractVM> for Instruction {
-    fn outcomes(&self) -> Vec<Outcome<AMDILAbstractVM>> {
+impl Instruction {
+    pub fn push_actions(&self, v: &mut Vec<Action<AMDILAbstractVM>>) {
         match self {
-            Instruction::DontCare(..) => {
-                vec![]
-            }
+            Instruction::DontCare(..) => {}
             Instruction::Unknown(g_instr) => {
                 if g_instr.args.len() >= 2 {
                     todo!("Best-effort outcomes for Unknown instructions with an identifiable src and dst")
                 } else {
                     // Assume the unknown instruction doesn't do anything necessary
-                    vec![]
                 }
             }
-            Instruction::Decl(decl) => decl.outcomes(),
-            Instruction::Alu(alu) => alu.outcomes(),
+            Instruction::Decl(decl) => decl.push_actions(v),
+            Instruction::Alu(alu) => alu.push_actions(v),
             Instruction::EarlyOut(inputs) => {
                 let args: Result<Vec<AMDILMaskSwizVector>, AMDILTextDecodeError> =
                     inputs.iter().map(arg_as_vector_data_ref).collect();
@@ -53,9 +50,9 @@ impl Action<AMDILAbstractVM> for Instruction {
                     .flatten()
                     .map(|comp_ref| comp_ref.into())
                     .collect();
-                vec![Outcome::EarlyOut {
+                v.push(Action::EarlyOut {
                     inputs: scalar_args,
-                }]
+                })
             }
         }
     }
