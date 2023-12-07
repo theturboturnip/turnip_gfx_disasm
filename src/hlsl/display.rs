@@ -105,12 +105,8 @@ impl std::fmt::Display for Action<HLSLAbstractVM> {
                 }
                 write!(f, ");")
             }
-            Self::EarlyOut { inputs } => {
-                write!(f, "early_out_based_on(")?;
-                for i in inputs {
-                    write!(f, "{}, ", DWrap((i, HLSLKindBitmask::all().into())))?; // TODO do we need a kind here? maybe not, if this is for early-out
-                }
-                write!(f, ");")
+            Self::EarlyOut => {
+                write!(f, "discard;")
             }
             Self::If { inputs, cond_operator, if_true, if_fals } => {
                 write!(f, "if ({:?}(", cond_operator)?;

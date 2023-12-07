@@ -123,8 +123,7 @@ pub enum Action<TVM: AbstractVM> {
         inputs: Vec<(TVM::Vector, HLSLKind)>,
     },
     /// Early out based on a set of inputs
-    // TODO don't include inputs here, make discard_nz(blah) => if (Identity(blah)) { discard } else {}
-    EarlyOut { inputs: Vec<TVM::Scalar> },
+    EarlyOut,
     If {
         inputs: Vec<(TVM::Vector, HLSLKind)>,
         cond_operator: HLSLOperator,

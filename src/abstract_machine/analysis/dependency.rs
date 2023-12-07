@@ -53,7 +53,7 @@ impl<TVM: AbstractVM> ScalarDependencies<TVM> {
     ///
     /// e.g. if the action introduces a dependency of GeneralPurposeRegister(1) onto Output(o),
     /// set `self.dependents[Output(o)]` to the contents of `self.dependents[GeneralPurposeRegister(1)]`
-    pub fn accum_action(&mut self, action: &Action<TVM>) {
+    pub fn accum_action(&mut self, action: &Action<TVM>, control_flow_inputs: &HashSet<TVM::Scalar>) {
         match action {
             Action::Assign { output, inputs, op } => {
                 if output.0.is_pure_input() {
@@ -76,21 +76,28 @@ impl<TVM: AbstractVM> ScalarDependencies<TVM> {
                     self.dependents.insert(output_scl, resolved_inputs);
                 }
             }
-            Action::EarlyOut { inputs } => {
+            Action::EarlyOut => {
                 let mut resolved_inputs = HashSet::new();
-                for input in inputs {
+                for input in control_flow_inputs {
                     self.resolve_input_on(&mut resolved_inputs, &input);
                 }
                 self.discard_dependencies.extend(resolved_inputs)
             }
-            Action::If { if_true, if_fals, .. } => {
-                // TODO make `inputs` a dependency on everything touched inside the if_true AND if_fals
+            Action::If { inputs, if_true, if_fals, .. } => {
+                // Make `inputs` a dependency on everything touched inside the if_true AND if_fals
+                let mut next_control_flow_inputs = control_flow_inputs.clone();
+                for (vec, _) in inputs {
+                    for input_scalar in TVM::decompose(vec) {
+                        self.resolve_input_on(&mut next_control_flow_inputs, &input_scalar);
+                    }
+                }
+
                 let mut else_branch_deps = self.clone(); // This needs to be a clone because it needs to understand how to expand previously-defined non-pure-inputs into pure inputs
                 for true_action in if_true {
-                    self.accum_action(true_action)
+                    self.accum_action(true_action, &next_control_flow_inputs)
                 }
                 for false_action in if_fals {
-                    else_branch_deps.accum_action(false_action)
+                    else_branch_deps.accum_action(false_action, &next_control_flow_inputs)
                 }
                 // Merge the else branch into the current branch.
                 // Any discard_dependencies added in the else-branch we pull in outright
@@ -114,5 +121,9 @@ impl<TVM: AbstractVM> ScalarDependencies<TVM> {
     ) -> &HashMap<TVM::Scalar, HashSet<TVM::Scalar>>
     {
         &self.dependents
+    }
+
+    pub fn discard_dependencies(&self) -> &HashSet<TVM::Scalar> {
+        &self.discard_dependencies
     }
 }

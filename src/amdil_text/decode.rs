@@ -1,4 +1,4 @@
-use crate::{abstract_machine::vector::MaskedSwizzle, Action, AbstractVM};
+use crate::{abstract_machine::vector::MaskedSwizzle, Action, AbstractVM, hlsl::{kinds::{HLSLKind, HLSLKindBitmask}, syntax::HLSLOperator}};
 
 use self::registers::arg_as_vector_data_ref;
 
@@ -39,20 +39,15 @@ impl Instruction {
             Instruction::Decl(decl) => decl.push_actions(v),
             Instruction::Alu(alu) => alu.push_actions(v),
             Instruction::EarlyOut(inputs) => {
-                let args: Result<Vec<AMDILMaskSwizVector>, AMDILTextDecodeError> =
-                    inputs.iter().map(arg_as_vector_data_ref).collect();
+                let args: Result<Vec<(AMDILMaskSwizVector, HLSLKind)>, AMDILTextDecodeError> =
+                    inputs.iter().map(|a| {
+                        Ok((arg_as_vector_data_ref(a)?, HLSLKindBitmask::NUMERIC.into()))
+                    }).collect();
                 let args = args.unwrap();
-                let scalar_args = args
-                    .iter()
-                    .map(|v_arg| {
-                        AMDILAbstractVM::decompose(v_arg)
-                    })
-                    .flatten()
-                    .map(|comp_ref| comp_ref.into())
-                    .collect();
-                v.push(Action::EarlyOut {
-                    inputs: scalar_args,
-                })
+                assert_eq!(args.len(), 1);
+                v.push(
+                    Action::If { inputs: args, cond_operator: HLSLOperator::Assign, if_true: vec![Action::EarlyOut], if_fals: vec![] }
+                )
             }
         }
     }
