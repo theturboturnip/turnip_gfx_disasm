@@ -1,4 +1,4 @@
-use crate::abstract_machine::{vector::{VectorOf, ComponentOf, VectorComponent}, VMName, VMVector, VMScalar};
+use crate::abstract_machine::{vector::{VectorOf, VectorComponent}, VMName, VMVector, VMScalar};
 
 use self::kinds::{HLSLKind, HLSLKindBitmask};
 
@@ -43,7 +43,7 @@ impl VMName for HLSLRegister {
             HLSLRegister::GenericRegister(..) => HLSLKindBitmask::NUMERIC.into(),
             HLSLRegister::ShaderInput(..) => HLSLKindBitmask::NUMERIC.into(),
             HLSLRegister::ShaderOutput(..) => HLSLKindBitmask::NUMERIC.into(),
-            HLSLRegister::ArrayElement { of, idx } => of.toplevel_kind(),
+            HLSLRegister::ArrayElement { of, idx: _ } => of.toplevel_kind(),
         }
     }
 }
@@ -52,7 +52,7 @@ impl VMVector for HLSLRegister {
         match self {
             HLSLRegister::Texture(_) => 1,
             HLSLRegister::GenericRegister(_, n) | HLSLRegister::ShaderInput(_, n) | HLSLRegister::ShaderOutput(_, n) => *n as usize,
-            HLSLRegister::ArrayElement { of, idx } => of.n_components(),
+            HLSLRegister::ArrayElement { of, idx: _ } => of.n_components(),
         }
     }
 }

@@ -95,13 +95,11 @@ impl<TVM: AbstractVM> DependencyRelation<TVM> for SimpleDependencyRelation {
         let expanded_outs = args
             .outputs
             .iter()
-            .enumerate()
-            .map(|(i, elem)| TVM::decompose(&elem.0));
+            .map(|elem| TVM::decompose(&elem.0));
         let expanded_inputs = args
             .inputs
             .iter()
-            .enumerate()
-            .map(|(i, elem)| TVM::decompose(&elem.0));
+            .map(|elem| TVM::decompose(&elem.0));
         match self {
             Self::AllToAll => {
                 // Put all inputs in a vector

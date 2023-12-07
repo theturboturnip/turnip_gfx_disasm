@@ -1,4 +1,4 @@
-use crate::{abstract_machine::vector::MaskedSwizzle, Action, AbstractVM, hlsl::{kinds::{HLSLKind, HLSLKindBitmask}, syntax::HLSLOperator}};
+use crate::{abstract_machine::vector::MaskedSwizzle, Action, hlsl::{kinds::{HLSLKind, HLSLKindBitmask}, syntax::HLSLOperator}};
 
 use self::registers::arg_as_vector_data_ref;
 
