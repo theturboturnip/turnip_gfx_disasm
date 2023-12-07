@@ -1,6 +1,6 @@
 use std::fmt::{Display, Formatter};
 
-use crate::{abstract_machine::{vector::VectorComponent, VMVector}, Action};
+use crate::{abstract_machine::{vector::VectorComponent, VMVector, VMName}, Action};
 
 use super::{
     kinds::{HLSLConcreteKind, HLSLKind, HLSLKindBitmask, HLSLNumericKind}, HLSLRegister, HLSLScalar, HLSLVector, vm::HLSLAbstractVM,
@@ -25,7 +25,11 @@ impl std::fmt::Display for DWrap<(&HLSLScalar, HLSLKind)> {
         let kind = self.0.1;
         match &self.0.0 {
             HLSLScalar::Component(reg, comp) => {
-                write!(f, "({}){}.", kind, reg)?;
+                let minimum_kind = kind.intersection(reg.toplevel_kind());
+                if minimum_kind.is_none() {
+                    write!(f, "({})", kind)?;
+                }
+                write!(f, "{}.", reg)?;
                 match comp {
                     VectorComponent::X => write!(f, "x"),
                     VectorComponent::Y => write!(f, "y"),
@@ -40,6 +44,7 @@ impl std::fmt::Display for DWrap<(&HLSLScalar, HLSLKind)> {
                     HLSLKindBitmask::NUMERIC_UINT => write!(f, "{}u", *val),
                     HLSLKindBitmask::NUMERIC => write!(f, "(num?)0x{:x}", *val),
                     HLSLKindBitmask::INTEGER => write!(f, "(u?int)0x{:x}", *val),
+                    HLSLKindBitmask::ALL => write!(f, "(any)0x{:x}", *val),
                     _ => write!(f, "({})0x{:x}", kind, *val),
                 }
             },

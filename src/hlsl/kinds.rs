@@ -103,6 +103,8 @@ bitflags! {
 
         const NUMERIC = Self::NUMERIC_FLOAT.bits | Self::NUMERIC_SINT.bits | Self::NUMERIC_UINT.bits;
         const INTEGER = Self::NUMERIC_SINT.bits | Self::NUMERIC_UINT.bits;
+
+        const ALL = Self::TEXTURE2D.bits | Self::NUMERIC.bits;
     }
 }
 impl From<HLSLNumericKind> for HLSLKindBitmask {

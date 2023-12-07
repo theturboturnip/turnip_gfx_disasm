@@ -67,22 +67,22 @@ impl VMScalar for ScalarVar {
 
 }
 
-#[derive(Debug, Clone)]
-struct VariableVM {}
-impl AbstractVM for VariableVM {
-    type Scalar = ScalarVar;
+// #[derive(Debug, Clone)]
+// struct VariableVM {}
+// impl AbstractVM for VariableVM {
+//     type Scalar = ScalarVar;
 
-    type Register = Variable;
+//     type Register = Variable;
 
-    type Vector = VectorOf<ScalarVar>;
+//     type Vector = VectorOf<ScalarVar>;
 
-    fn decompose(v: &Self::Vector) -> Vec<Self::Scalar> {
-        v.ts.clone()
-    }
-}
-impl HLSLCompatibleAbstractVM for VariableVM {
+//     fn decompose(v: &Self::Vector) -> Vec<Self::Scalar> {
+//         v.ts.clone()
+//     }
+// }
+// impl HLSLCompatibleAbstractVM for VariableVM {
 
-}
+// }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct InputScalar {

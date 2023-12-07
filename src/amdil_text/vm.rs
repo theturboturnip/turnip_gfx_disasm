@@ -6,10 +6,11 @@
 //! Inputs to instructions can be swizzled i.e. can have their components reordered or reused (v0.xyxx, v3.wzwx etc. are valid)
 
 use crate::Action;
-use crate::abstract_machine::vector::{MaskedSwizzle, ComponentOf};
+use crate::abstract_machine::vector::{MaskedSwizzle, ComponentOf, VectorOf};
 use crate::abstract_machine::{
     AbstractVM, VMName, VMVector
 };
+use crate::hlsl::{HLSLVector, HLSLScalar, HLSLRegister};
 use crate::hlsl::compat::HLSLCompatibleAbstractVM;
 use crate::hlsl::syntax::HLSLOperator;
 use crate::hlsl::kinds::{HLSLKind, HLSLKindBitmask};
@@ -30,7 +31,35 @@ impl AbstractVM for AMDILAbstractVM {
         }).collect()
     }
 }
-impl HLSLCompatibleAbstractVM for AMDILAbstractVM {}
+impl HLSLCompatibleAbstractVM for AMDILAbstractVM {
+    fn convert_action(a: &Action<Self>) -> Action<crate::hlsl::vm::HLSLAbstractVM> {
+        match a {
+            Action::Assign { output, op, inputs } => Action::Assign {
+                output: ((&output.0).into(), output.1),
+                op: *op,
+                inputs: inputs.into_iter().map(|(vec, kind)| (vec.into(), *kind)).collect()
+            },
+            Action::EarlyOut => Action::EarlyOut,
+            Action::If { inputs, cond_operator, if_true, if_fals } => Action::If {
+                inputs: inputs.into_iter().map(|(vec, kind)| (vec.into(), *kind)).collect(),
+                cond_operator: *cond_operator,
+                if_true: if_true.into_iter().map(Self::convert_action).collect(),
+                if_fals: if_fals.into_iter().map(Self::convert_action).collect()
+            },
+        }
+    }
+
+    fn convert_register(r: &Self::Register) -> HLSLRegister {
+        match r {
+            AMDILRegister::Literal(_) => panic!("This doesn't have a concept in HLSLRegister :P should delete"),
+            AMDILRegister::NamedBuffer { name, idx } => HLSLRegister::ArrayElement { of: Box::new(HLSLRegister::ShaderInput(name.clone(), 4)), idx: *idx },
+            AMDILRegister::NamedInputRegister(name) => HLSLRegister::ShaderInput(name.clone(), 4),
+            AMDILRegister::NamedOutputRegister(name) => HLSLRegister::ShaderOutput(name.clone(), 4),
+            AMDILRegister::Texture(idx) => HLSLRegister::Texture(*idx),
+            AMDILRegister::NamedRegister(name) | AMDILRegister::NamedLiteral(name) => HLSLRegister::GenericRegister(name.clone(), 4)
+        }
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum AMDILRegister {
@@ -57,7 +86,7 @@ impl VMName for AMDILRegister {
 
     fn is_output(&self) -> bool {
         match self {
-            Self::NamedOutputRegister(String) => true,
+            Self::NamedOutputRegister(_) => true,
             _ => false,
         }
     }
@@ -127,6 +156,22 @@ impl VMName for AMDILMaskSwizVector {
 impl VMVector for AMDILMaskSwizVector {
     fn n_components(&self) -> usize {
         self.1.num_used_components() // TODO: ???
+    }
+}
+impl From<&AMDILMaskSwizVector> for HLSLVector {
+    fn from(value: &AMDILMaskSwizVector) -> Self {
+
+        VectorOf::new(&AMDILAbstractVM::decompose(&value).into_iter().map(|comp| {
+            match comp.vec {
+                AMDILRegister::NamedRegister(name) => HLSLScalar::Component(HLSLRegister::GenericRegister(name, 4), comp.comp),
+                AMDILRegister::Literal(arr) => HLSLScalar::Literal(arr[comp.comp.into_index()] as u32),
+                AMDILRegister::NamedLiteral(name) => HLSLScalar::Component(HLSLRegister::GenericRegister(name, 4), comp.comp),
+                AMDILRegister::NamedBuffer { name, idx } => HLSLScalar::Component(HLSLRegister::ArrayElement { of: Box::new(HLSLRegister::ShaderInput(name, 4)), idx }, comp.comp),
+                AMDILRegister::NamedInputRegister(name) => HLSLScalar::Component(HLSLRegister::ShaderInput(name, 4), comp.comp),
+                AMDILRegister::NamedOutputRegister(name) => HLSLScalar::Component(HLSLRegister::ShaderOutput(name, 4), comp.comp),
+                AMDILRegister::Texture(idx) => HLSLScalar::Component(HLSLRegister::Texture(idx), comp.comp),
+            }
+        }).collect::<Vec<_>>()).unwrap()
     }
 }
 

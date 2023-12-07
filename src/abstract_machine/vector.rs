@@ -353,6 +353,22 @@ impl MaskedSwizzle {
             }
         })
     }
+
+    pub fn is_contiguous(&self) -> bool {
+        if (self.0[3].is_some() && self.0[2].is_none()) {
+            // --_x => non contig
+            false
+        } else if (self.0[2].is_some() && self.0[1].is_none()) {
+            // -_x- => non contig
+            false
+        } else if (self.0[1].is_some() && self.0[0].is_none()) {
+            // _x-- => non contig
+            false
+        } else {
+            true
+        }
+    }
+
 }
 impl Index<usize> for MaskedSwizzle {
     type Output = Option<VectorComponent>;
