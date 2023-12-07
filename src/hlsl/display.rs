@@ -1,54 +1,49 @@
 use std::fmt::{Display, Formatter};
 
-use crate::abstract_machine::{vector::VectorComponent, VMName, VMVector};
+use crate::abstract_machine::{vector::VectorComponent, VMVector};
 
 use super::{
     kinds::{HLSLConcreteKind, HLSLKind, HLSLKindBitmask, HLSLNumericKind},
-    vm::HLSLAction, HLSLSingleVectorName, HLSLScalarName, HLSLVector,
+    vm::HLSLAction, HLSLRegister, HLSLScalar, HLSLVector,
 };
 
 pub struct DWrap<T>(pub T);
 
-impl std::fmt::Display for HLSLSingleVectorName {
+impl std::fmt::Display for HLSLRegister {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         // TODO have a formatter that takes type into account
         match self {
             Self::Texture(id) => write!(f, "tex{:0>3}", id),
-            Self::GenericRegister(id) => write!(f, "var{:0>3}", id),
-            Self::Literal(data) => write!(
-                f,
-                "(0x{:x}, 0x{:x}, 0x{:x}, 0x{:x})",
-                data[0], data[1], data[2], data[3]
-            ),
-            Self::ShaderInput(name) | Self::ShaderOutput(name) => write!(f, "{}", name),
+            Self::GenericRegister(id, _) => write!(f, "var{:0>3}", id),
+            Self::ShaderInput(name, _) | Self::ShaderOutput(name, _) => write!(f, "{}", name),
             Self::ArrayElement { of: elem, idx } => write!(f, "{}[{}]", elem, idx),
         }
     }
 }
 
-impl std::fmt::Display for DWrap<&HLSLScalarName> {
+impl std::fmt::Display for DWrap<(&HLSLScalar, HLSLKind)> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        let v = &self.0.vec;
-        let c = self.0.comp;
-        let v_kind = v.toplevel_kind();
-        if let HLSLSingleVectorName::Literal(vals) = v {
-            let val: u64 = vals[c.into_index()];
-            match v_kind.mask() {
-                HLSLKindBitmask::NUMERIC_FLOAT => write!(f, "{:?}f", f32::from_bits(val as u32)),
-                HLSLKindBitmask::NUMERIC_SINT => write!(f, "{}", val),
-                HLSLKindBitmask::NUMERIC_UINT => write!(f, "{}u", val),
-                HLSLKindBitmask::NUMERIC => write!(f, "(num?)0x{:x}", val),
-                HLSLKindBitmask::INTEGER => write!(f, "(u?int)0x{:x}", val),
-                _ => write!(f, "({})0x{:x}", v_kind, val),
+        let kind = self.0.1;
+        match &self.0.0 {
+            HLSLScalar::Component(reg, comp) => {
+                write!(f, "({}){}.", kind, reg)?;
+                match comp {
+                    VectorComponent::X => write!(f, "x"),
+                    VectorComponent::Y => write!(f, "y"),
+                    VectorComponent::Z => write!(f, "z"),
+                    VectorComponent::W => write!(f, "w"),
+                }
             }
-        } else {
-            write!(f, "({}){}.", v_kind, v)?;
-            match c {
-                VectorComponent::X => write!(f, "x"),
-                VectorComponent::Y => write!(f, "y"),
-                VectorComponent::Z => write!(f, "z"),
-                VectorComponent::W => write!(f, "w"),
-            }
+            HLSLScalar::Literal(val) => {
+                match kind.mask() {
+                    HLSLKindBitmask::NUMERIC_FLOAT => write!(f, "{:?}f", f32::from_bits(*val)),
+                    HLSLKindBitmask::NUMERIC_SINT => write!(f, "{}", *val),
+                    HLSLKindBitmask::NUMERIC_UINT => write!(f, "{}u", *val),
+                    HLSLKindBitmask::NUMERIC => write!(f, "(num?)0x{:x}", *val),
+                    HLSLKindBitmask::INTEGER => write!(f, "(u?int)0x{:x}", *val),
+                    _ => write!(f, "({})0x{:x}", kind, *val),
+                }
+            },
         }
     }
 }
@@ -58,20 +53,41 @@ impl std::fmt::Display for DWrap<&(HLSLVector, HLSLKind)> {
         // let (v, cs) = &self.0;
         // write!(f, "{}{}", v.vector_name, cs)
         let ts = &self.0.0.ts;
-        let common_origin = &ts[0].vec;
-        if ts.iter().all(|t| &t.vec == common_origin) {
-            write!(f, "{common_origin}.")?;
-            for t in ts.iter() {
-                write!(f, "{}", t.comp)?;
+        let kind = self.0.1;
+        let common_origin = match &ts[0] {
+            HLSLScalar::Component(reg, _) => {
+                if ts.iter().all(|t| match t {
+                    HLSLScalar::Component(other_reg, _) => other_reg == reg,
+                    HLSLScalar::Literal(_) => false,
+                }) {
+                    Some(reg)
+                } else {
+                    None
+                }
+            },
+            HLSLScalar::Literal(_) => None,
+        };
+        // If all the scalars are components of the same register
+        match common_origin {
+            Some(common_origin) => {
+                write!(f, "{common_origin}.")?;
+                for t in ts.iter() {
+                    if let HLSLScalar::Component(_, c) = t {
+                        write!(f, "{}", c)?;
+                    } else {
+                        unreachable!("common_origin can only be Some if every t in ts is a HLSLScalar::Component")
+                    }
+                }
+                Ok(())
+            },
+            None => {
+                write!(f, "{}{}(", self.0.1, self.0.0.n_components())?;
+                for t in ts.iter() {
+                    // TODO correct comma joining
+                    write!(f, "{}, ", DWrap((t, kind)))?;
+                }
+                write!(f, ")")
             }
-            Ok(())
-        } else {
-            write!(f, "{}{}(", self.0.1, self.0.0.n_components())?;
-            for t in ts.iter() {
-                // TODO correct comma joining
-                write!(f, "{}.{}, ", t.vec, t.comp)?;
-            }
-            write!(f, ")")
         }
     }
 }
@@ -93,7 +109,7 @@ impl std::fmt::Display for HLSLAction {
             Self::EarlyOut { inputs } => {
                 write!(f, "early_out_based_on(")?;
                 for i in inputs {
-                    write!(f, "{}, ", DWrap(i))?;
+                    write!(f, "{}, ", DWrap((i, HLSLKindBitmask::all().into())))?; // TODO do we need a kind here? maybe not, if this is for early-out
                 }
                 write!(f, ");")
             }

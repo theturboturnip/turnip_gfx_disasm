@@ -3,7 +3,7 @@ use crate::{
     AbstractVM, Action,
 };
 
-use super::{HLSLVector, HLSLScalarName, HLSLSingleVectorName};
+use super::{HLSLVector, HLSLScalar, HLSLRegister};
 
 pub type HLSLAction = Outcome<HLSLAbstractVM>;
 
@@ -12,8 +12,8 @@ pub type HLSLAction = Outcome<HLSLAbstractVM>;
 pub enum HLSLAbstractVM {}
 impl AbstractVM for HLSLAbstractVM {
     type Action = HLSLAction;
-    type Register = HLSLSingleVectorName;
-    type Scalar = HLSLScalarName;
+    type Register = HLSLRegister;
+    type Scalar = HLSLScalar;
     type Vector = HLSLVector;
 
     fn decompose(v: &Self::Vector) -> Vec<Self::Scalar> {

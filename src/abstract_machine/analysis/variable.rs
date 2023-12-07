@@ -1,13 +1,13 @@
 use std::{cell::RefCell, rc::Rc, collections::HashMap};
 
-use crate::{hlsl::{kinds::HLSLKind, compat::HLSLCompatibleAbstractVM, HLSLSingleVectorName}, abstract_machine::{vector::{VectorComponent, VectorOf}, VMName, VMVector, VMScalar, SimpleAction}, AbstractVM};
+use crate::{hlsl::{kinds::HLSLKind, compat::HLSLCompatibleAbstractVM, HLSLRegister}, abstract_machine::{vector::{VectorComponent, VectorOf}, VMName, VMVector, VMScalar, SimpleAction}, AbstractVM};
 
 
 type MutRef<T> = Rc<RefCell<T>>;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct Variable {
-    name: HLSLSingleVectorName,
+    name: HLSLRegister,
     n_contig_components: usize,
     kind: HLSLKind,
 }
@@ -88,7 +88,7 @@ impl HLSLCompatibleAbstractVM for VariableVM {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct InputScalar {
-    input_register: HLSLSingleVectorName,
+    input_register: HLSLRegister,
     comp: VectorComponent
 }
 
@@ -186,7 +186,7 @@ impl VariableState {
 
     fn remap_scalars_to_new_gp_register(&mut self, v: Vec<InputScalar>, kind: HLSLKind) -> Vec<MutScalarVar> {
         let n_contig_components = v.len();
-        let name = HLSLSingleVectorName::GenericRegister(format!("{}_{:03}", if n_contig_components == 1 { "s" } else { "v" }, self.registers.len()));
+        let name = HLSLRegister::GenericRegister(format!("{}_{:03}", if n_contig_components == 1 { "s" } else { "v" }, self.registers.len()), n_contig_components as u8);
         // let kind = v.iter().fold(Some(v[0].1), |k, s| match k {
         //     Some(k) => k.intersection(s.1),
         //     None => None
