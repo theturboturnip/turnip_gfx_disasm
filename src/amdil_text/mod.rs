@@ -8,7 +8,7 @@ mod decode;
 mod grammar;
 pub mod vm;
 
-use self::{decode::{AMDILTextDecodeError, Instruction}, grammar::AMDILTextParseError, vm::{AMDILAbstractVM, AMDILRegister}};
+use self::{decode::{AMDILTextDecodeError, Instruction, registers::AMDILContext}, grammar::AMDILTextParseError, vm::{AMDILAbstractVM, AMDILRegister}};
 
 /// The type returned by [AMDILDecoder] holding the instructions for a given AMDIL program
 pub struct AMDILProgram {
@@ -81,9 +81,9 @@ impl<'a> Decoder<AMDILAbstractVM> for AMDILDecoder<'a> {
         // Decode
         let mut actions = vec![];
         let mut io_registers = vec![];
+        let mut context = AMDILContext::new();
         for g_i in g_instrs {
-            let i = decode::decode_instruction(g_i)?;
-            i.push_actions(&mut actions);
+            let i = decode::push_instruction_actions(g_i, &mut context, &mut actions)?;
             match i {
                 Instruction::Decl(decl) => {
                     match decl.get_decl().filter(|r| r.is_pure_input() || r.is_output()) {

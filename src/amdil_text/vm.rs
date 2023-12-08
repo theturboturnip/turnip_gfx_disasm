@@ -56,7 +56,7 @@ impl HLSLCompatibleAbstractVM for AMDILAbstractVM {
             AMDILRegister::NamedInputRegister(name) => HLSLRegister::ShaderInput(name.clone(), 4),
             AMDILRegister::NamedOutputRegister(name) => HLSLRegister::ShaderOutput(name.clone(), 4),
             AMDILRegister::Texture(idx) => HLSLRegister::Texture(*idx),
-            AMDILRegister::NamedRegister(name) | AMDILRegister::NamedLiteral(name) => HLSLRegister::GenericRegister(name.clone(), 4)
+            AMDILRegister::NamedRegister(name) => HLSLRegister::GenericRegister(name.clone(), 4)
         }
     }
 }
@@ -64,8 +64,7 @@ impl HLSLCompatibleAbstractVM for AMDILAbstractVM {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum AMDILRegister {
     NamedRegister(String),
-    Literal([u64; 4]),
-    NamedLiteral(String),
+    Literal(Box<[u64; 4]>),
     NamedBuffer { name: String, idx: u64 },
     NamedInputRegister(String),
     NamedOutputRegister(String),
@@ -76,7 +75,6 @@ impl VMName for AMDILRegister {
         match self {
             Self::Texture(_) => true, // Assuming textures are read only
             Self::Literal(..) => true,
-            Self::NamedLiteral(..) => false, // Named literals always map to real literals in AMDIL
             Self::NamedInputRegister(..) => true,
             // TODO consider concept of i/o buffers
             Self::NamedBuffer { .. } => true,
@@ -124,11 +122,8 @@ impl AMDILMaskSwizVector {
     pub fn named_register(name: String, swizzle: MaskedSwizzle) -> Self {
         Self::new(AMDILRegister::NamedRegister(name), swizzle)
     }
-    pub fn literal(data: [u64; 4], swizzle: MaskedSwizzle) -> Self {
+    pub fn literal(data: Box<[u64; 4]>, swizzle: MaskedSwizzle) -> Self {
         Self::new(AMDILRegister::Literal(data), swizzle)
-    }
-    pub fn named_literal(name: String, swizzle: MaskedSwizzle) -> Self {
-        Self::new(AMDILRegister::NamedLiteral(name), swizzle)
     }
     pub fn named_buffer(name: String, idx: u64, swizzle: MaskedSwizzle) -> Self {
         Self::new(AMDILRegister::NamedBuffer { name, idx }, swizzle)
@@ -165,7 +160,6 @@ impl From<&AMDILMaskSwizVector> for HLSLVector {
             match comp.vec {
                 AMDILRegister::NamedRegister(name) => HLSLScalar::Component(HLSLRegister::GenericRegister(name, 4), comp.comp),
                 AMDILRegister::Literal(arr) => HLSLScalar::Literal(arr[comp.comp.into_index()] as u32),
-                AMDILRegister::NamedLiteral(name) => HLSLScalar::Component(HLSLRegister::GenericRegister(name, 4), comp.comp),
                 AMDILRegister::NamedBuffer { name, idx } => HLSLScalar::Component(HLSLRegister::ArrayElement { of: Box::new(HLSLRegister::ShaderInput(name, 4)), idx }, comp.comp),
                 AMDILRegister::NamedInputRegister(name) => HLSLScalar::Component(HLSLRegister::ShaderInput(name, 4), comp.comp),
                 AMDILRegister::NamedOutputRegister(name) => HLSLScalar::Component(HLSLRegister::ShaderOutput(name, 4), comp.comp),
@@ -273,24 +267,6 @@ impl AMDILDeclaration {
             //     }]
             // }
             _ => None,
-        }
-    }
-
-    pub fn push_actions(&self, v: &mut Vec<Action<AMDILAbstractVM>>) {
-        match self {
-            AMDILDeclaration::NamedLiteral(name, value) => {
-                let name = AMDILRegister::NamedLiteral(name.clone());
-                v.push(
-                    Action::Assign {
-                        output: (AMDILMaskSwizVector::new(name, MaskedSwizzle::identity(4)), HLSLKindBitmask::NUMERIC.into()),
-                        op: HLSLOperator::Assign,
-                        inputs: vec![
-                            (AMDILMaskSwizVector::literal(*value, MaskedSwizzle::identity(4)), HLSLKindBitmask::NUMERIC.into())
-                        ],
-                    },
-                )
-            }
-            _ => {},
         }
     }
 }

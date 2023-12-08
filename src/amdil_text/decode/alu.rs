@@ -17,7 +17,7 @@ use crate::{
 use lazy_static::lazy_static;
 
 use super::{
-    decode_args, decode_instr_mods, registers::arg_as_vector_data_ref, AMDILTextDecodeError,
+    decode_args, decode_instr_mods, AMDILTextDecodeError, registers::AMDILContext,
 };
 
 #[derive(Debug, Clone, Copy)]
@@ -187,6 +187,7 @@ lazy_static! {
 
 pub fn decode_alu(
     g_instr: &grammar::Instruction,
+    ctx: &AMDILContext,
 ) -> Result<Option<ALUInstruction>, AMDILTextDecodeError> {
     let matchable_args = decode_args(&g_instr.args);
     match (
@@ -196,7 +197,7 @@ pub fn decode_alu(
     ) {
         ("sample", [("resource", tex_id), ("sampler", _sampler_id)], matchable_args) => {
             let args: Result<Vec<AMDILMaskSwizVector>, AMDILTextDecodeError> =
-                matchable_args.iter().map(arg_as_vector_data_ref).collect();
+                matchable_args.iter().map(|a| ctx.arg_as_vector_data_ref(a)).collect();
             let mut args = args?;
             // Insert the argument at index 1 (index 0 = the output)
             args.insert(
@@ -230,7 +231,7 @@ pub fn decode_alu(
         (Some((_static_name, instr_spec)), matchable_args) => {
             // Map matchable_args into VectorDataRefs
             let args: Result<Vec<AMDILMaskSwizVector>, AMDILTextDecodeError> =
-                matchable_args.iter().map(arg_as_vector_data_ref).collect();
+                matchable_args.iter().map(|a| ctx.arg_as_vector_data_ref(a)).collect();
 
             let args = instr_spec.0.sanitize_arguments(args?);
 

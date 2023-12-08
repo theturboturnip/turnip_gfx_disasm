@@ -1,6 +1,6 @@
 use crate::{abstract_machine::vector::MaskedSwizzle, Action, hlsl::{kinds::{HLSLKind, HLSLKindBitmask}, syntax::HLSLOperator}};
 
-use self::registers::arg_as_vector_data_ref;
+use self::registers::AMDILContext;
 
 use super::{
     grammar,
@@ -24,33 +24,6 @@ pub enum Instruction {
     Alu(ALUInstruction),
     /// Early out based on the a set of args
     EarlyOut(Vec<MatchableArg>),
-}
-impl Instruction {
-    pub fn push_actions(&self, v: &mut Vec<Action<AMDILAbstractVM>>) {
-        match self {
-            Instruction::DontCare(..) => {}
-            Instruction::Unknown(g_instr) => {
-                if g_instr.args.len() >= 2 {
-                    todo!("Best-effort outcomes for Unknown instructions with an identifiable src and dst")
-                } else {
-                    // Assume the unknown instruction doesn't do anything necessary
-                }
-            }
-            Instruction::Decl(decl) => decl.push_actions(v),
-            Instruction::Alu(alu) => alu.push_actions(v),
-            Instruction::EarlyOut(inputs) => {
-                let args: Result<Vec<(AMDILMaskSwizVector, HLSLKind)>, AMDILTextDecodeError> =
-                    inputs.iter().map(|a| {
-                        Ok((arg_as_vector_data_ref(a)?, HLSLKindBitmask::NUMERIC.into()))
-                    }).collect();
-                let args = args.unwrap();
-                assert_eq!(args.len(), 1);
-                v.push(
-                    Action::If { inputs: args, cond_operator: HLSLOperator::Assign, if_true: vec![Action::EarlyOut], if_fals: vec![] }
-                )
-            }
-        }
-    }
 }
 
 /// Adaptation of [grammar::Arg] that's more suitable for match-cases
@@ -89,21 +62,48 @@ pub fn decode_instr_mods<'a>(mods: &'a Vec<grammar::InstrMod>) -> Vec<MatchableI
         .collect()
 }
 
-pub fn decode_instruction(
+pub fn push_instruction_actions(
     g_instr: grammar::Instruction,
+    ctx: &mut AMDILContext, v: &mut Vec<Action<AMDILAbstractVM>>
 ) -> Result<Instruction, AMDILTextDecodeError> {
     let instr = match g_instr.instr.as_str() {
         "discard_logicalnz" => Instruction::EarlyOut(decode_args(&g_instr.args)),
         instr if check_if_dontcare(instr) => Instruction::DontCare(g_instr),
         instr if instr.starts_with("dcl_") => decode_declare(&g_instr)?,
         _ => {
-            if let Some(alu) = decode_alu(&g_instr)? {
+            if let Some(alu) = decode_alu(&g_instr, ctx)? {
                 Instruction::Alu(alu)
             } else {
                 Instruction::Unknown(g_instr)
             }
         }
     };
+
+    match &instr {
+        Instruction::DontCare(..) => {}
+        Instruction::Unknown(g_instr) => {
+            if g_instr.args.len() >= 2 {
+                todo!("Best-effort outcomes for Unknown instructions with an identifiable src and dst")
+            } else {
+                // Assume the unknown instruction doesn't do anything necessary
+            }
+        }
+        Instruction::Decl(decl) => if let AMDILDeclaration::NamedLiteral(name, literal) = decl {
+            ctx.push_named_literal(name.clone(), Box::new(*literal))
+        },
+        Instruction::Alu(alu) => alu.push_actions(v),
+        Instruction::EarlyOut(inputs) => {
+            let args: Result<Vec<(AMDILMaskSwizVector, HLSLKind)>, AMDILTextDecodeError> =
+                inputs.iter().map(|a| {
+                    Ok((ctx.arg_as_vector_data_ref(a)?, HLSLKindBitmask::NUMERIC.into()))
+                }).collect();
+            let args = args.unwrap();
+            assert_eq!(args.len(), 1);
+            v.push(
+                Action::If { inputs: args, cond_operator: HLSLOperator::Assign, if_true: vec![Action::EarlyOut], if_fals: vec![] }
+            )
+        }
+    }
 
     Ok(instr)
 }

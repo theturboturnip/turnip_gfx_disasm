@@ -1,6 +1,6 @@
 use std::{cell::RefCell, rc::Rc, collections::HashMap};
 
-use crate::{hlsl::{kinds::HLSLKind, compat::HLSLCompatibleAbstractVM, HLSLRegister}, abstract_machine::{vector::{VectorComponent, VectorOf}, VMName, VMVector, VMScalar}, AbstractVM};
+use crate::{hlsl::{kinds::HLSLKind, compat::HLSLCompatibleAbstractVM, HLSLRegister, vm::HLSLAbstractVM}, abstract_machine::{vector::{VectorComponent, VectorOf}, VMName, VMVector, VMScalar}, AbstractVM, Program};
 
 
 type MutRef<T> = Rc<RefCell<T>>;
@@ -94,7 +94,7 @@ struct InputScalar {
 /// Consider a program `A = X + Y; B = A + 1.0f;`
 /// `B` must have a 'kind' of f32, and the HLSL addition operator thus forces A to be of the same kind f32.
 /// This then implies that X and Y must be of f32, but currently this machine doesn't track that metadata or re-apply constraints once forward analysis has completed.
-/// This will be most visible for literals - the AMDIL machine handles named literals by creating a new variable and assigning a constant value to it.
+/// This will be most visible for literals - the AMDIL machine used to handle named literals by creating a new variable and assigning a constant value to it.
 /// The kind of the constant values can only be affected by how the new variable is used, but without back-propagation of the kind it will never come out.
 
 /// This machine takes a program of any given abstract virtual machine and converts it to a different kind of HLSL-compatible program with a custom Static Single Assigment machine.
@@ -206,6 +206,10 @@ impl VariableState {
         }).collect()
     }
 }
-// fn convert_with_variables<TVM: AbstractVM>(p: Program<TVM>) -> Program<VariableVM> {
+
+
+
+
+// fn disassemble<TVM: HLSLCompatibleAbstractVM>(p: impl Program<TVM>) -> Program<HLSLAbstractVM> {
 
 // }
