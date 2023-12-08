@@ -10,7 +10,7 @@ pub mod vm;
 
 
 /// The name of an unswizzled vector in the HLSL virtual machine
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum HLSLRegister {
     Texture(u64),
     GenericRegister(String, u8),
@@ -58,7 +58,7 @@ impl VMVector for HLSLRegister {
 }
 
 /// A reference to a single scalar in the HLSL virtual machine
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum HLSLScalar {
     Component(HLSLRegister, VectorComponent),
     Literal(u32),
