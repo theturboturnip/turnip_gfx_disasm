@@ -113,7 +113,7 @@ impl<T: VMVectorNameRef> VMVectorDataRef<T> for (T, MaskedSwizzle) {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct VectorOf<T: VMScalar> {
     pub ts: Vec<T>,
-    kind: HLSLKind
+    common_kind: HLSLKind
 }
 impl<T: VMScalar> VectorOf<T> {
     pub fn new(ts: &[T]) -> Option<Self> {
@@ -121,8 +121,12 @@ impl<T: VMScalar> VectorOf<T> {
         let kind_mask = ts.iter().fold(Some(HLSLKindBitmask::all().into()), |kind, t| {
             HLSLKind::intersection(kind?, t.toplevel_kind())
         });
-        Some(Self { ts: ts.iter().map(|t| t.clone()).collect(), kind: kind_mask?.into() })
+        Some(Self { ts: ts.iter().map(|t| t.clone()).collect(), common_kind: kind_mask?.into() })
     }
+
+    pub fn len(&self) -> usize {
+        self.ts.len()
+    } 
 }
 impl<T: VMScalar> VMName for VectorOf<T> {
     fn is_pure_input(&self) -> bool {
@@ -134,7 +138,7 @@ impl<T: VMScalar> VMName for VectorOf<T> {
     }
 
     fn toplevel_kind(&self) -> HLSLKind {
-        self.kind
+        self.common_kind
     }
 }
 impl<T: VMScalar> VMVector for VectorOf<T> {
