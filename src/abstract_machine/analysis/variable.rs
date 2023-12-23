@@ -350,24 +350,48 @@ impl VariableState {
         }
     }
 
-    fn resolve(&self, mut_var: MutScalarVar) -> HLSLScalar {
+    fn resolve_action(&self, action: &MutVarAction) -> HLSLAction {
+        match action {
+            Action::Assign { output, op, inputs } => {
+                let output = (
+                    VectorOf::new(&output.0.iter().map(|s| self.resolve(s)).collect::<Vec<_>>()).unwrap(),
+                    output.1
+                );
+                let inputs = inputs.iter().map(|(var_vec, vec_kind)| {
+                    (
+                        VectorOf::new(&var_vec.iter().map(|s| self.resolve(s)).collect::<Vec<_>>()).unwrap(),
+                        *vec_kind
+                    )
+                }).collect();
+                Action::Assign { output, op: *op, inputs }
+            },
+            Action::EarlyOut => Action::EarlyOut,
+            Action::If { inputs, cond_operator, if_true, if_fals } => {
+                let inputs = inputs.iter().map(|(s, kind)| (self.resolve(s), *kind)).collect();
+                let if_true = if_true.iter().map(|a| self.resolve_action(a)).collect();
+                let if_fals = if_fals.iter().map(|a| self.resolve_action(a)).collect();
+                Action::If { inputs, cond_operator: *cond_operator, if_true, if_fals }
+            },
+        }
+    }
+
+    fn resolve(&self, mut_var: &MutScalarVar) -> HLSLScalar {
         // TODO how do we communicate more restricted type information to the outside world?
         // HLSLRegister doesn't have a HLSLKind
-        // match mut_var {
-        //     MutScalarVar::Component(var, var_comp) => HLSLScalar::Component(var.borrow().name, ()),
-        //     MutScalarVar::Literal(_) => todo!(),
-        // }
-        todo!()
+        match mut_var {
+            MutScalarVar::Component(var, var_comp) => HLSLScalar::Component(var.borrow().name.clone(), *var_comp),
+            MutScalarVar::Literal(x) => HLSLScalar::Literal(*x),
+        }
     }
 }
 
 // struct 
-fn disassemble<P: Program<HLSLAbstractVM>>(p: &P) {
+pub fn disassemble<P: Program<HLSLAbstractVM>>(p: &P) -> Vec<HLSLAction> {
     let mut variables = VariableState::new(p.io_declarations());
 
     // Run all the actions through the machine
     let var_actions: Vec<_> = p.actions().iter().map(|a| variables.process_action(a)).collect();
     assert!(variables.scalar_map.scopes.is_empty());
 
-    todo!()
+    var_actions.into_iter().map(|a| variables.resolve_action(&a)).collect()
 }
