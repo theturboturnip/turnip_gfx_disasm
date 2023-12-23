@@ -136,16 +136,20 @@ impl VariableScalarMap {
         self.scalar_to_var.get(&key).map(|(var, c)| (var.clone(), *c))
     }
     fn update(&mut self, reg: HLSLRegister, reg_comp: VectorComponent, var: MutRef<Variable>, var_comp: VectorComponent) {
-        match self.scopes.last_mut() {
-            Some(scope) => {
-                if reg.is_pure_input() || reg.is_output() {
-                    panic!("Shouldn't be creating input/output mappings inside a scope!")
+        if reg.is_pure_input() {
+            self.scalar_to_var.insert((reg, reg_comp), (var, var_comp));
+        } else {
+            match self.scopes.last_mut() {
+                Some(scope) => {
+                    if reg.is_output() {
+                        panic!("Shouldn't be creating input/output mappings inside a scope!")
+                    }
+                    scope.keys_to_clear.insert((reg.clone(), reg_comp));
+                    scope.overlay_mappings.insert((reg, reg_comp), (var, var_comp))
                 }
-                scope.keys_to_clear.insert((reg.clone(), reg_comp));
-                scope.overlay_mappings.insert((reg, reg_comp), (var, var_comp))
-            }
-            None => self.scalar_to_var.insert((reg, reg_comp), (var, var_comp)),
-        };
+                None => self.scalar_to_var.insert((reg, reg_comp), (var, var_comp)),
+            };
+        }
     }
     fn push_scope(&mut self) {
         self.scopes.push(ScopeOverlay {
@@ -213,12 +217,27 @@ impl VariableState {
     /// - any of the scalars are new and haven't been encountered before
     /// 
     /// Will cast scalars if they have an incompatible kind from their previous usage
-    fn remap_scalars_to_input_vector(&self, v: &VectorOf<HLSLScalar>, kind: HLSLKind) -> Option<(Vec<MutScalarVar>, HLSLKind)> {
+    /// 
+    /// Will create new input vectors if they haven't been seen before?
+    /// TODO could replace this with more complete array handling...
+    fn remap_scalars_to_input_vector(&mut self, v: &VectorOf<HLSLScalar>, kind: HLSLKind) -> Option<(Vec<MutScalarVar>, HLSLKind)> {
         let mut new_v = vec![];
         for s in v.ts.iter() {
             let new_s = match &s {
                 HLSLScalar::Component(reg, reg_comp) => {
-                    let (var, var_comp) = self.scalar_map.lookup(reg.clone(), *reg_comp)?;
+                    let (var, var_comp) = match self.scalar_map.lookup(reg.clone(), *reg_comp) {
+                        Some((var, var_comp)) => (var, var_comp),
+                        None => if reg.is_pure_input() {
+                            let var = Rc::new(RefCell::new(Variable::new(reg.clone(), reg.toplevel_kind())));
+                            self.io_declarations.push(var.clone());
+                            for i in 0..reg.n_components() {
+                                self.scalar_map.update(reg.clone(), i.into(), var.clone(), i.into());
+                            }
+                            (var, *reg_comp)
+                        } else {
+                            return None
+                        }
+                    };
                     var.borrow_mut().refine(kind); // TODO cast if this fails?
                     MutScalarVar::Component(var, var_comp)
                 },
@@ -303,6 +322,8 @@ impl VariableState {
             self.scalar_map.update(reg.clone(), reg_comp, var.clone(), i.into());
             MutScalarVar::Component(var.clone(), i.into())
         }).collect();
+
+        self.registers.push(var);
 
         (new_v, kind)
     }
