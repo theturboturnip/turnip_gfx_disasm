@@ -317,7 +317,7 @@ impl VariableState {
 
     fn remap_scalars_to_new_variable(&mut self, v: Vec<(&HLSLRegister, VectorComponent)>, kind: HLSLKind) -> (Vec<MutScalarVar>, HLSLKind) {
         let n_contig_components = v.len();
-        let name = HLSLRegister::GenericRegister(format!("{}_{:03}", if n_contig_components == 1 { "s" } else { "v" }, self.registers.len()), n_contig_components as u8);
+        let name = HLSLRegister::GenericRegister(format!("{}{}", if n_contig_components == 1 { "s" } else { "v" }, self.registers.len()), n_contig_components as u8);
 
         let var = Rc::new(RefCell::new(Variable::new(name, kind)));
         

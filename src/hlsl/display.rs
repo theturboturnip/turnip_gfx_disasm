@@ -13,7 +13,7 @@ impl std::fmt::Display for HLSLRegister {
         // TODO have a formatter that takes type into account
         match self {
             Self::Texture(id) => write!(f, "tex{:0>3}", id),
-            Self::GenericRegister(id, _) => write!(f, "var{:0>3}", id),
+            Self::GenericRegister(id, _) => write!(f, "var_{}", id),
             Self::ShaderInput(name, _) | Self::ShaderOutput(name, _) => write!(f, "{}", name),
             Self::ArrayElement { of: elem, idx } => write!(f, "{}[{}]", elem, idx),
         }
