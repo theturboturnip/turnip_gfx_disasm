@@ -1,6 +1,6 @@
-use std::{cell::RefCell, rc::Rc, collections::HashMap};
+use std::{cell::RefCell, rc::Rc, collections::{HashMap, HashSet}};
 
-use crate::{hlsl::{kinds::HLSLKind, compat::HLSLCompatibleAbstractVM, HLSLRegister, vm::HLSLAbstractVM, HLSLScalar}, abstract_machine::{vector::{VectorComponent, VectorOf}, VMName, VMVector, VMScalar}, AbstractVM, Program, Action};
+use crate::{hlsl::{kinds::HLSLKind, compat::HLSLCompatibleAbstractVM, HLSLRegister, vm::HLSLAbstractVM, HLSLScalar, HLSLAction}, abstract_machine::{vector::{VectorComponent, VectorOf}, VMName, VMVector, VMScalar}, AbstractVM, Program, Action};
 
 
 type MutRef<T> = Rc<RefCell<T>>;
@@ -74,6 +74,7 @@ impl VMName for ScalarVar {
 impl VMScalar for ScalarVar {
 
 }
+type MutVarAction = Action<Vec<MutScalarVar>, MutScalarVar>;
 
 #[derive(Debug, Clone)]
 enum VariableVM {}
@@ -102,16 +103,79 @@ fn find_common<'a, TIn: 'a, TOut: PartialEq, I: Iterator<Item = &'a TIn>, F: Fn(
     Some(init)
 }
 
-struct VariableScalarMap(HashMap<(HLSLRegister, VectorComponent), (MutRef<Variable>, VectorComponent)>);
+type ScalarKey = (HLSLRegister, VectorComponent);
+type VariableComp = (MutRef<Variable>, VectorComponent);
+
+/// Whenever a new (conditional) scope is created:
+/// - it may create new mappings to use inside the scope, which aren't valid outside
+/// - it makes any scalar keys used inside of it invalid, because they won't map to the variables they did at the start of the scope.
+struct ScopeOverlay {
+    overlay_mappings: HashMap<ScalarKey, VariableComp>,
+    keys_to_clear: HashSet<ScalarKey>,
+}
+
+struct VariableScalarMap {
+    scalar_to_var: HashMap<ScalarKey, VariableComp>,
+    scopes: Vec<ScopeOverlay>,
+}
 impl VariableScalarMap {
     fn new() -> Self {
-        Self(HashMap::new())
+        Self {
+            scalar_to_var: HashMap::new(),
+            scopes: vec![],
+        }
     }
-    fn lookup(&self, reg: HLSLRegister, reg_comp: VectorComponent) -> Option<(MutRef<Variable>, VectorComponent)> {
-        self.0.get(&(reg, reg_comp)).map(|(var, c)| (var.clone(), *c))
+    fn lookup(&self, reg: HLSLRegister, reg_comp: VectorComponent) -> Option<VariableComp> {
+        let key = (reg, reg_comp);
+        for scope in self.scopes.iter().rev() {
+            match scope.overlay_mappings.get(&key) {
+                Some((var, c)) => return Some((var.clone(), *c)),
+                None => continue,
+            }
+        }
+        self.scalar_to_var.get(&key).map(|(var, c)| (var.clone(), *c))
     }
     fn update(&mut self, reg: HLSLRegister, reg_comp: VectorComponent, var: MutRef<Variable>, var_comp: VectorComponent) {
-        self.0.insert((reg, reg_comp), (var, var_comp));
+        match self.scopes.last_mut() {
+            Some(scope) => {
+                if reg.is_pure_input() || reg.is_output() {
+                    panic!("Shouldn't be creating input/output mappings inside a scope!")
+                }
+                scope.keys_to_clear.insert((reg.clone(), reg_comp));
+                scope.overlay_mappings.insert((reg, reg_comp), (var, var_comp))
+            }
+            None => self.scalar_to_var.insert((reg, reg_comp), (var, var_comp)),
+        };
+    }
+    fn push_scope(&mut self) {
+        self.scopes.push(ScopeOverlay {
+            overlay_mappings: HashMap::new(),
+            keys_to_clear: HashSet::new(),
+        })
+    }
+    fn reset_scope_mappings_to_checkpoint(&mut self) {
+        // Clear any intermediate mappings created inside the scope so far.
+        // This is for if-else blocks - both the IF and the ELSE should start with the same mappings i.e. the mappings below this scope.
+        // DON'T reset used_keys, because scalars used in only the IF and not the ELSE should still be counted as "things to reset once we're done"
+        self.scopes
+            .last_mut()
+            .expect("Called reset_scope_to_checkpoint on a VariableScalarMap with no scopes")
+            .overlay_mappings
+            .clear();
+    }
+    fn pop_scope(&mut self) {
+        // 1. pop the actual scope off
+        let keys_to_clear = self.scopes.pop().expect("Called pop_scope on a VariableScalarMap with no scopes").keys_to_clear;
+        // 2. clear the keys_to_clear from ALL mappings in the stack of scopes.
+        //    even if we clear the keys from the next level down, ones further down might still use it and would be visible through lookup()
+        for scope in self.scopes.iter_mut() {
+            for k in keys_to_clear.iter() {
+                scope.overlay_mappings.remove(k);
+            }
+        }
+        for k in keys_to_clear {
+            self.scalar_to_var.remove(&k);
+        }
     }
 }
 
@@ -243,31 +307,67 @@ impl VariableState {
         (new_v, kind)
     }
 
-    /*fn process_action<TVM: HLSLCompatibleAbstractVM>(&mut self, action: &Action<TVM::Vector, TVM::Scalar>) -> VecAction<Vec<MutScalarVar>> {
+    fn process_action(&mut self, action: &HLSLAction) -> MutVarAction {
         match action {
-            VMAction::Assign { output, op, inputs } => {
+            Action::Assign { output, op, inputs } => {
                 let inputs = inputs.into_iter().map(|(in_vec, kind)| {
-                    self.remap_scalars_to_input_vector(in_vec, *kind).unwrap()
+                    self.remap_scalars_to_input_vector(in_vec, *kind).expect("Tried to make an input-vector with unencountered original scalars")
                 }).collect();
                 let output = self.remap_scalars_to_output_vector(&output.0, output.1);
-                VecAction::Assign { output, op: *op, inputs }
+                MutVarAction::Assign { output, op: *op, inputs }
             },
-            VMAction::EarlyOut => VecAction::EarlyOut,
-            VMAction::If { inputs, cond_operator, if_true, if_fals } => {
-                
+            Action::EarlyOut => MutVarAction::EarlyOut,
+            Action::If { inputs, cond_operator, if_true, if_fals } => {
+                // Sketch:
+                // 1. translate immediate input
+                let inputs = inputs.iter().map(|(scalar, kind)| {
+                    let remap_scalar = match scalar {
+                        HLSLScalar::Component(reg, reg_comp) => {
+                            let (var, var_comp) = self.scalar_map.lookup(reg.clone(), *reg_comp).expect("Tried to use unencountered original scalars in an IF");
+                            MutScalarVar::Component(var, var_comp)
+                        }
+                        HLSLScalar::Literal(lit) => MutScalarVar::Literal(*lit),
+                    };
+                    (remap_scalar, *kind)
+                }).collect();
+                // 2. make a checkpoint for the scalar mapping
+                self.scalar_map.push_scope();
+                // 3. translate the IF block
+                // 3a. capture the set of scalars written over by the IF block
+                let if_true = if_true.iter().map(|a| self.process_action(a)).collect();
+                // 4. restore the scalar mapping
+                    // the if and the else should have the same starting point
+                self.scalar_map.reset_scope_mappings_to_checkpoint();
+                // 5. translate the else statement
+                // 5a. capture the set of scalars written over by the ELSE block
+                let if_fals = if_fals.iter().map(|a| self.process_action(a)).collect();
+                // 6. delete all scalar mappings written over by the IF and the ELSE (THAT AREN'T OUTPUTS). Don't restore them, because any code after this point can't rely on values that may-or-may-not have been written.
+                    // NOTE this assumes that IF-ELSE will never write to the same register in both blocks with the intention of reading that value afterwards (a rust-style let y = if x { 1 } else { 2 };)
+                    // If this assumption is ever faulty, we have a big fuckin problem.
+                self.scalar_map.pop_scope();
+                MutVarAction::If { inputs, cond_operator: *cond_operator, if_true, if_fals }
             }
-        };
-    }*/
+        }
+    }
+
+    fn resolve(&self, mut_var: MutScalarVar) -> HLSLScalar {
+        // TODO how do we communicate more restricted type information to the outside world?
+        // HLSLRegister doesn't have a HLSLKind
+        // match mut_var {
+        //     MutScalarVar::Component(var, var_comp) => HLSLScalar::Component(var.borrow().name, ()),
+        //     MutScalarVar::Literal(_) => todo!(),
+        // }
+        todo!()
+    }
 }
 
 // struct 
 fn disassemble<P: Program<HLSLAbstractVM>>(p: &P) {
     let mut variables = VariableState::new(p.io_declarations());
 
-    // let mut var_actions = vec![];
-    // for action in p.actions() {
-    //     // let var_action = 
-    //     // var_actions.push(var_action);
-    // }
-    // todo!()
+    // Run all the actions through the machine
+    let var_actions: Vec<_> = p.actions().iter().map(|a| variables.process_action(a)).collect();
+    assert!(variables.scalar_map.scopes.is_empty());
+
+    todo!()
 }
