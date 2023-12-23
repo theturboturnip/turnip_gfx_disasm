@@ -91,12 +91,20 @@ impl std::fmt::Display for DWrap<&(HLSLVector, HLSLKind)> {
                 Ok(())
             },
             None => {
-                write!(f, "{}{}(", self.0.1, self.0.0.n_components())?;
-                for t in ts.iter() {
-                    // TODO correct comma joining
-                    write!(f, "{}, ", DWrap((t, kind)))?;
+                if ts.len() == 1 {
+                    write!(f, "{}", DWrap((&ts[0], kind)))
+                } else {
+                    write!(f, "{}{}(", self.0.1, self.0.0.n_components())?;
+                    let mut first = true;
+                    for t in ts.iter() {
+                        if !first {
+                            write!(f, ", ")?;
+                        }
+                        write!(f, "{}", DWrap((t, kind)))?;
+                        first = false;
+                    }
+                    write!(f, ")")
                 }
-                write!(f, ")")
             }
         }
     }
