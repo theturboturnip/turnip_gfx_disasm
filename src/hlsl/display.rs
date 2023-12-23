@@ -109,7 +109,7 @@ impl std::fmt::Display for HLSLAction {
                 op, output, inputs, ..
             } => {
                 {
-                    write!(f, "{} = {:?}(", DWrap(output), op)?;
+                    write!(f, "{}{} {} = {:?}(", output.1, output.0.n_components(), DWrap(output), op)?;
                 }
                 for i in inputs {
                     write!(f, "{}, ", DWrap(i))?;
@@ -163,6 +163,7 @@ impl Display for HLSLKind {
             HLSLKindBitmask::NUMERIC_UINT => write!(f, "uint"),
             HLSLKindBitmask::NUMERIC => write!(f, "num?"),
             HLSLKindBitmask::INTEGER => write!(f, "u?int"),
+            HLSLKindBitmask::ALL => write!(f, "any"),
             _ => write!(f, "{:?}", self),
         }
     }
