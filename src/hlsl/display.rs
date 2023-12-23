@@ -1,9 +1,9 @@
 use std::fmt::{Display, Formatter};
 
-use crate::{abstract_machine::{vector::VectorComponent, VMVector, VMName}, Action};
+use crate::{abstract_machine::{vector::{VectorComponent, VectorOf}, VMVector, VMName}, Action};
 
 use super::{
-    kinds::{HLSLConcreteKind, HLSLKind, HLSLKindBitmask, HLSLNumericKind}, HLSLRegister, HLSLScalar, HLSLVector, vm::HLSLAbstractVM, HLSLAction,
+    kinds::{HLSLConcreteKind, HLSLKind, HLSLKindBitmask, HLSLNumericKind}, HLSLRegister, HLSLScalar, HLSLVector, vm::HLSLAbstractVM, HLSLAction, syntax::HLSLOperator,
 };
 
 pub struct DWrap<T>(pub T);
@@ -101,30 +101,105 @@ impl std::fmt::Display for DWrap<&(HLSLVector, HLSLKind)> {
         }
     }
 }
+impl<'a, T: 'a> std::fmt::Display for DWrap<(&'a HLSLOperator, &'a Vec<T>)> where DWrap<&'a T>: std::fmt::Display {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        let (op, inputs) = self.0;
 
+        match op {
+            HLSLOperator::Assign => {
+                assert_eq!(inputs.len(), 1);
+                write!(f, "{}", DWrap(&inputs[0]))
+            },
+            HLSLOperator::Unary(unary) => {
+                assert_eq!(inputs.len(), 1);
+                match unary {
+                    super::syntax::UnaryOp::BinaryNot => write!(f, "!{}", DWrap(&inputs[0])),
+                    super::syntax::UnaryOp::Negate => write!(f, "-{}", DWrap(&inputs[0])),
+                    super::syntax::UnaryOp::Plus => write!(f, "+{}", DWrap(&inputs[0])),
+                }
+            },
+            HLSLOperator::Arithmetic(arith) => {
+                assert_eq!(inputs.len(), 2);
+                match arith {
+                    crate::hlsl::syntax::ArithmeticOp::Plus => write!(f, "{} + {}", DWrap(&inputs[0]), DWrap(&inputs[1])),
+                    crate::hlsl::syntax::ArithmeticOp::Minus => write!(f, "{} - {}", DWrap(&inputs[0]), DWrap(&inputs[1])),
+                    crate::hlsl::syntax::ArithmeticOp::Times => write!(f, "{} * {}", DWrap(&inputs[0]), DWrap(&inputs[1])),
+                    crate::hlsl::syntax::ArithmeticOp::Div => write!(f, "{} / {}", DWrap(&inputs[0]), DWrap(&inputs[1])),
+                    crate::hlsl::syntax::ArithmeticOp::Mod => write!(f, "{} % {}", DWrap(&inputs[0]), DWrap(&inputs[1])),
+                }
+            },
+            HLSLOperator::BinaryArithmetic(arith) => {
+                assert_eq!(inputs.len(), 2);
+                match arith {
+                    crate::hlsl::syntax::BinaryArithmeticOp::LeftShift => write!(f, "{} << {}", DWrap(&inputs[0]), DWrap(&inputs[1])),
+                    crate::hlsl::syntax::BinaryArithmeticOp::RightShift => write!(f, "{} >> {}", DWrap(&inputs[0]), DWrap(&inputs[1])),
+                    crate::hlsl::syntax::BinaryArithmeticOp::BitwiseAnd => write!(f, "{} & {}", DWrap(&inputs[0]), DWrap(&inputs[1])),
+                    crate::hlsl::syntax::BinaryArithmeticOp::BitwiseOr => write!(f, "{} | {}", DWrap(&inputs[0]), DWrap(&inputs[1])),
+                    crate::hlsl::syntax::BinaryArithmeticOp::BitwiseXor => write!(f, "{} ^ {}", DWrap(&inputs[0]), DWrap(&inputs[1])),
+                }
+            },
+            HLSLOperator::NumericCast(_) => todo!(),
+            HLSLOperator::SampleI(samp) => {
+                match samp {
+                    crate::hlsl::syntax::SampleIntrinsic::Tex2D => {
+                        assert_eq!(inputs.len(), 2);
+                        write!(f, "{}.Sample(NO_SAMPLER, {})", DWrap(&inputs[0]), DWrap(&inputs[1]))
+                    }
+                }
+            },
+            HLSLOperator::NumericI(intr) => {
+                assert_eq!(inputs.len(), 2);
+                match intr {
+                    super::syntax::NumericIntrinsic::Dot => write!(f, "dot({}, {})", DWrap(&inputs[0]), DWrap(&inputs[1])),
+                    super::syntax::NumericIntrinsic::Min => write!(f, "min({}, {})", DWrap(&inputs[0]), DWrap(&inputs[1])),
+                    super::syntax::NumericIntrinsic::Max => write!(f, "max({}, {})", DWrap(&inputs[0]), DWrap(&inputs[1])),
+                }
+            },
+            HLSLOperator::FauxBoolean(b) => {
+                match b {
+                    crate::hlsl::syntax::FauxBooleanOp::Lt => {
+                        assert_eq!(inputs.len(), 2);
+                        write!(f, "{} < {}", DWrap(&inputs[0]), DWrap(&inputs[1]))
+                    },
+                    crate::hlsl::syntax::FauxBooleanOp::Le => {
+                        assert_eq!(inputs.len(), 2);
+                        write!(f, "{} <= {}", DWrap(&inputs[0]), DWrap(&inputs[1]))
+                    },
+                    crate::hlsl::syntax::FauxBooleanOp::Gt => {
+                        assert_eq!(inputs.len(), 2);
+                        write!(f, "{} > {}", DWrap(&inputs[0]), DWrap(&inputs[1]))
+                    },
+                    crate::hlsl::syntax::FauxBooleanOp::Ge => {
+                        assert_eq!(inputs.len(), 2);
+                        write!(f, "{} >= {}", DWrap(&inputs[0]), DWrap(&inputs[1]))
+                    },
+                    crate::hlsl::syntax::FauxBooleanOp::Ternary => {
+                        assert_eq!(inputs.len(), 3);
+                        write!(f, "{} ? {} : {}", DWrap(&inputs[0]), DWrap(&inputs[1]), DWrap(&inputs[2]))
+                    },
+                }
+            },
+            HLSLOperator::Constructor(_) => todo!(),
+        }
+    }
+}
 impl std::fmt::Display for HLSLAction {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
             Self::Assign {
                 op, output, inputs, ..
             } => {
-                {
-                    write!(f, "{}{} {} = {:?}(", output.1, output.0.n_components(), DWrap(output), op)?;
-                }
-                for i in inputs {
-                    write!(f, "{}, ", DWrap(i))?;
-                }
-                write!(f, ");")
+                write!(f, "{}{} {} = {};", output.1, output.0.n_components(), DWrap(output), DWrap((op, inputs)))
+                // for i in inputs {
+                //     write!(f, "{}, ", DWrap(i))?;
+                // }
+                // write!(f, ");")
             }
             Self::EarlyOut => {
                 write!(f, "discard;")
             }
             Self::If { inputs, cond_operator, if_true, if_fals } => {
-                write!(f, "if ({:?}(", cond_operator)?;
-                for i in inputs {
-                    write!(f, "{}, ", DWrap(i))?;
-                }
-                write!(f, ")) {{\n")?;
+                write!(f, "if ({}) {{\n", DWrap((cond_operator, inputs)))?;
                 for i in if_true {
                     write!(f, "\t{}\n", i)?;
                 }
