@@ -243,7 +243,7 @@ impl VariableState {
         (new_v, kind)
     }
 
-    /*fn process_action<TVM: HLSLCompatibleAbstractVM>(&mut self, action: &Action<TVM>) -> VecAction<Vec<MutScalarVar>> {
+    /*fn process_action<TVM: HLSLCompatibleAbstractVM>(&mut self, action: &Action<TVM::Vector, TVM::Scalar>) -> VecAction<Vec<MutScalarVar>> {
         match action {
             VMAction::Assign { output, op, inputs } => {
                 let inputs = inputs.into_iter().map(|(in_vec, kind)| {

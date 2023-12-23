@@ -475,7 +475,7 @@ impl<TVM: HLSLCompatibleAbstractVM> VariableAbstractMachine<TVM> {
         self.actions.push((self.tick, outcome))
     }
 
-    pub fn accum_action(&mut self, action: &dyn Action<TVM>) {
+    pub fn accum_action(&mut self, action: &dyn Action<TVM::Vector, TVM::Scalar>) {
         for outcome in action.outcomes() {
             match outcome {
                 Outcome::Declare(var_name) => {

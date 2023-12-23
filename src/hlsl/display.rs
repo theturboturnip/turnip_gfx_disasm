@@ -3,7 +3,7 @@ use std::fmt::{Display, Formatter};
 use crate::{abstract_machine::{vector::VectorComponent, VMVector, VMName}, Action};
 
 use super::{
-    kinds::{HLSLConcreteKind, HLSLKind, HLSLKindBitmask, HLSLNumericKind}, HLSLRegister, HLSLScalar, HLSLVector, vm::HLSLAbstractVM,
+    kinds::{HLSLConcreteKind, HLSLKind, HLSLKindBitmask, HLSLNumericKind}, HLSLRegister, HLSLScalar, HLSLVector, vm::HLSLAbstractVM, HLSLAction,
 };
 
 pub struct DWrap<T>(pub T);
@@ -19,36 +19,42 @@ impl std::fmt::Display for HLSLRegister {
         }
     }
 }
-
+fn display_scalar_kind(f: &mut Formatter<'_>, scalar: &HLSLScalar, kind: HLSLKind) -> std::fmt::Result {
+    match scalar {
+        HLSLScalar::Component(reg, comp) => {
+            let minimum_kind = kind.intersection(reg.toplevel_kind());
+            if minimum_kind.is_none() {
+                write!(f, "({})", kind)?;
+            }
+            write!(f, "{}.", reg)?;
+            match comp {
+                VectorComponent::X => write!(f, "x"),
+                VectorComponent::Y => write!(f, "y"),
+                VectorComponent::Z => write!(f, "z"),
+                VectorComponent::W => write!(f, "w"),
+            }
+        }
+        HLSLScalar::Literal(val) => {
+            match kind.mask() {
+                HLSLKindBitmask::NUMERIC_FLOAT => write!(f, "{:?}f", f32::from_bits(*val)),
+                HLSLKindBitmask::NUMERIC_SINT => write!(f, "{}", *val),
+                HLSLKindBitmask::NUMERIC_UINT => write!(f, "{}u", *val),
+                HLSLKindBitmask::NUMERIC => write!(f, "(num?)0x{:x}", *val),
+                HLSLKindBitmask::INTEGER => write!(f, "(u?int)0x{:x}", *val),
+                HLSLKindBitmask::ALL => write!(f, "(any)0x{:x}", *val),
+                _ => write!(f, "({})0x{:x}", kind, *val),
+            }
+        },
+    }
+}
 impl std::fmt::Display for DWrap<(&HLSLScalar, HLSLKind)> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        let kind = self.0.1;
-        match &self.0.0 {
-            HLSLScalar::Component(reg, comp) => {
-                let minimum_kind = kind.intersection(reg.toplevel_kind());
-                if minimum_kind.is_none() {
-                    write!(f, "({})", kind)?;
-                }
-                write!(f, "{}.", reg)?;
-                match comp {
-                    VectorComponent::X => write!(f, "x"),
-                    VectorComponent::Y => write!(f, "y"),
-                    VectorComponent::Z => write!(f, "z"),
-                    VectorComponent::W => write!(f, "w"),
-                }
-            }
-            HLSLScalar::Literal(val) => {
-                match kind.mask() {
-                    HLSLKindBitmask::NUMERIC_FLOAT => write!(f, "{:?}f", f32::from_bits(*val)),
-                    HLSLKindBitmask::NUMERIC_SINT => write!(f, "{}", *val),
-                    HLSLKindBitmask::NUMERIC_UINT => write!(f, "{}u", *val),
-                    HLSLKindBitmask::NUMERIC => write!(f, "(num?)0x{:x}", *val),
-                    HLSLKindBitmask::INTEGER => write!(f, "(u?int)0x{:x}", *val),
-                    HLSLKindBitmask::ALL => write!(f, "(any)0x{:x}", *val),
-                    _ => write!(f, "({})0x{:x}", kind, *val),
-                }
-            },
-        }
+        display_scalar_kind(f, self.0.0, self.0.1)
+    }
+}
+impl std::fmt::Display for DWrap<&(HLSLScalar, HLSLKind)> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        display_scalar_kind(f, &self.0.0, self.0.1)
     }
 }
 
@@ -96,7 +102,7 @@ impl std::fmt::Display for DWrap<&(HLSLVector, HLSLKind)> {
     }
 }
 
-impl std::fmt::Display for Action<HLSLAbstractVM> {
+impl std::fmt::Display for HLSLAction {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
             Self::Assign {

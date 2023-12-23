@@ -6,7 +6,7 @@ use crate::{
     },
     amdil_text::{
         grammar,
-        vm::{AMDILAbstractVM, AMDILMaskSwizVector, AMDILRegister},
+        vm::{AMDILAbstractVM, AMDILMaskSwizVector, AMDILRegister, AMDILAction},
     },
     hlsl::{
         syntax::{ArithmeticOp, FauxBooleanOp, HLSLOperator, NumericIntrinsic, SampleIntrinsic},
@@ -246,7 +246,7 @@ pub fn decode_alu(
 }
 
 impl ALUInstruction {
-    pub fn push_actions(&self, v: &mut Vec<Action<AMDILAbstractVM>>) {
+    pub fn push_actions(&self, v: &mut Vec<AMDILAction>) {
         v.extend(self.args
             .outputs
             .iter()

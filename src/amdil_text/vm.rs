@@ -10,9 +10,8 @@ use crate::abstract_machine::vector::{MaskedSwizzle, ComponentOf, VectorOf};
 use crate::abstract_machine::{
     AbstractVM, VMName, VMVector
 };
-use crate::hlsl::{HLSLVector, HLSLScalar, HLSLRegister};
+use crate::hlsl::{HLSLVector, HLSLScalar, HLSLRegister, HLSLAction};
 use crate::hlsl::compat::HLSLCompatibleAbstractVM;
-use crate::hlsl::syntax::HLSLOperator;
 use crate::hlsl::kinds::{HLSLKind, HLSLKindBitmask};
 
 /// Type for the AMDIL abstract VM. Implements [AbstractVM] and [HLSLCompatibleAbstractVM]
@@ -31,8 +30,9 @@ impl AbstractVM for AMDILAbstractVM {
         }).collect()
     }
 }
+pub type AMDILAction = Action<AMDILMaskSwizVector, ComponentOf<AMDILRegister>>;
 impl HLSLCompatibleAbstractVM for AMDILAbstractVM {
-    fn convert_action(a: &Action<Self>) -> Action<crate::hlsl::vm::HLSLAbstractVM> {
+    fn convert_action(a: &AMDILAction) -> HLSLAction {
         match a {
             Action::Assign { output, op, inputs } => Action::Assign {
                 output: ((&output.0).into(), output.1),
@@ -41,7 +41,7 @@ impl HLSLCompatibleAbstractVM for AMDILAbstractVM {
             },
             Action::EarlyOut => Action::EarlyOut,
             Action::If { inputs, cond_operator, if_true, if_fals } => Action::If {
-                inputs: inputs.into_iter().map(|(vec, kind)| (vec.into(), *kind)).collect(),
+                inputs: inputs.into_iter().map(|(comp, kind)| (comp.into(), *kind)).collect(),
                 cond_operator: *cond_operator,
                 if_true: if_true.into_iter().map(Self::convert_action).collect(),
                 if_fals: if_fals.into_iter().map(Self::convert_action).collect()
@@ -166,6 +166,18 @@ impl From<&AMDILMaskSwizVector> for HLSLVector {
                 AMDILRegister::Texture(idx) => HLSLScalar::Component(HLSLRegister::Texture(idx), comp.comp),
             }
         }).collect::<Vec<_>>()).unwrap()
+    }
+}
+impl From<&ComponentOf<AMDILRegister>> for HLSLScalar {
+    fn from(comp: &ComponentOf<AMDILRegister>) -> Self {
+        match &comp.vec {
+            AMDILRegister::NamedRegister(name) => HLSLScalar::Component(HLSLRegister::GenericRegister(name.clone(), 4), comp.comp),
+            AMDILRegister::Literal(arr) => HLSLScalar::Literal(arr[comp.comp.into_index()] as u32),
+            AMDILRegister::NamedBuffer { name, idx } => HLSLScalar::Component(HLSLRegister::ArrayElement { of: Box::new(HLSLRegister::ShaderInput(name.clone(), 4)), idx: *idx }, comp.comp),
+            AMDILRegister::NamedInputRegister(name) => HLSLScalar::Component(HLSLRegister::ShaderInput(name.clone(), 4), comp.comp),
+            AMDILRegister::NamedOutputRegister(name) => HLSLScalar::Component(HLSLRegister::ShaderOutput(name.clone(), 4), comp.comp),
+            AMDILRegister::Texture(idx) => HLSLScalar::Component(HLSLRegister::Texture(*idx), comp.comp),
+        }
     }
 }
 

@@ -1,10 +1,10 @@
-use crate::{abstract_machine::vector::MaskedSwizzle, Action, hlsl::{kinds::{HLSLKind, HLSLKindBitmask}, syntax::HLSLOperator}};
+use crate::{abstract_machine::vector::{MaskedSwizzle, ComponentOf}, Action, hlsl::{kinds::{HLSLKind, HLSLKindBitmask}, syntax::HLSLOperator}};
 
 use self::registers::AMDILContext;
 
 use super::{
     grammar,
-    vm::{AMDILAbstractVM, AMDILMaskSwizVector, AMDILDeclaration},
+    vm::{AMDILAbstractVM, AMDILMaskSwizVector, AMDILDeclaration, AMDILAction},
 };
 
 pub mod alu;
@@ -64,7 +64,7 @@ pub fn decode_instr_mods<'a>(mods: &'a Vec<grammar::InstrMod>) -> Vec<MatchableI
 
 pub fn push_instruction_actions(
     g_instr: grammar::Instruction,
-    ctx: &mut AMDILContext, v: &mut Vec<Action<AMDILAbstractVM>>
+    ctx: &mut AMDILContext, v: &mut Vec<AMDILAction>
 ) -> Result<Instruction, AMDILTextDecodeError> {
     let instr = match g_instr.instr.as_str() {
         "discard_logicalnz" => Instruction::EarlyOut(decode_args(&g_instr.args)),
@@ -99,8 +99,10 @@ pub fn push_instruction_actions(
                 }).collect();
             let args = args.unwrap();
             assert_eq!(args.len(), 1);
+            assert_eq!(args[0].0.swizzle().num_used_components(), 1);
+            assert!(args[0].0.swizzle().0[0].is_some());
             v.push(
-                Action::If { inputs: args, cond_operator: HLSLOperator::Assign, if_true: vec![Action::EarlyOut], if_fals: vec![] }
+                Action::If { inputs: vec![(ComponentOf{ vec: args[0].0.register().clone(), comp: args[0].0.swizzle().0[0].unwrap() }, args[0].1)], cond_operator: HLSLOperator::Assign, if_true: vec![Action::EarlyOut], if_fals: vec![] }
             )
         }
     }

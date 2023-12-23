@@ -1,4 +1,4 @@
-use crate::abstract_machine::{vector::{VectorOf, VectorComponent}, VMName, VMVector, VMScalar};
+use crate::{abstract_machine::{vector::{VectorOf, VectorComponent}, VMName, VMVector, VMScalar}, Action};
 
 use self::kinds::{HLSLKind, HLSLKindBitmask};
 
@@ -102,3 +102,5 @@ pub type HLSLVector = VectorOf<HLSLScalar>;
 // /// A reference to a swizzled vector in the HLSL virtual machine
 // pub type HLSLVectorDataRef = (HLSLVector, MaskedSwizzle);
 // impl UnconcreteOpTarget for HLSLVectorDataRef {}
+
+pub type HLSLAction = Action<HLSLVector, HLSLScalar>;

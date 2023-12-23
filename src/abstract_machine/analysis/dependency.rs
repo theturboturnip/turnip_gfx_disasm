@@ -53,7 +53,7 @@ impl<TVM: AbstractVM> ScalarDependencies<TVM> {
     ///
     /// e.g. if the action introduces a dependency of GeneralPurposeRegister(1) onto Output(o),
     /// set `self.dependents[Output(o)]` to the contents of `self.dependents[GeneralPurposeRegister(1)]`
-    pub fn accum_action(&mut self, action: &Action<TVM>, control_flow_inputs: &HashSet<TVM::Scalar>) {
+    pub fn accum_action(&mut self, action: &Action<TVM::Vector, TVM::Scalar>, control_flow_inputs: &HashSet<TVM::Scalar>) {
         match action {
             Action::Assign { output, inputs, op } => {
                 if output.0.is_pure_input() {
@@ -86,10 +86,8 @@ impl<TVM: AbstractVM> ScalarDependencies<TVM> {
             Action::If { inputs, if_true, if_fals, .. } => {
                 // Make `inputs` a dependency on everything touched inside the if_true AND if_fals
                 let mut next_control_flow_inputs = control_flow_inputs.clone();
-                for (vec, _) in inputs {
-                    for input_scalar in TVM::decompose(vec) {
-                        self.resolve_input_on(&mut next_control_flow_inputs, &input_scalar);
-                    }
+                for (input_scalar, _) in inputs {
+                    self.resolve_input_on(&mut next_control_flow_inputs, &input_scalar);
                 }
 
                 let mut else_branch_deps = self.clone(); // This needs to be a clone because it needs to understand how to expand previously-defined non-pure-inputs into pure inputs

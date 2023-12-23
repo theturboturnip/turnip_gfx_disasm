@@ -94,38 +94,21 @@ pub trait AbstractVM: std::fmt::Debug + Sized {
     fn decompose(v: &Self::Vector) -> Vec<Self::Scalar>;
 }
 
-// pub trait Action<TVM: AbstractVM> {
-//     fn outcomes(&self) -> Vec<Outcome<TVM>>;
-// }
-// /// Helper implementation for VMs which want to type-erase their actions
-// impl<TVM: AbstractVM> Action<TVM> for Box<dyn Action<TVM>> {
-//     fn outcomes(&self) -> Vec<Outcome<TVM>> {
-//         self.as_ref().outcomes()
-//     }
-// }
-
-// struct SimpleAction<TVM: AbstractVM + Clone>(Outcome<TVM>);
-// impl<TVM: AbstractVM + Clone> Action<TVM> for SimpleAction<TVM> {
-//     fn outcomes(&self) -> Vec<Outcome<TVM>> {
-//         vec![self.0.clone()]
-//     }
-// }
-
 #[derive(Debug, Clone)]
-pub enum Action<TVM: AbstractVM> {
+pub enum Action<TVector, TScalar> {
     /// Assign a value derived from a set of inputs using an [HLSLOperator] to an output.
     ///
     /// The names for all inputs and output must have been previously declared.
     Assign {
         // TODO move to using InstrArgs
-        output: (TVM::Vector, HLSLKind),
+        output: (TVector, HLSLKind),
         op: HLSLOperator,
-        inputs: Vec<(TVM::Vector, HLSLKind)>,
+        inputs: Vec<(TVector, HLSLKind)>,
     },
     /// Early out based on a set of inputs
     EarlyOut,
     If {
-        inputs: Vec<(TVM::Vector, HLSLKind)>,
+        inputs: Vec<(TScalar, HLSLKind)>,
         cond_operator: HLSLOperator,
         if_true: Vec<Self>,
         if_fals: Vec<Self>,
@@ -136,7 +119,7 @@ pub enum Action<TVM: AbstractVM> {
 pub trait Program<TVM: AbstractVM> {
     /// The list of Registers that are used by the program. Either pure inputs or outputs. 
     fn io_declarations(&self) -> &Vec<TVM::Register>;
-    fn actions(&self) -> &Vec<Action<TVM>>;
+    fn actions(&self) -> &Vec<Action<TVM::Vector, TVM::Scalar>>;
 }
 
 /// Trait for structs that can turn an arbitrary representation of a program (e.g. binary data) into a [Program] for a given [ScalarAbstractVM]

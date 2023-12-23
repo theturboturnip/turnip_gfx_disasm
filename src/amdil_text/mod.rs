@@ -8,18 +8,18 @@ mod decode;
 mod grammar;
 pub mod vm;
 
-use self::{decode::{AMDILTextDecodeError, Instruction, registers::AMDILContext}, grammar::AMDILTextParseError, vm::{AMDILAbstractVM, AMDILRegister}};
+use self::{decode::{AMDILTextDecodeError, Instruction, registers::AMDILContext}, grammar::AMDILTextParseError, vm::{AMDILAbstractVM, AMDILRegister, AMDILAction}};
 
 /// The type returned by [AMDILDecoder] holding the instructions for a given AMDIL program
 pub struct AMDILProgram {
     io_registers: Vec<AMDILRegister>,
-    actions: Vec<Action<AMDILAbstractVM>>
+    actions: Vec<AMDILAction>,
 }
 impl Program<AMDILAbstractVM> for AMDILProgram {
     fn io_declarations(&self) -> &Vec<<AMDILAbstractVM as crate::AbstractVM>::Register> {
         &self.io_registers
     }
-    fn actions(&self) -> &Vec<Action<AMDILAbstractVM>> {
+    fn actions(&self) -> &Vec<AMDILAction> {
         &self.actions
     }
 }
