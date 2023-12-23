@@ -1,6 +1,6 @@
-use std::{cell::RefCell, rc::Rc, collections::{HashMap, HashSet}};
+use std::{cell::RefCell, rc::Rc, collections::{HashMap, HashSet}, borrow::BorrowMut};
 
-use crate::{hlsl::{kinds::HLSLKind, compat::HLSLCompatibleAbstractVM, HLSLRegister, vm::HLSLAbstractVM, HLSLScalar, HLSLAction}, abstract_machine::{vector::{VectorComponent, VectorOf}, VMName, VMVector, VMScalar}, AbstractVM, Program, Action};
+use crate::{hlsl::{kinds::{HLSLKind, HLSLOperandKind, HLSLKindBitmask}, compat::HLSLCompatibleAbstractVM, HLSLRegister, vm::HLSLAbstractVM, HLSLScalar, HLSLAction, syntax::Operator}, abstract_machine::{vector::{VectorComponent, VectorOf}, VMName, VMVector, VMScalar}, AbstractVM, Program, Action};
 
 
 type MutRef<T> = Rc<RefCell<T>>;
@@ -13,6 +13,8 @@ struct Variable {
 }
 impl Variable {
     fn new(name: HLSLRegister, kind: HLSLKind) -> Self {
+        let kind = name.toplevel_kind().intersection(kind).expect("Tried to create a variable with a mismatching name and kind");
+        // eprintln!("Created var {name} as {kind}");
         Self {
             n_contig_components: name.n_components(),
             name,
@@ -22,9 +24,9 @@ impl Variable {
 
     // Refining can only happen inside here, because this machine doesn't use <v as Variable>.toplevel_kind().
     // toplevel_kind() is necessary for other analyses to use
-    fn refine(&mut self, hlsl_kind: HLSLKind) -> Option<()> {
+    fn refine(&mut self, hlsl_kind: HLSLKind) -> Option<HLSLKind> {
         self.kind = self.kind.intersection(hlsl_kind)?;
-        Some(())
+        Some(self.kind)
     }
 }
 impl VMName for Variable {
@@ -220,7 +222,7 @@ impl VariableState {
     /// 
     /// Will create new input vectors if they haven't been seen before?
     /// TODO could replace this with more complete array handling...
-    fn remap_scalars_to_input_vector(&mut self, v: &VectorOf<HLSLScalar>, kind: HLSLKind) -> Option<(Vec<MutScalarVar>, HLSLKind)> {
+    fn remap_scalars_to_input_vector(&mut self, v: &VectorOf<HLSLScalar>, mut kind: HLSLKind) -> Option<(Vec<MutScalarVar>, HLSLKind)> {
         let mut new_v = vec![];
         for s in v.ts.iter() {
             let new_s = match &s {
@@ -238,7 +240,11 @@ impl VariableState {
                             return None
                         }
                     };
-                    var.borrow_mut().refine(kind); // TODO cast if this fails?
+                    let combined_kind = (*var).borrow_mut().refine(kind); // TODO cast if this fails?
+                    match combined_kind {
+                        Some(combined_kind) => kind = combined_kind,
+                        None => {}
+                    }
                     MutScalarVar::Component(var, var_comp)
                 },
                 HLSLScalar::Literal(x) => MutScalarVar::Literal(*x),
@@ -260,7 +266,7 @@ impl VariableState {
     /// - any of the scalars are general-purpose and have an incompatible kind from their previous usage
     /// - the scalars all remap to existing variable-space scalars which are not from the same register
     /// - ALWAYS because SSA makes handling scopes easier
-    fn remap_scalars_to_output_vector(&mut self, v: &VectorOf<HLSLScalar>, kind: HLSLKind) -> (Vec<MutScalarVar>, HLSLKind) {
+    fn remap_scalars_to_output_vector(&mut self, v: &VectorOf<HLSLScalar>, mut kind: HLSLKind) -> (Vec<MutScalarVar>, HLSLKind) {
         let mut all_output = true;
         let mut any_output = false;
         let v: Vec<_> = v.ts.iter().map(|t| {
@@ -289,7 +295,11 @@ impl VariableState {
             let new_v = match common_reg {
                 Some(_) => v.into_iter().map(|(reg, reg_comp)| {
                     let (var, var_comp) = self.scalar_map.lookup(reg.clone(), reg_comp).unwrap();
-                    var.borrow_mut().refine(kind); // TODO cast if this fails?
+                    let combined_kind = (*var).borrow_mut().refine(kind); // TODO cast if this fails?
+                    match combined_kind {
+                        Some(combined_kind) => kind = combined_kind,
+                        None => {}
+                    }
                     MutScalarVar::Component(var, var_comp)
                 }).collect(),
                 None => panic!("Tried to remap a group of scalars that "),
@@ -323,6 +333,7 @@ impl VariableState {
             MutScalarVar::Component(var.clone(), i.into())
         }).collect();
 
+        let kind = var.borrow().kind;
         self.registers.push(var);
 
         (new_v, kind)
@@ -331,10 +342,86 @@ impl VariableState {
     fn process_action(&mut self, action: &HLSLAction) -> MutVarAction {
         match action {
             Action::Assign { output, op, inputs } => {
-                let inputs = inputs.into_iter().map(|(in_vec, kind)| {
+                // Extra type inference is useful at this stage!
+                // Consider an AMDIL machine which produces a program with two actions:
+                // - r0.x = div v0.x, v0.y
+                // - r1.x = v1.z ? r0.x : 0x0
+                // because r0.x is the output of a div, the AMDIL machine has enough information to state r0.x is a Float
+                // but the AMDIL machine doesn't keep that information around - generally, the variable machine is expected to propagate the type information
+                // the AMDIL machine sees the ternary and all it knows is "well, r0.x and 0x0 must be the same type. I don't know what type it is, because ternarys work on anything."
+                // The variable machine is the only place that understands "hey, r0.x (maps to a variable which) is a float! Which means the 0x0 must also be a float! and r1.x (maps to a variable which) must be a float!"
+
+                let mut inputs: Vec<_> = inputs.into_iter().map(|(in_vec, kind)| {
                     self.remap_scalars_to_input_vector(in_vec, *kind).expect("Tried to make an input-vector with unencountered original scalars")
                 }).collect();
-                let output = self.remap_scalars_to_output_vector(&output.0, output.1);
+                let mut output = self.remap_scalars_to_output_vector(&output.0, output.1);
+
+                // We should do the inference here, because this is where we have the most information.
+                // We have attached the inputs to their previous variables, which may have more type information than before.
+
+                let kindspec = op.get_kindspec();
+                // eprintln!("\n--------------------------\nKindspec for {:?}: {:?}", op, &kindspec);
+                // eprintln!("Inputs: {:?}\nOutput: {:?}", inputs.iter().map(|(_, kind)| kind).collect::<Vec<_>>(), output.1);
+
+                // The kindspec gives us either a concrete kind or a hole index for each input and output.
+                let mut inferred_holes = kindspec.holes().clone();
+                // First, for every input:
+                // - if it corresponds to a hole, filter down the hole
+                for ((_, supposed_kind), operand_kind) in inputs.iter_mut().zip(kindspec.input_types().iter()) {
+                    match operand_kind {
+                        HLSLOperandKind::Concrete(..) => {},
+                        HLSLOperandKind::Hole(idx) => inferred_holes[*idx] = inferred_holes[*idx].intersection(*supposed_kind).unwrap(),
+                    }
+                }
+                // Also do this for the output
+                {
+                    let supposed_kind = &mut output.1;
+                
+                    match kindspec.output_type() {
+                        HLSLOperandKind::Concrete(..) => {},
+                        HLSLOperandKind::Hole(idx) => inferred_holes[*idx] = inferred_holes[*idx].intersection(*supposed_kind).unwrap(),
+                    }
+                }
+                // eprintln!("After inference, holes = {:?}", &inferred_holes);
+                // We now have complete holes or concrete types.
+                // Apply them to the input/output.
+                for ((input_vec, supposed_kind), operand_kind) in inputs.iter_mut().zip(kindspec.input_types().iter()) {
+                    let final_kind = match operand_kind {
+                        HLSLOperandKind::Concrete(conc_kind) => (*conc_kind).into(), // Already applied
+                        HLSLOperandKind::Hole(idx) => inferred_holes[*idx],
+                    };
+                    // These *should* match
+                    *supposed_kind = supposed_kind.intersection(final_kind).unwrap();
+                    for s in input_vec {
+                        match s {
+                            MutScalarVar::Component(var, _) => {
+                                // eprintln!("Refining {} with {}", var.borrow().name, supposed_kind);
+                                (**var).borrow_mut().refine(*supposed_kind);
+                            }
+                            MutScalarVar::Literal(_) => {},
+                        }
+                    }
+                }
+                {
+                    let (output_vec, supposed_kind) = &mut output;
+
+                    let final_kind = match kindspec.output_type() {
+                        HLSLOperandKind::Concrete(conc_kind) => (*conc_kind).into(), // Already applied
+                        HLSLOperandKind::Hole(idx) => inferred_holes[*idx],
+                    };
+                    // These *should* match
+                    *supposed_kind = supposed_kind.intersection(final_kind).unwrap();
+                    for s in output_vec {
+                        match s {
+                            MutScalarVar::Component(var, _) => {
+                                // eprintln!("Refining {} with {}", var.borrow().name, supposed_kind);
+                                (**var).borrow_mut().refine(*supposed_kind);
+                            }
+                            MutScalarVar::Literal(_) => {},
+                        }
+                    }
+                }
+
                 MutVarAction::Assign { output, op: *op, inputs }
             },
             Action::EarlyOut => MutVarAction::EarlyOut,
@@ -371,17 +458,35 @@ impl VariableState {
         }
     }
 
+    fn get_consistent_kind(var_vec: &Vec<MutScalarVar>, supposed_kind: HLSLKind) -> HLSLKind {
+        // If the constituent variables referenced in var_vec were updated after-the-fact through type inference,
+        // they may be out-of-date with the supposed_kind attached to the variable initially.
+        // NOTE this may be difficult to resolve if two variables referenced in the same input vector (which thus initially have the same kind masks)
+        // end up diverging and being of different concrete types.
+        // This would require a bit cast when their elements are used in the input vector.
+        // This cannot happen for outputs because they are always from the same variable. 
+        var_vec.iter().fold(supposed_kind, |prev, s| {
+            match s {
+                MutScalarVar::Component(var, _) => match prev.intersection((**var).borrow_mut().kind){
+                    Some(kind) => kind,
+                    None => panic!("A variable was updated by type-inference and made incompatible with some of its previous usages?"),
+                },
+                MutScalarVar::Literal(_) => prev.intersection(HLSLKindBitmask::NUMERIC.into()).expect("supposed_kind was not numeric despite applying to a literal"),
+            }
+        })
+    }
+
     fn resolve_action(&self, action: &MutVarAction) -> HLSLAction {
         match action {
             Action::Assign { output, op, inputs } => {
                 let output = (
                     VectorOf::new(&output.0.iter().map(|s| self.resolve(s)).collect::<Vec<_>>()).unwrap(),
-                    output.1
+                    Self::get_consistent_kind(&output.0, output.1),
                 );
                 let inputs = inputs.iter().map(|(var_vec, vec_kind)| {
                     (
                         VectorOf::new(&var_vec.iter().map(|s| self.resolve(s)).collect::<Vec<_>>()).unwrap(),
-                        *vec_kind
+                        Self::get_consistent_kind(var_vec, *vec_kind)
                     )
                 }).collect();
                 Action::Assign { output, op: *op, inputs }
@@ -410,9 +515,11 @@ impl VariableState {
 pub fn disassemble<P: Program<HLSLAbstractVM>>(p: &P) -> Vec<HLSLAction> {
     let mut variables = VariableState::new(p.io_declarations());
 
-    // Run all the actions through the machine
+    // Run all the actions forwards through the machine
     let var_actions: Vec<_> = p.actions().iter().map(|a| variables.process_action(a)).collect();
     assert!(variables.scalar_map.scopes.is_empty());
+
+    // Do another pass to ensure the consistency of (var.kind, supposed_kind) - var.kind can be updated under our feet, supposed_kind needs to be made up-to-date
 
     var_actions.into_iter().map(|a| variables.resolve_action(&a)).collect()
 }

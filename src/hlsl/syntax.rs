@@ -91,6 +91,10 @@ impl OperatorKindspec {
         }
     }
 
+    pub fn holes(&self) -> &Vec<HLSLKind> {
+        &self.holes
+    }
+
     /// Return a vector of HLSLKind masks corresponding to the input arguments.
     /// Does not consider the actual types of the other arguments or do any type coercion logic.
     pub fn get_basic_input_types(&self) -> Vec<HLSLKind> {
