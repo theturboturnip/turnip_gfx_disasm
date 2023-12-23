@@ -99,7 +99,8 @@ pub fn push_instruction_actions(
                 }).collect();
             let args = args.unwrap();
             assert_eq!(args.len(), 1);
-            assert_eq!(args[0].0.swizzle().num_used_components(), 1);
+            // dbg!(&args);
+            // assert_eq!(args[0].0.swizzle().num_used_components(), 1); // `discard_logicalnz r0.x` expands r0.x to [Some(X), Some(X), Some(X), Some(X)] because that's what some other instructions like mul rely on.
             assert!(args[0].0.swizzle().0[0].is_some());
             v.push(
                 Action::If { inputs: vec![(ComponentOf{ vec: args[0].0.register().clone(), comp: args[0].0.swizzle().0[0].unwrap() }, args[0].1)], cond_operator: HLSLOperator::Assign, if_true: vec![Action::EarlyOut], if_fals: vec![] }
