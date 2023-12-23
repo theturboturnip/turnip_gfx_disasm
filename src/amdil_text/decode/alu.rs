@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use crate::{
     abstract_machine::{
-        instructions::InstrArgs, vector::MaskedSwizzle,
+        instructions::InstrArgs, vector::MaskedSwizzle, VMName,
     },
     amdil_text::{
         grammar,
@@ -56,7 +56,8 @@ impl ALUArgsSpec {
             .into_iter()
             .zip(self.output_kinds.iter())
             .map(|(data, kind)| {
-                (data.clone(), *kind)
+                let kind = kind.intersection(data.toplevel_kind()).unwrap();
+                (data.clone(), kind)
             })
             .collect();
 
@@ -65,8 +66,9 @@ impl ALUArgsSpec {
             .zip(self.input_kinds.iter())
             .map(|(data, kind)| {
                 let swizzle = data.swizzle().masked_out(mask_to_apply_to_input);
+                let kind = kind.intersection(data.toplevel_kind()).unwrap();
                 let data = AMDILMaskSwizVector::new(data.register().clone(), swizzle);
-                (data, *kind)
+                (data, kind)
             })
             .collect();
 
