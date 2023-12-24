@@ -12,8 +12,8 @@ pub trait HLSLCompatibleAbstractVM: AbstractVM
 }
 
 pub struct HLSLCompatProgram {
-    actions: Vec<HLSLAction>,
-    io_registers: Vec<HLSLRegister>,
+    pub actions: Vec<HLSLAction>,
+    pub io_registers: Vec<HLSLRegister>,
 }
 impl Program<HLSLAbstractVM> for HLSLCompatProgram {
     fn io_declarations(&self) -> &Vec<<HLSLAbstractVM as AbstractVM>::Register> {

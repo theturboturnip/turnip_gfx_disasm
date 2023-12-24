@@ -1,6 +1,6 @@
 use std::{cell::RefCell, rc::Rc, collections::{HashMap, HashSet}};
 
-use crate::{hlsl::{kinds::{HLSLKind, HLSLOperandKind, HLSLKindBitmask}, compat::HLSLCompatibleAbstractVM, HLSLRegister, vm::HLSLAbstractVM, HLSLScalar, HLSLAction, syntax::{Operator, HLSLOperator}}, abstract_machine::{vector::{VectorComponent, VectorOf}, VMName, VMVector, VMScalar}, AbstractVM, Program, Action};
+use crate::{hlsl::{kinds::{HLSLKind, HLSLOperandKind, HLSLKindBitmask}, compat::{HLSLCompatibleAbstractVM, HLSLCompatProgram}, HLSLRegister, vm::HLSLAbstractVM, HLSLScalar, HLSLAction, syntax::{Operator, HLSLOperator}}, abstract_machine::{vector::{VectorComponent, VectorOf}, VMName, VMVector, VMScalar}, AbstractVM, Program, Action};
 
 
 type MutRef<T> = Rc<RefCell<T>>;
@@ -566,7 +566,7 @@ impl VariableState {
 }
 
 // struct 
-pub fn disassemble<P: Program<HLSLAbstractVM>>(p: &P) -> Vec<HLSLAction> {
+pub fn disassemble<P: Program<HLSLAbstractVM>>(p: &P) -> HLSLCompatProgram {
     let mut variables = VariableState::new(p.io_declarations());
 
     // Run all the actions forwards through the machine
@@ -576,5 +576,8 @@ pub fn disassemble<P: Program<HLSLAbstractVM>>(p: &P) -> Vec<HLSLAction> {
     // Do another pass to do backwards type propagation and ensure the consistency of (var.kind, supposed_kind) - var.kind can be updated under our feet, supposed_kind needs to be made up-to-date
     variables.finalize_actions(&mut var_actions);
 
-    var_actions.into_iter().map(|a| variables.resolve_action(&a)).collect()
+    HLSLCompatProgram {
+        actions: var_actions.into_iter().map(|a| variables.resolve_action(&a)).collect(),
+        io_registers: variables.io_declarations.iter().map(|var| var.borrow().name.clone()).collect(),
+    }
 }
