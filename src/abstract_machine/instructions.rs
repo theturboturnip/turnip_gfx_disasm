@@ -28,7 +28,7 @@ pub trait InstructionSpec<TVM: AbstractVM> {
         args: &InstrArgs<TVM::Vector>,
     ) -> Vec<(
         TVM::Scalar,
-        Vec<TVM::Scalar>,
+        Vec<(TVM::Scalar, HLSLKind)>,
     )>;
     /// [ArgsSpec::sanitize_arguments]
     fn sanitize_arguments(&self, args: Vec<TVM::Vector>) -> InstrArgs<TVM::Vector>;
@@ -44,7 +44,7 @@ impl<TVM: AbstractVM, TArgsSpec: ArgsSpec<TVM>, TDepRelation: DependencyRelation
         args: &InstrArgs<TVM::Vector>,
     ) -> Vec<(
         TVM::Scalar,
-        Vec<TVM::Scalar>,
+        Vec<(TVM::Scalar, HLSLKind)>,
     )> {
         self.1.determine_dependencies(args)
     }
@@ -66,7 +66,7 @@ pub trait DependencyRelation<TVM: AbstractVM> {
         args: &InstrArgs<TVM::Vector>,
     ) -> Vec<(
         TVM::Scalar,
-        Vec<TVM::Scalar>,
+        Vec<(TVM::Scalar, HLSLKind)>,
     )>;
 }
 
@@ -88,7 +88,7 @@ impl<TVM: AbstractVM> DependencyRelation<TVM> for SimpleDependencyRelation {
         args: &InstrArgs<TVM::Vector>,
     ) -> Vec<(
         TVM::Scalar,
-        Vec<TVM::Scalar>,
+        Vec<(TVM::Scalar, HLSLKind)>,
     )> {
         // for output in outputs
         //     for component in output
@@ -99,7 +99,7 @@ impl<TVM: AbstractVM> DependencyRelation<TVM> for SimpleDependencyRelation {
         let expanded_inputs = args
             .inputs
             .iter()
-            .map(|elem| TVM::decompose(&elem.0));
+            .map(|elem| TVM::decompose(&elem.0).into_iter().map(|s| (s, elem.1)).collect::<Vec<_>>());
         match self {
             Self::AllToAll => {
                 // Put all inputs in a vector

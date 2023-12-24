@@ -19,7 +19,7 @@ impl From<HLSLNumericKind> for HLSLConcreteKind {
 }
 
 /// A type for HLSL values - an [HLSLKindMask] with at least one bit set
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct HLSLKind(HLSLKindBitmask);
 impl HLSLKind {
     pub fn try_concretize(&self) -> Option<HLSLConcreteKind> {
