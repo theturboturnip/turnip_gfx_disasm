@@ -29,8 +29,8 @@ pub struct Instruction {
     /// ```
     pub instr: String,
     pub ctrl_specifiers: Vec<CtrlSpec>,
-    // pub dst: 
-    pub args: Vec<Src>,
+    pub dst: Option<Dst>,
+    pub srcs: Vec<Src>,
 }
 
 #[derive(Debug, Clone)]
@@ -55,14 +55,14 @@ pub enum RegRelativeAddr {
 
 #[derive(Debug, Clone)]
 pub struct Dst {
-    id: RegId,
-    write_mask: [DstWrite; 4],
-    mods: Vec<DstMod>
+    pub regid: RegId,
+    pub write_mask: [DstWrite; 4],
+    pub mods: Vec<DstMod>
 }
 
 /// Section 2.2.5
 /// 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DstWrite {
     /// The corresponding component is written with the output of the calculation
     Write,
@@ -209,14 +209,19 @@ pub fn parse_lines(data: &str) -> IResult<&str, Vec<Instruction>, AMDILTextParse
 fn parse_line(data: &str) -> IResult<&str, Instruction, AMDILTextParseError<&str>> {
     let (data, (instr, ctrl_specifiers, dst_mods)) = parse_instruction_name(data)?;
 
-    assert!(dst_mods.is_empty());
 
     // If there is a space
-    let (data, args) = if let (data, Some(_)) = opt(tag(" "))(data)? {
+    let (data, dst, srcs) = if let (data, Some(_)) = opt(tag(" "))(data)? {
         // Take arguments
-        separated_list0(tag(", "), parse_src)(data)?
+        // First, parse dst
+        let (data, dst) = parse_dst(data, dst_mods)?;
+
+        let (data, srcs) = separated_list0(tag(", "), parse_src)(data)?;
+
+        (data, Some(dst), srcs)
     } else {
-        (data, vec![])
+        assert!(dst_mods.is_empty());
+        (data, None, vec![])
     };
 
     if data.len() != 0 {
@@ -228,7 +233,8 @@ fn parse_line(data: &str) -> IResult<&str, Instruction, AMDILTextParseError<&str
         Instruction {
             instr: instr.to_owned(),
             ctrl_specifiers,
-            args,
+            dst,
+            srcs,
         },
     ))
 }
@@ -289,6 +295,35 @@ fn parse_ctrlspec(data: &str) -> IResult<&str, CtrlSpec, AMDILTextParseError<&st
 fn parse_src(data: &str) -> IResult<&str, Src, AMDILTextParseError<&str>> {
     // args are either a hex literal or a named arg
     alt((parse_hex_literal, parse_named_src))(data)
+}
+fn parse_dst(data: &str, mods: Vec<DstMod>) -> IResult<&str, Dst, AMDILTextParseError<&str>> {
+    let (data, regid) = parse_regid(data)?;
+
+    let parse_comp = |expected_write: char, data: &str| {
+        match anychar(data)? {
+            (data, expected_write) => Ok((data, DstWrite::Write)),
+            (data, '_') => Ok((data, DstWrite::NoWrite)),
+            // TODO 0 or 1
+            (_, other) => Err(nom::Err::Error(AMDILTextParseError::BadVectorComponent(other)))
+        }
+    };
+
+    let (data, write_mask) = match tag::<&str, &str, AMDILTextParseError<&str>>(".")(data) {
+        Ok((data, _)) => {
+            let (data, x) = parse_comp('x', data)?;
+            let (data, y) = parse_comp('y', data)?;
+            let (data, z) = parse_comp('z', data)?;
+            let (data, w) = parse_comp('w', data)?;
+            (data, [x, y, z, w])
+        }
+        _ => (data, [DstWrite::Write; 4])
+    };
+
+    Ok((data, Dst {
+        regid,
+        write_mask,
+        mods,
+    }))
 }
 fn parse_regname(data: &str) -> IResult<&str, String, AMDILTextParseError<&str>> {
     // name: [a-zA-Z]+[0-9]*
