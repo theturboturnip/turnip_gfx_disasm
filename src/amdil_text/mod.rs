@@ -30,6 +30,7 @@ pub enum AMDILDecodeError {
     ParseNomError(String, nom::error::ErrorKind),
     ParseIntError(std::num::ParseIntError),
     ParseBadVectorComponent(char),
+    ParseBadSrcMod(String),
 
     DecodedBadValue(&'static str, grammar::Instruction),
     GenericDecodeError(String),
@@ -44,6 +45,7 @@ impl<'a> From<AMDILTextParseError<&'a str>> for AMDILDecodeError {
             AMDILTextParseError::BadVectorComponent(comp) => {
                 AMDILDecodeError::ParseBadVectorComponent(comp)
             }
+            AMDILTextParseError::BadSrcModifier(srcmod) => AMDILDecodeError::ParseBadSrcMod(srcmod),
         }
     }
 }
