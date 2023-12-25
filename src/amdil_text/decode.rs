@@ -34,29 +34,36 @@ pub enum MatchableArg {
     NamedIndexed(String, u64),
     NamedSwizzled(String, MaskedSwizzle),
     NamedIndexedSwizzled(String, u64, MaskedSwizzle),
-    Complex(grammar::Arg),
+    Complex(grammar::Src),
 }
-pub fn decode_args(args: &Vec<grammar::Arg>) -> Vec<MatchableArg> {
+pub fn decode_args(args: &Vec<grammar::Src>) -> Vec<MatchableArg> {
     args.iter()
         .map(|g_arg| match g_arg {
-            grammar::Arg::HexLiteral(x) => MatchableArg::HexLiteral(*x),
-            grammar::Arg::Named(name, mods) => match mods.as_slice() {
-                &[] => MatchableArg::Named(name.clone()),
-                &[grammar::ArgMod::Indexed(idx)] => MatchableArg::NamedIndexed(name.clone(), idx),
-                &[grammar::ArgMod::Swizzled(swizzle)] => {
-                    MatchableArg::NamedSwizzled(name.clone(), swizzle)
-                }
-                &[grammar::ArgMod::Indexed(idx), grammar::ArgMod::Swizzled(swizzle)] => {
-                    MatchableArg::NamedIndexedSwizzled(name.clone(), idx, swizzle)
-                }
+            grammar::Src::HexLiteral(x) => MatchableArg::HexLiteral(*x),
+            grammar::Src::Named(name, mods) => match (name.rel_addrs.as_slice(), mods.as_slice()) {
+                (
+                    &[], &[]
+                ) => MatchableArg::Named(name.name.clone()),
+                (
+                    &[],
+                    &[grammar::SrcMod::Swizzled(swizzle)]
+                ) => MatchableArg::NamedSwizzled(name.name.clone(), swizzle),
+                (
+                    &[grammar::RegRelativeAddr::Literal(idx)],
+                    &[]
+                ) => MatchableArg::NamedIndexed(name.name.clone(), idx),
+                (
+                    &[grammar::RegRelativeAddr::Literal(idx)],
+                    &[grammar::SrcMod::Swizzled(swizzle)]
+                ) => MatchableArg::NamedIndexedSwizzled(name.name.clone(), idx, swizzle),
                 _ => MatchableArg::Complex(g_arg.clone()),
-            },
+            }
         })
         .collect()
 }
 
 pub type MatchableInstrMod<'a> = (&'a str, &'a str);
-pub fn decode_instr_mods<'a>(mods: &'a Vec<grammar::InstrMod>) -> Vec<MatchableInstrMod<'a>> {
+pub fn decode_instr_mods<'a>(mods: &'a Vec<grammar::CtrlSpec>) -> Vec<MatchableInstrMod<'a>> {
     mods.iter()
         .map(|g_mod| (g_mod.name.as_str(), g_mod.value.as_str()))
         .collect()
@@ -200,7 +207,7 @@ fn decode_declare(g_instr: &grammar::Instruction) -> Result<Instruction, AMDILTe
             [*x, *y, *z, *w],
         )),
         ("dcl_global_flags", [..]) => Instruction::DontCare(g_instr.clone()),
-        _ => match decode_instr_mods(&g_instr.instr_mods)[..] {
+        _ => match decode_instr_mods(&g_instr.ctrl_specifiers)[..] {
             [
                 ("id", id),
                 ("type", "2d"),

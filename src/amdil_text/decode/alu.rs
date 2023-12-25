@@ -194,7 +194,7 @@ pub fn decode_alu(
     let matchable_args = decode_args(&g_instr.args);
     match (
         g_instr.instr.as_str(),
-        &decode_instr_mods(&g_instr.instr_mods)[..],
+        &decode_instr_mods(&g_instr.ctrl_specifiers)[..],
         &matchable_args,
     ) {
         ("sample", [("resource", tex_id), ("sampler", _sampler_id)], matchable_args) => {
