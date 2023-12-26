@@ -5,7 +5,7 @@ use std::collections::HashMap;
 
 use crate::{abstract_machine::vector::MaskedSwizzle, amdil_text::vm::AMDILMaskSwizVector};
 
-use super::{AMDILTextDecodeError, MatchableArg};
+use super::{grammar::{Src, RegId, SrcMod, RegRelativeAddr, Dst}, error::AMDILError};
 
 pub type LiteralVec = Box<[u64; 4]>;
 
@@ -22,36 +22,36 @@ impl AMDILContext {
         self.named_literals.insert(name, literal);
     }
 
-    pub fn arg_as_vector_data_ref(&self, arg: &MatchableArg) -> Result<AMDILMaskSwizVector, AMDILTextDecodeError> {
-        let vdr = match arg {
-            MatchableArg::Named(name) => {
-                self.swizzled_name_to_named_vector_data_ref(name, MaskedSwizzle::identity(4))?
-            }
-            MatchableArg::NamedSwizzled(name, swizzle) => {
-                self.swizzled_name_to_named_vector_data_ref(name, *swizzle)?
-            }
-            MatchableArg::NamedIndexed(name, idx) => {
-                self.indexed_swizzled_name_to_named_vector_data_ref(name, *idx, MaskedSwizzle::identity(4))?
-            }
-            MatchableArg::NamedIndexedSwizzled(name, idx, swizzle) => {
-                self.indexed_swizzled_name_to_named_vector_data_ref(name, *idx, *swizzle)?
-            }
-            MatchableArg::Complex(arg) => {
-                todo!("more complex parsing, need to handle {:?}", arg)
-            }
-            MatchableArg::HexLiteral(_) => {
-                todo!("scalar hex literal passed to arg_as_vector_data_ref. How to handle?")
-            }
-        };
-    
-        Ok(vdr)
+    pub fn src_to_maskswizvector(&self, src: &Src) -> Result<AMDILMaskSwizVector, AMDILError> {
+        match &src.mods[..] {
+            &[] => self.swizzled_regid_to_maskswizvector(&src.regid, None),
+            &[SrcMod::Swizzled(swizzle)] => self.swizzled_regid_to_maskswizvector(&src.regid, Some(swizzle)),
+            _ => todo!("more complex parsing, need to handle mods {:?}", src.mods)
+        }
+    }
+
+    pub fn dst_to_maskswizvector(&self, dst: &Dst) -> Result<AMDILMaskSwizVector, AMDILError> {
+        if dst.mods.is_empty() {
+            self.swizzled_regid_to_maskswizvector(&dst.regid, Some(dst.write_mask.into()))
+        } else {
+            todo!("more complex parsing, need to handle dstmods {:?}", dst.mods)
+        }
+    }
+
+    fn swizzled_regid_to_maskswizvector(&self, regid: &RegId, swizzle: Option<MaskedSwizzle>) -> Result<AMDILMaskSwizVector, AMDILError> {
+        let swizzle = swizzle.unwrap_or(MaskedSwizzle::identity(4));
+        match &regid.rel_addrs[..] {
+            &[] => self.swizzled_name_to_named_vector_data_ref(&regid.name, swizzle),
+            &[RegRelativeAddr::Literal(idx)] => self.indexed_swizzled_name_to_named_vector_data_ref(&regid.name, idx, swizzle),
+            _ => todo!("more complex parsing, need to handle relative addressing {:?}", regid.rel_addrs)
+        }
     }
     
     fn swizzled_name_to_named_vector_data_ref(
         &self, 
         name: &String,
         swizzle: MaskedSwizzle,
-    ) -> Result<AMDILMaskSwizVector, AMDILTextDecodeError> {
+    ) -> Result<AMDILMaskSwizVector, AMDILError> {
         let vdr = match name.chars().nth(0) {
             Some('l') => {
                 let literal = self.named_literals.get(name).unwrap();
@@ -61,7 +61,7 @@ impl AMDILContext {
             Some('o') => AMDILMaskSwizVector::named_output_register(name.clone(), swizzle),
             Some('r') => AMDILMaskSwizVector::named_register(name.clone(), swizzle),
             _ => {
-                return Err(AMDILTextDecodeError::Generic(format!(
+                return Err(AMDILError::Generic(format!(
                     "unexpected argument name '{}'",
                     name
                 )))
@@ -75,11 +75,11 @@ impl AMDILContext {
         name: &String,
         idx: u64,
         swizzle: MaskedSwizzle,
-    ) -> Result<AMDILMaskSwizVector, AMDILTextDecodeError> {
+    ) -> Result<AMDILMaskSwizVector, AMDILError> {
         if name.starts_with("cb") {
             Ok(AMDILMaskSwizVector::named_buffer(name.clone(), idx, swizzle))
         } else {
-            Err(AMDILTextDecodeError::Generic(format!(
+            Err(AMDILError::Generic(format!(
                 "unexpected indexable argument name '{}'",
                 name
             )))

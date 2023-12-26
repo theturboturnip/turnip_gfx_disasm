@@ -1,213 +1,133 @@
-use crate::{abstract_machine::vector::{MaskedSwizzle, ComponentOf}, Action, hlsl::{kinds::{HLSLKind, HLSLKindBitmask}, syntax::HLSLOperator}};
+mod alu;
+mod registers;
+mod grammar;
+mod error;
+pub use error::AMDILError;
 
-use self::registers::AMDILContext;
+use alu::{parse_alu, ALUInstruction};
 
-use super::{
-    grammar,
-    vm::{AMDILAbstractVM, AMDILMaskSwizVector, AMDILDeclaration, AMDILAction},
-};
+use crate::{amdil_text::decode::grammar::RegRelativeAddr, abstract_machine::vector::VectorComponent};
 
-pub mod alu;
-use alu::{decode_alu, ALUInstruction};
-pub mod registers;
+use self::{grammar::{parse_instruction_name, parse_dst, parse_src, DstWrite, parse_hex_literal, CtrlSpec, DstMod}, registers::AMDILContext};
 
-#[derive(Debug, Clone)]
-pub enum AMDILTextDecodeError {
-    BadValue(&'static str, grammar::Instruction),
-    Generic(String),
-}
+use super::vm::{AMDILDeclaration, AMDILRegister};
+
 #[derive(Debug, Clone)]
 pub enum Instruction {
-    Unknown(grammar::Instruction),
-    DontCare(grammar::Instruction),
+    DontCare(String),
     Decl(AMDILDeclaration),
     Alu(ALUInstruction),
     /// Early out based on the a set of args
-    EarlyOut(Vec<MatchableArg>),
+    EarlyOut(AMDILRegister, VectorComponent),
 }
 
-/// Adaptation of [grammar::Arg] that's more suitable for match-cases
-#[derive(Debug, Clone)]
-pub enum MatchableArg {
-    HexLiteral(u64),
-    Named(String),
-    NamedIndexed(String, u64),
-    NamedSwizzled(String, MaskedSwizzle),
-    NamedIndexedSwizzled(String, u64, MaskedSwizzle),
-    Complex(grammar::Src),
-}
-pub fn decode_args(args: &Vec<grammar::Src>) -> Vec<MatchableArg> {
-    args.iter()
-        .map(|g_arg| match g_arg {
-            grammar::Src::HexLiteral(x) => MatchableArg::HexLiteral(*x),
-            grammar::Src::Named(name, mods) => match (name.rel_addrs.as_slice(), mods.as_slice()) {
-                (
-                    &[], &[]
-                ) => MatchableArg::Named(name.name.clone()),
-                (
-                    &[],
-                    &[grammar::SrcMod::Swizzled(swizzle)]
-                ) => MatchableArg::NamedSwizzled(name.name.clone(), swizzle),
-                (
-                    &[grammar::RegRelativeAddr::Literal(idx)],
-                    &[]
-                ) => MatchableArg::NamedIndexed(name.name.clone(), idx),
-                (
-                    &[grammar::RegRelativeAddr::Literal(idx)],
-                    &[grammar::SrcMod::Swizzled(swizzle)]
-                ) => MatchableArg::NamedIndexedSwizzled(name.name.clone(), idx, swizzle),
-                _ => MatchableArg::Complex(g_arg.clone()),
-            }
-        })
+pub fn parse_lines(data: &str) -> Result<Vec<Instruction>, AMDILError> {
+    let mut ctx = AMDILContext::new();
+    data.lines()
+        // Filter out empty lines
+        .filter(|data| data.len() > 0)
+        .map(|data| Ok(parse_instruction(&mut ctx, data)?))
         .collect()
 }
+fn parse_instruction(ctx: &mut AMDILContext, data: &str) -> Result<Instruction, AMDILError> {
+    let (data, (instr, ctrl_specifiers, dst_mods)) = parse_instruction_name(data)?;
 
-pub type MatchableInstrMod<'a> = (&'a str, &'a str);
-pub fn decode_instr_mods<'a>(mods: &'a Vec<grammar::CtrlSpec>) -> Vec<MatchableInstrMod<'a>> {
-    mods.iter()
-        .map(|g_mod| (g_mod.name.as_str(), g_mod.value.as_str()))
-        .collect()
-}
+    let (data, instr) = match instr.as_str() {
+        x if x.starts_with("il_vs") || x.starts_with("il_ps") => (data, Instruction::DontCare(instr)),
+        "ret_dyn" => (data, Instruction::DontCare(instr)),
+        "end" => (data, Instruction::DontCare(instr)),
+        "" => (data, Instruction::DontCare(instr)),
 
-pub fn push_instruction_actions(
-    g_instr: grammar::Instruction,
-    ctx: &mut AMDILContext, v: &mut Vec<AMDILAction>
-) -> Result<Instruction, AMDILTextDecodeError> {
-    let instr = match g_instr.instr.as_str() {
-        "discard_logicalnz" => Instruction::EarlyOut(decode_args(&g_instr.args)),
-        instr if check_if_dontcare(instr) => Instruction::DontCare(g_instr),
-        instr if instr.starts_with("dcl_") => decode_declare(&g_instr)?,
+        "discard_logicalnz" => {
+            let (data, src) = parse_src(data)?;
+            let src = ctx.src_to_maskswizvector(&src)?;
+            assert!(src.swizzle().0[0].is_some());
+            (data, Instruction::EarlyOut(src.register().clone(), src.swizzle().0[0].unwrap()))
+        },
+
+        d if d.starts_with("dcl_") => {
+            parse_declare(ctx, data, instr, ctrl_specifiers, dst_mods)?
+        },
+
         _ => {
-            if let Some(alu) = decode_alu(&g_instr, ctx)? {
-                Instruction::Alu(alu)
-            } else {
-                Instruction::Unknown(g_instr)
-            }
+            let (data, alu) = parse_alu(data, instr, ctrl_specifiers, dst_mods, ctx)?;
+            (data, Instruction::Alu(alu))
         }
     };
 
-    match &instr {
-        Instruction::DontCare(..) => {}
-        Instruction::Unknown(g_instr) => {
-            if g_instr.args.len() >= 2 {
-                todo!("Best-effort outcomes for Unknown instructions with an identifiable src and dst")
-            } else {
-                // Assume the unknown instruction doesn't do anything necessary
-            }
-        }
-        Instruction::Decl(decl) => if let AMDILDeclaration::NamedLiteral(name, literal) = decl {
-            ctx.push_named_literal(name.clone(), Box::new(*literal))
-        },
-        Instruction::Alu(alu) => alu.push_actions(v),
-        Instruction::EarlyOut(inputs) => {
-            let args: Result<Vec<(AMDILMaskSwizVector, HLSLKind)>, AMDILTextDecodeError> =
-                inputs.iter().map(|a| {
-                    Ok((ctx.arg_as_vector_data_ref(a)?, HLSLKindBitmask::NUMERIC.into()))
-                }).collect();
-            let args = args.unwrap();
-            assert_eq!(args.len(), 1);
-            // dbg!(&args);
-            // assert_eq!(args[0].0.swizzle().num_used_components(), 1); // `discard_logicalnz r0.x` expands r0.x to [Some(X), Some(X), Some(X), Some(X)] because that's what some other instructions like mul rely on.
-            assert!(args[0].0.swizzle().0[0].is_some());
-            v.push(
-                Action::If { inputs: vec![(ComponentOf{ vec: args[0].0.register().clone(), comp: args[0].0.swizzle().0[0].unwrap() }, args[0].1)], cond_operator: HLSLOperator::Assign, if_true: vec![Action::EarlyOut], if_fals: vec![] }
-            )
-        }
+    if data.len() != 0 {
+        println!("warning: didn't parse '{}'", data);
     }
 
     Ok(instr)
 }
 
-fn check_if_dontcare(instr: &str) -> bool {
-    match instr {
-        instr if instr.starts_with("il_vs") || instr.starts_with("il_ps") => true,
-        "ret_dyn" => true,
-        "end" => true,
-        "" => true,
-        _ => false,
-    }
-}
-
-fn decode_declare(g_instr: &grammar::Instruction) -> Result<Instruction, AMDILTextDecodeError> {
-    use AMDILTextDecodeError::BadValue;
-
-    let instr = match (
-        g_instr.instr.as_str(),
-        decode_args(&g_instr.args).as_slice(),
-    ) {
-        ("dcl_cb", [MatchableArg::NamedIndexed(cb_name, len)]) => {
-            Instruction::Decl(AMDILDeclaration::NamedBuffer {
-                name: cb_name.to_string(),
-                len: *len,
-            })
-        }
-        ("dcl_input_generic", [arg]) => {
-            let (name, swizzle) = match arg {
-                MatchableArg::Named(name) => (name, MaskedSwizzle::identity(4)),
-                MatchableArg::NamedSwizzled(name, swizzle) => (name, *swizzle),
-                _ => {
-                    return Err(BadValue(
-                        "bad argument for dcl_input_generic",
-                        g_instr.clone(),
-                    ))
-                }
+fn parse_declare<'a>(ctx: &mut AMDILContext, data: &'a str, instr: String, ctrl_specifiers: Vec<CtrlSpec>, mods: Vec<DstMod>) -> Result<(&'a str, Instruction), AMDILError> {
+    let (data, dst) = parse_dst(data, mods)?;
+    let len = match &dst.write_mask {
+        &[DstWrite::Write, DstWrite::NoWrite, DstWrite::NoWrite, DstWrite::NoWrite] => 1,
+        &[DstWrite::Write, DstWrite::Write, DstWrite::NoWrite, DstWrite::NoWrite] => 2,
+        &[DstWrite::Write, DstWrite::Write, DstWrite::Write, DstWrite::NoWrite] => 3,
+        &[DstWrite::Write, DstWrite::Write, DstWrite::Write, DstWrite::Write] => 4,
+        _ => return Err(AMDILError::InstructionError(
+            "bad swizzle for declaration",
+            instr.clone(),
+        ))
+    };
+    match instr.as_str() {
+        "dcl_cb" => {
+            assert_eq!(dst.regid.rel_addrs.len(), 1);
+            let len = if let RegRelativeAddr::Literal(len) = dst.regid.rel_addrs[0] {
+                len 
+            } else {
+                panic!("Can't dcl_cb with non-literal length");
             };
-            Instruction::Decl(AMDILDeclaration::NamedInputRegister {
-                name: name.to_owned(),
-                len: swizzle
-                    .as_nonzero_length()
-                    .ok_or_else(|| BadValue("noncontiguous swizzle", g_instr.clone()))?,
+            Ok((data, Instruction::Decl(AMDILDeclaration::NamedBuffer {
+                name: dst.regid.name,
+                len,
+            })))
+        }
+        "dcl_input_generic" => {
+            
+            Ok((data, Instruction::Decl(AMDILDeclaration::NamedInputRegister {
+                name: dst.regid.name,
+                len,
                 reg_type: "Generic".to_owned(),
-            })
+            })))
         }
-        ("dcl_output_generic", [arg]) => {
-            let (name, swizzle) = match arg {
-                MatchableArg::Named(name) => (name, MaskedSwizzle::identity(4)),
-                MatchableArg::NamedSwizzled(name, swizzle) => (name, *swizzle),
-                _ => {
-                    return Err(BadValue(
-                        "bad argument for dcl_output_generic",
-                        g_instr.clone(),
-                    ))
-                }
-            };
-            Instruction::Decl(AMDILDeclaration::NamedOutputRegister {
-                name: name.to_owned(),
-                len: swizzle
-                    .as_nonzero_length()
-                    .ok_or_else(|| BadValue("noncontiguous swizzle", g_instr.clone()))?,
+        "dcl_output_generic" => {
+            Ok((data, Instruction::Decl(AMDILDeclaration::NamedOutputRegister {
+                name: dst.regid.name,
+                len,
                 reg_type: "Generic".to_owned(),
-            })
+            })))
         }
 
-        ("dcl_output_position", [arg]) => {
-            let (name, swizzle) = match arg {
-                MatchableArg::Named(name) => (name, MaskedSwizzle::identity(4)),
-                MatchableArg::NamedSwizzled(name, swizzle) => (name, *swizzle),
-                _ => {
-                    return Err(BadValue(
-                        "bad argument for dcl_input_generic",
-                        g_instr.clone(),
-                    ))
-                }
-            };
-            Instruction::Decl(AMDILDeclaration::NamedOutputRegister {
-                name: name.to_owned(),
-                len: swizzle
-                    .as_nonzero_length()
-                    .ok_or_else(|| BadValue("noncontiguous swizzle", g_instr.clone()))?,
+        "dcl_output_position" => {
+            Ok((data, Instruction::Decl(AMDILDeclaration::NamedOutputRegister {
+                name: dst.regid.name,
+                len,
                 reg_type: "Position".to_owned(),
-            })
+            })))
         }
-        (
-            "dcl_literal",
-            [MatchableArg::Named(name), MatchableArg::HexLiteral(x), MatchableArg::HexLiteral(y), MatchableArg::HexLiteral(z), MatchableArg::HexLiteral(w)],
-        ) => Instruction::Decl(AMDILDeclaration::NamedLiteral(
-            name.clone(),
-            [*x, *y, *z, *w],
-        )),
-        ("dcl_global_flags", [..]) => Instruction::DontCare(g_instr.clone()),
-        _ => match decode_instr_mods(&g_instr.ctrl_specifiers)[..] {
+        
+        "dcl_literal" => {
+            let (data, x) = parse_hex_literal(data)?;
+            let (data, y) = parse_hex_literal(data)?;
+            let (data, z) = parse_hex_literal(data)?;
+            let (data, w) = parse_hex_literal(data)?;
+            let literal = [x, y, z, w];
+            ctx.push_named_literal(dst.regid.name.clone(), Box::new(literal));
+            Ok((data, Instruction::Decl(AMDILDeclaration::NamedLiteral(
+                dst.regid.name,
+                literal,
+            ))))
+        },
+        "dcl_global_flags" => {
+            let (data, _) = parse_src(data)?; // e.g. refactoringAllowed
+            Ok((data, Instruction::DontCare(dst.regid.name)))
+        },
+        "dcl_resource" => match matchable_ctrl_specs(&ctrl_specifiers)[..] {
             [
                 ("id", id),
                 ("type", "2d"),
@@ -216,11 +136,16 @@ fn decode_declare(g_instr: &grammar::Instruction) -> Result<Instruction, AMDILTe
                 ("fmtz", "float"),
                 ("fmtw", "float"), // dummy comment to force formatting
             ] => {
-                Instruction::Decl(AMDILDeclaration::TextureResource(id.parse().unwrap()))
+                Ok((data, Instruction::Decl(AMDILDeclaration::TextureResource(id.parse().unwrap()))))
             }
-            _ => Instruction::Unknown(g_instr.clone()),
-        },
-    };
+            _ => return Err(AMDILError::UnkInstruction(instr, ctrl_specifiers))
+        }
+        _ => return Err(AMDILError::UnkInstruction(instr, ctrl_specifiers))
+    }
+}
 
-    Ok(instr)
+pub fn matchable_ctrl_specs<'a>(mods: &'a Vec<grammar::CtrlSpec>) -> Vec<(&'a str, &'a str)> {
+    mods.iter()
+        .map(|g_mod| (g_mod.name.as_str(), g_mod.value.as_str()))
+        .collect()
 }

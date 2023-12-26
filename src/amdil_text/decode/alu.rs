@@ -4,10 +4,7 @@ use crate::{
     abstract_machine::{
         instructions::InstrArgs, vector::MaskedSwizzle, VMName,
     },
-    amdil_text::{
-        grammar,
-        vm::{AMDILAbstractVM, AMDILMaskSwizVector, AMDILRegister, AMDILAction},
-    },
+    amdil_text::vm::{AMDILMaskSwizVector, AMDILRegister, AMDILAction},
     hlsl::{
         syntax::{ArithmeticOp, FauxBooleanOp, HLSLOperator, NumericIntrinsic, SampleIntrinsic},
         kinds::{HLSLConcreteKind, HLSLKind, HLSLKindBitmask, HLSLNumericKind},
@@ -17,7 +14,7 @@ use crate::{
 use lazy_static::lazy_static;
 
 use super::{
-    decode_args, decode_instr_mods, AMDILTextDecodeError, registers::AMDILContext,
+    registers::AMDILContext, grammar::{parse_many1_src, parse_dst, DstMod, CtrlSpec}, matchable_ctrl_specs, error::AMDILError,
 };
 
 #[derive(Debug, Clone, Copy)]
@@ -39,27 +36,16 @@ pub struct ALUInstruction {
 struct ALUArgsSpec {
     input_kinds: Vec<HLSLKind>,
     input_mask: InputMask,
-    output_kinds: Vec<HLSLKind>,
+    output_kind: HLSLKind,
 }
 impl ALUArgsSpec {
-    fn sanitize_arguments(&self, args: Vec<AMDILMaskSwizVector>) -> InstrArgs<AMDILMaskSwizVector> {
-        let (output_elems, input_elems) = args.split_at(self.output_kinds.len());
-        assert_eq!(output_elems.len(), self.output_kinds.len());
-        assert_eq!(input_elems.len(), self.input_kinds.len());
-
+    fn sanitize_arguments(&self, output_elem: AMDILMaskSwizVector, input_elems: Vec<AMDILMaskSwizVector>) -> InstrArgs<AMDILMaskSwizVector> {
         let mask_to_apply_to_input = match self.input_mask {
-            InputMask::InheritFromFirstOutput => output_elems[0].swizzle().copy_mask(),
+            InputMask::InheritFromFirstOutput => output_elem.swizzle().copy_mask(),
             InputMask::TruncateTo(n) => MaskedSwizzle::identity(n.into()),
         };
 
-        let outputs: Vec<_> = output_elems
-            .into_iter()
-            .zip(self.output_kinds.iter())
-            .map(|(data, kind)| {
-                let kind = kind.intersection(data.toplevel_kind()).unwrap();
-                (data.clone(), kind)
-            })
-            .collect();
+        let outputs = vec![(output_elem, self.output_kind)];
 
         let inputs: Vec<_> = input_elems
             .into_iter()
@@ -72,7 +58,6 @@ impl ALUArgsSpec {
             })
             .collect();
 
-        assert_eq!(outputs.len(), self.output_kinds.len());
         assert_eq!(inputs.len(), self.input_kinds.len());
 
         InstrArgs { outputs, inputs }
@@ -85,7 +70,7 @@ fn float_arith(op: ArithmeticOp) -> (ALUArgsSpec, HLSLOperator) {
         ALUArgsSpec {
             input_kinds: vec![HLSLNumericKind::Float.into(), HLSLNumericKind::Float.into()],
             input_mask: InputMask::InheritFromFirstOutput,
-            output_kinds: vec![HLSLNumericKind::Float.into()],
+            output_kind: HLSLNumericKind::Float.into(),
         },
         HLSLOperator::Arithmetic(op),
     )
@@ -97,7 +82,7 @@ lazy_static! {
             ALUArgsSpec {
                 input_kinds: vec![HLSLKindBitmask::all().into()],
                 input_mask: InputMask::InheritFromFirstOutput,
-                output_kinds: vec![HLSLKindBitmask::all().into()]
+                output_kind: HLSLKindBitmask::all().into()
             },
             HLSLOperator::Assign,
         )),
@@ -105,7 +90,7 @@ lazy_static! {
             ALUArgsSpec {
                 input_kinds: vec![HLSLNumericKind::Float.into(), HLSLNumericKind::Float.into()],
                 input_mask: InputMask::TruncateTo(4),
-                output_kinds: vec![HLSLNumericKind::Float.into()],
+                output_kind: HLSLNumericKind::Float.into(),
             },
             HLSLOperator::NumericI(NumericIntrinsic::Dot),
         )),
@@ -113,7 +98,7 @@ lazy_static! {
             ALUArgsSpec {
                 input_kinds: vec![HLSLNumericKind::Float.into(), HLSLNumericKind::Float.into()],
                 input_mask: InputMask::TruncateTo(3),
-                output_kinds: vec![HLSLNumericKind::Float.into()],
+                output_kind: HLSLNumericKind::Float.into(),
             },
             HLSLOperator::NumericI(NumericIntrinsic::Dot),
         )),
@@ -121,7 +106,7 @@ lazy_static! {
             ALUArgsSpec {
                 input_kinds: vec![HLSLNumericKind::Float.into(), HLSLNumericKind::Float.into()],
                 input_mask: InputMask::InheritFromFirstOutput,
-                output_kinds: vec![HLSLNumericKind::Float.into()],
+                output_kind: HLSLNumericKind::Float.into(),
             },
             HLSLOperator::NumericI(NumericIntrinsic::Min),
         )),
@@ -129,7 +114,7 @@ lazy_static! {
             ALUArgsSpec {
                 input_kinds: vec![HLSLNumericKind::Float.into(), HLSLNumericKind::Float.into()],
                 input_mask: InputMask::InheritFromFirstOutput,
-                output_kinds: vec![HLSLNumericKind::Float.into()],
+                output_kind: HLSLNumericKind::Float.into(),
             },
             HLSLOperator::NumericI(NumericIntrinsic::Max),
         )),
@@ -143,7 +128,7 @@ lazy_static! {
             ALUArgsSpec {
                 input_kinds: vec![HLSLNumericKind::Float.into(), HLSLNumericKind::Float.into()],
                 input_mask: InputMask::InheritFromFirstOutput,
-                output_kinds: vec![HLSLKindBitmask::INTEGER.into()],
+                output_kind: HLSLKindBitmask::INTEGER.into(),
             },
             HLSLOperator::FauxBoolean(FauxBooleanOp::Lt),
         )),
@@ -151,7 +136,7 @@ lazy_static! {
             ALUArgsSpec {
                 input_kinds: vec![HLSLNumericKind::Float.into(), HLSLNumericKind::Float.into()],
                 input_mask: InputMask::InheritFromFirstOutput,
-                output_kinds: vec![HLSLKindBitmask::INTEGER.into()],
+                output_kind: HLSLKindBitmask::INTEGER.into(),
             },
             HLSLOperator::FauxBoolean(FauxBooleanOp::Le),
         )),
@@ -159,7 +144,7 @@ lazy_static! {
             ALUArgsSpec {
                 input_kinds: vec![HLSLNumericKind::Float.into(), HLSLNumericKind::Float.into()],
                 input_mask: InputMask::InheritFromFirstOutput,
-                output_kinds: vec![HLSLKindBitmask::INTEGER.into()],
+                output_kind: HLSLKindBitmask::INTEGER.into(),
             },
             HLSLOperator::FauxBoolean(FauxBooleanOp::Gt),
         )),
@@ -167,7 +152,7 @@ lazy_static! {
             ALUArgsSpec {
                 input_kinds: vec![HLSLNumericKind::Float.into(), HLSLNumericKind::Float.into()],
                 input_mask: InputMask::InheritFromFirstOutput,
-                output_kinds: vec![HLSLKindBitmask::INTEGER.into()],
+                output_kind: HLSLKindBitmask::INTEGER.into(),
             },
             HLSLOperator::FauxBoolean(FauxBooleanOp::Ge),
         )),
@@ -180,30 +165,32 @@ lazy_static! {
                 // can do cmov_logical r0.xyz r1.xyz r2.xyz r3.xyz: r3.x = r2.x if r0.x else r1.x and so forth for x,y,z
                 input_kinds: vec![HLSLNumericKind::UnsignedInt.into(), HLSLKindBitmask::all().into(), HLSLKindBitmask::all().into()],
                 input_mask: InputMask::InheritFromFirstOutput,
-                output_kinds: vec![HLSLKindBitmask::all().into()],
+                output_kind: HLSLKindBitmask::all().into(),
             },
             HLSLOperator::FauxBoolean(FauxBooleanOp::Ternary)
         )),
     ]);
 }
 
-pub fn decode_alu(
-    g_instr: &grammar::Instruction,
+pub fn parse_alu<'a>(
+    data: &'a str, instr: String, ctrl_specifiers: Vec<CtrlSpec>, dst_mods: Vec<DstMod>,
     ctx: &AMDILContext,
-) -> Result<Option<ALUInstruction>, AMDILTextDecodeError> {
-    let matchable_args = decode_args(&g_instr.args);
+) -> Result<(&'a str, ALUInstruction), AMDILError> {
     match (
-        g_instr.instr.as_str(),
-        &decode_instr_mods(&g_instr.ctrl_specifiers)[..],
-        &matchable_args,
+        instr.as_str(),
+        &matchable_ctrl_specs(&ctrl_specifiers)[..],
     ) {
-        ("sample", [("resource", tex_id), ("sampler", _sampler_id)], matchable_args) => {
-            let args: Result<Vec<AMDILMaskSwizVector>, AMDILTextDecodeError> =
-                matchable_args.iter().map(|a| ctx.arg_as_vector_data_ref(a)).collect();
-            let mut args = args?;
-            // Insert the argument at index 1 (index 0 = the output)
-            args.insert(
-                1,
+        ("sample", [("resource", tex_id), ("sampler", _sampler_id)]) => {
+            let (data, dst) = parse_dst(data, dst_mods)?;
+            let dst = ctx.dst_to_maskswizvector(&dst)?;
+
+            let (data, srcs) = parse_many1_src(data)?;
+            let srcs: Result<Vec<AMDILMaskSwizVector>, AMDILError> =
+                srcs.iter().map(|a| ctx.src_to_maskswizvector(a)).collect();
+            let mut srcs = srcs?;
+            // Insert the texture argument as the first input
+            srcs.insert(
+                0,
                 AMDILMaskSwizVector::new(
                     AMDILRegister::Texture(tex_id.parse().unwrap()),
                     MaskedSwizzle::identity(1),
@@ -216,34 +203,35 @@ pub fn decode_alu(
                     HLSLNumericKind::Float.into(),
                 ],
                 input_mask: InputMask::TruncateTo(2),
-                output_kinds: vec![HLSLNumericKind::Float.into()],
+                output_kind: HLSLNumericKind::Float.into(),
             };
 
-            return Ok(Some(ALUInstruction {
-                args: arg_spec.sanitize_arguments(args),
+            return Ok((data, ALUInstruction {
+                args: arg_spec.sanitize_arguments(dst, srcs),
                 op: HLSLOperator::SampleI(SampleIntrinsic::Tex2D),
             }));
         }
         _ => {}
     };
-    match (
-        ALU_INSTR_DEFS.get_key_value(g_instr.instr.as_str()),
-        matchable_args,
-    ) {
-        (Some((_static_name, instr_spec)), matchable_args) => {
+    match ALU_INSTR_DEFS.get_key_value(instr.as_str()) {
+        Some((_static_name, instr_spec)) => {
             // Map matchable_args into VectorDataRefs
-            let args: Result<Vec<AMDILMaskSwizVector>, AMDILTextDecodeError> =
-                matchable_args.iter().map(|a| ctx.arg_as_vector_data_ref(a)).collect();
+            let (data, dst) = parse_dst(data, dst_mods)?;
+            let dst = ctx.dst_to_maskswizvector(&dst)?;
 
-            let args = instr_spec.0.sanitize_arguments(args?);
+            let (data, srcs) = parse_many1_src(data)?;
+            let srcs: Result<Vec<AMDILMaskSwizVector>, AMDILError> =
+                srcs.iter().map(|a| ctx.src_to_maskswizvector(a)).collect();
+
+            let args = instr_spec.0.sanitize_arguments(dst, srcs?);
 
             // ok, produce the instruction
-            Ok(Some(ALUInstruction {
+            Ok((data, ALUInstruction {
                 args,
                 op: instr_spec.1,
             }))
         }
-        (None, _) => Ok(None),
+        None => return Err(AMDILError::UnkInstruction(instr, ctrl_specifiers)),
     }
 }
 

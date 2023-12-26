@@ -1,14 +1,13 @@
 use std::marker::PhantomData;
 
-use nom::Finish;
-
-use crate::{Decoder, Program, abstract_machine::VMName, Action};
+use crate::{Decoder, Program, abstract_machine::{VMName, vector::ComponentOf}, Action, hlsl::{kinds::HLSLKindBitmask, syntax::HLSLOperator}};
 
 mod decode;
-mod grammar;
+pub use decode::AMDILError;
+
 pub mod vm;
 
-use self::{decode::{AMDILTextDecodeError, Instruction, registers::AMDILContext}, grammar::AMDILTextParseError, vm::{AMDILAbstractVM, AMDILRegister, AMDILAction}};
+use self::{decode::Instruction, vm::{AMDILAbstractVM, AMDILRegister, AMDILAction}};
 
 /// The type returned by [AMDILDecoder] holding the instructions for a given AMDIL program
 pub struct AMDILProgram {
@@ -21,42 +20,6 @@ impl Program<AMDILAbstractVM> for AMDILProgram {
     }
     fn actions(&self) -> &Vec<AMDILAction> {
         &self.actions
-    }
-}
-
-/// Combined error type for [AMDILTextParseError] and [AMDILTextDecodeError]
-#[derive(Debug, Clone)]
-pub enum AMDILDecodeError {
-    ParseNomError(String, nom::error::ErrorKind),
-    ParseIntError(std::num::ParseIntError),
-    ParseBadVectorComponent(char),
-    ParseBadSrcMod(String),
-
-    DecodedBadValue(&'static str, grammar::Instruction),
-    GenericDecodeError(String),
-}
-impl<'a> From<AMDILTextParseError<&'a str>> for AMDILDecodeError {
-    fn from(err: AMDILTextParseError<&'a str>) -> Self {
-        match err {
-            AMDILTextParseError::Nom(msg, kind) => {
-                AMDILDecodeError::ParseNomError(msg.to_owned(), kind)
-            }
-            AMDILTextParseError::ParseIntError(int_err) => AMDILDecodeError::ParseIntError(int_err),
-            AMDILTextParseError::BadVectorComponent(comp) => {
-                AMDILDecodeError::ParseBadVectorComponent(comp)
-            }
-            AMDILTextParseError::BadSrcModifier(srcmod) => AMDILDecodeError::ParseBadSrcMod(srcmod),
-        }
-    }
-}
-impl From<AMDILTextDecodeError> for AMDILDecodeError {
-    fn from(err: AMDILTextDecodeError) -> Self {
-        match err {
-            AMDILTextDecodeError::BadValue(msg, instruction) => {
-                AMDILDecodeError::DecodedBadValue(msg, instruction)
-            }
-            AMDILTextDecodeError::Generic(msg) => AMDILDecodeError::GenericDecodeError(msg),
-        }
     }
 }
 
@@ -74,25 +37,32 @@ impl<'a> AMDILDecoder<'a> {
 impl<'a> Decoder<AMDILAbstractVM> for AMDILDecoder<'a> {
     type Input = &'a str;
     type Program = AMDILProgram;
-    type Err = AMDILDecodeError;
+    type Err = AMDILError;
 
-    fn decode(&self, data: Self::Input) -> Result<AMDILProgram, AMDILDecodeError> {
-        // Parse
-        let (_, g_instrs) = grammar::parse_lines(data).finish()?;
+    fn decode(&self, data: Self::Input) -> Result<AMDILProgram, AMDILError> {
+        let instructions = decode::parse_lines(data)?;
 
-        // Decode
         let mut actions = vec![];
         let mut io_registers = vec![];
-        let mut context = AMDILContext::new();
-        for g_i in g_instrs {
-            let i = decode::push_instruction_actions(g_i, &mut context, &mut actions)?;
-            match i {
+        for instr in instructions {
+            match &instr {
                 Instruction::Decl(decl) => {
                     match decl.get_decl().filter(|r| r.is_pure_input() || r.is_output()) {
                         Some(io_reg) => io_registers.push(io_reg),
                         None => {}
                     }
                 },
+                Instruction::Alu(alu) => alu.push_actions(&mut actions),
+                Instruction::EarlyOut(vec, comp) => {
+                    actions.push(
+                        Action::If {
+                            inputs: vec![(ComponentOf{ vec: vec.clone(), comp: *comp }, HLSLKindBitmask::NUMERIC.into())],
+                            cond_operator: HLSLOperator::Assign,
+                            if_true: vec![Action::EarlyOut],
+                            if_fals: vec![]
+                        }
+                    )
+                }
                 _ => {}
             }
         }

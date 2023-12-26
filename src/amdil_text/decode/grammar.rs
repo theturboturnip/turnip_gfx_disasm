@@ -1,37 +1,15 @@
-use std::num::ParseIntError;
-
 use nom::{
     branch::alt,
     bytes::complete::{tag, take_until1, take_while, take_while1},
-    character::complete::{anychar, line_ending},
+    character::complete::anychar,
     combinator::{complete, opt},
-    error::{ErrorKind, ParseError},
-    multi::{many0, many_m_n, separated_list0, separated_list1},
+    multi::{many0, many_m_n, separated_list1, many1},
     sequence::{delimited, tuple},
-    IResult,
 };
 
 use crate::abstract_machine::vector::{MaskedSwizzle, VectorComponent};
 
-#[derive(Debug, Clone)]
-pub struct Instruction {
-    /// Instruction name
-    ///
-    /// ```text
-    /// [a-zA-Z][a-zA-Z0-9]+           // Base name
-    /// (                              // Modifier-or-extra-name-part
-    ///     _                          // Modifier separator (or just part of the base name)
-    ///     [a-zA-Z0-9]+               // Modifier name (or just part of the base name)
-    ///     (                          // Modifier argument (if present, preceding separator+name were a modifier)
-    ///         \([a-zA-Z0-9]+\)
-    ///     )?
-    /// )*
-    /// ```
-    pub instr: String,
-    pub ctrl_specifiers: Vec<CtrlSpec>,
-    pub dst: Option<Dst>,
-    pub srcs: Vec<Src>,
-}
+use super::error::{NomGrammarResult, GrammarError, AMDILError};
 
 #[derive(Debug, Clone)]
 pub struct CtrlSpec {
@@ -74,12 +52,21 @@ pub enum DstWrite {
     // Write1
 }
 
+impl From<[DstWrite; 4]> for MaskedSwizzle {
+    fn from(value: [DstWrite; 4]) -> Self {
+        MaskedSwizzle::masked_identity(
+            value[0] == DstWrite::Write,
+            value[1] == DstWrite::Write,
+            value[2] == DstWrite::Write,
+            value[3] == DstWrite::Write,
+        )
+    }
+}
+
 #[derive(Debug, Clone)]
-pub enum Src {
-    /// a name = ([a-zA-Z]+[0-9]*)
-    Named(RegId, Vec<SrcMod>),
-    /// a hex literal = 0x[0-9A-Fa-f]+
-    HexLiteral(u64),
+pub struct Src {
+    pub regid: RegId,
+    pub mods: Vec<SrcMod>
 }
 
 /// Section 3.4 "Destination Modifiers"
@@ -175,73 +162,11 @@ pub enum SrcMod {
     Clamp
 }
 
-#[derive(Debug, PartialEq)]
-pub enum AMDILTextParseError<I> {
-    Nom(I, ErrorKind),
-    ParseIntError(ParseIntError),
-    BadVectorComponent(char),
-    BadSrcModifier(String),
-}
-impl<I> ParseError<I> for AMDILTextParseError<I> {
-    fn from_error_kind(input: I, kind: ErrorKind) -> Self {
-        AMDILTextParseError::Nom(input, kind)
-    }
-
-    fn append(_: I, _: ErrorKind, other: Self) -> Self {
-        other
-    }
-}
-
-pub fn parse_lines(data: &str) -> IResult<&str, Vec<Instruction>, AMDILTextParseError<&str>> {
-    let (data, lines) = separated_list0(
-        line_ending,
-        take_while(|c| c != '\r' && c != '\n' && c != '\0'),
-    )(data)?;
-    let instrs: Result<Vec<Instruction>, nom::Err<AMDILTextParseError<&str>>> = lines
-        .into_iter()
-        // Filter out empty lines
-        .filter(|data| data.len() > 0)
-        .map(|data| Ok(parse_line(data)?.1))
-        .collect();
-
-    Ok((data, instrs?))
-}
-fn parse_line(data: &str) -> IResult<&str, Instruction, AMDILTextParseError<&str>> {
-    let (data, (instr, ctrl_specifiers, dst_mods)) = parse_instruction_name(data)?;
-
-
-    // If there is a space
-    let (data, dst, srcs) = if let (data, Some(_)) = opt(tag(" "))(data)? {
-        // Take arguments
-        // First, parse dst
-        let (data, dst) = parse_dst(data, dst_mods)?;
-
-        let (data, srcs) = separated_list0(tag(", "), parse_src)(data)?;
-
-        (data, Some(dst), srcs)
-    } else {
-        assert!(dst_mods.is_empty());
-        (data, None, vec![])
-    };
-
-    if data.len() != 0 {
-        println!("warning: didn't parse '{}'", data);
-    }
-
-    Ok((
-        data,
-        Instruction {
-            instr: instr.to_owned(),
-            ctrl_specifiers,
-            dst,
-            srcs,
-        },
-    ))
-}
-fn parse_instruction_name(
+/// Parse the name of an instruction, plus control specifiers and destination modifiers AND the following space if one was present.
+pub fn parse_instruction_name(
     data: &str,
-) -> IResult<&str, (String, Vec<CtrlSpec>, Vec<DstMod>), AMDILTextParseError<&str>> {
-    let (remaining_data, full_name) = take_while1(|c| c != ' ')(data)?;
+) -> NomGrammarResult<(String, Vec<CtrlSpec>, Vec<DstMod>)> {
+    let (data, full_name) = take_while1(|c| c != ' ')(data)?;
 
     // The components of the instruction name are underscore-separated
     let (_, components) =
@@ -272,12 +197,13 @@ fn parse_instruction_name(
                 );
             }
         }
-        
     }
 
-    Ok((remaining_data, (instr, ctrl_specifiers, dst_mods)))
+    let (data, _) = opt(tag(" "))(data)?;
+
+    Ok((data, (instr, ctrl_specifiers, dst_mods)))
 }
-fn parse_ctrlspec(data: &str) -> IResult<&str, CtrlSpec, AMDILTextParseError<&str>> {
+fn parse_ctrlspec(data: &str) -> NomGrammarResult<CtrlSpec> {
     use nom::character::complete::char;
     let (data, (name, value)) = complete(tuple((
         take_until1("("),
@@ -292,23 +218,43 @@ fn parse_ctrlspec(data: &str) -> IResult<&str, CtrlSpec, AMDILTextParseError<&st
         },
     ))
 }
-fn parse_src(data: &str) -> IResult<&str, Src, AMDILTextParseError<&str>> {
+/// Parse a source (input) register, consuming a following ", " if present
+pub fn parse_src(data: &str) -> NomGrammarResult<Src> {
     // args are either a hex literal or a named arg
-    alt((parse_hex_literal, parse_named_src))(data)
+    let (data, regid) = parse_regid(data)?;
+    let (data, mods) = many0(parse_named_arg_mod)(data)?;
+    let (data, _) = opt(tag(", "))(data)?;
+    Ok((data, Src{ regid, mods }))
 }
-fn parse_dst(data: &str, mods: Vec<DstMod>) -> IResult<&str, Dst, AMDILTextParseError<&str>> {
+pub fn parse_many1_src(data: &str) -> NomGrammarResult<Vec<Src>> {
+    many1(parse_src)(data)
+}
+/// Parse a hex literal, sometimes used in place of an input, consuming a following ", " if present
+pub fn parse_hex_literal(data: &str) -> NomGrammarResult<u64> {
+    let (data, _) = tag("0x")(data)?;
+    let (data, hex_str) = take_while1(|c: char| c.is_ascii_hexdigit())(data)?;
+    let hex = u64::from_str_radix(hex_str, 16)
+        .map_err(|e| AMDILError::ParseIntError(e))?;
+    let (data, _) = opt(tag(", "))(data)?;
+    Ok((data, hex))
+}
+/// Parse a destination (output) register, consuming a following ", " if present
+pub fn parse_dst<'a>(data: &'a str, mods: Vec<DstMod>) -> NomGrammarResult<Dst> {
     let (data, regid) = parse_regid(data)?;
 
-    let parse_comp = |expected_write: char, data: &str| {
-        match anychar(data)? {
-            (data, expected_write) => Ok((data, DstWrite::Write)),
-            (data, '_') => Ok((data, DstWrite::NoWrite)),
-            // TODO 0 or 1
-            (_, other) => Err(nom::Err::Error(AMDILTextParseError::BadVectorComponent(other)))
+    let parse_comp = |expected_write: char, data: &'a str| {
+        let (data, c) = anychar(data)?;
+        if c == expected_write {
+            Ok((data, DstWrite::Write))
+        } else if c == '_' {
+            Ok((data, DstWrite::NoWrite))
+        } else {
+            Err(nom::Err::Error(AMDILError::BadVectorComponent(c).into()))
         }
+        // TODO 0 or 1
     };
 
-    let (data, write_mask) = match tag::<&str, &str, AMDILTextParseError<&str>>(".")(data) {
+    let (data, write_mask) = match tag::<&str, &str, GrammarError<&str>>(".")(data) {
         Ok((data, _)) => {
             let (data, x) = parse_comp('x', data)?;
             let (data, y) = parse_comp('y', data)?;
@@ -319,13 +265,15 @@ fn parse_dst(data: &str, mods: Vec<DstMod>) -> IResult<&str, Dst, AMDILTextParse
         _ => (data, [DstWrite::Write; 4])
     };
 
+    let (data, _) = opt(tag(", "))(data)?;
+
     Ok((data, Dst {
         regid,
         write_mask,
         mods,
     }))
 }
-fn parse_regname(data: &str) -> IResult<&str, String, AMDILTextParseError<&str>> {
+fn parse_regname(data: &str) -> NomGrammarResult<String> {
     // name: [a-zA-Z]+[0-9]*
     // [a-zA-Z]+
     let (data, name_start) = take_while1(|c: char| c.is_alphabetic())(data)?;
@@ -334,13 +282,13 @@ fn parse_regname(data: &str) -> IResult<&str, String, AMDILTextParseError<&str>>
 
     Ok((data, name_start.to_owned() + name_end))
 }
-fn parse_reg_rel_literal(data: &str) -> IResult<&str, RegRelativeAddr, AMDILTextParseError<&str>> {
+fn parse_reg_rel_literal(data: &str) -> NomGrammarResult<RegRelativeAddr> {
     let (data, index_str) = take_while1(|c: char| c.is_numeric())(data)?;
     let index = u64::from_str_radix(index_str, 10)
-        .map_err(|e| nom::Err::Error(AMDILTextParseError::ParseIntError(e)))?;
+        .map_err(|e| AMDILError::ParseIntError(e))?;
     Ok((data, RegRelativeAddr::Literal(index)))
 }
-fn parse_reg_rel_reg(data: &str) -> IResult<&str, RegRelativeAddr, AMDILTextParseError<&str>> {
+fn parse_reg_rel_reg(data: &str) -> NomGrammarResult<RegRelativeAddr> {
     let (data, reg_name) = parse_regname(data)?;
     let (data, _) = tag(".")(data)?;
     let (data, c) = anychar(data)?;
@@ -349,20 +297,20 @@ fn parse_reg_rel_reg(data: &str) -> IResult<&str, RegRelativeAddr, AMDILTextPars
         'y' => VectorComponent::Y,
         'z' => VectorComponent::Z,
         'w' => VectorComponent::W,
-        _ => return Err(nom::Err::Error(AMDILTextParseError::BadVectorComponent(c))),
+        _ => return Err(nom::Err::Error(AMDILError::BadVectorComponent(c).into())),
     };
 
-    match tag::<&str, &str, AMDILTextParseError<&str>>("+")(data) {
+    match tag::<&str, &str, GrammarError<&str>>("+")(data) {
         Ok((data, _)) => {
             let (data, index_str) = take_while1(|c: char| c.is_numeric())(data)?;
             let index = u64::from_str_radix(index_str, 10)
-                .map_err(|e| nom::Err::Error(AMDILTextParseError::ParseIntError(e)))?;
+                .map_err(|e| AMDILError::ParseIntError(e))?;
             Ok((data, RegRelativeAddr::RegPlusLiteral(reg_name, comp, index)))
         },
         Err(_) => Ok((data, RegRelativeAddr::Reg(reg_name, comp)))
     }
 } 
-fn parse_regid(data: &str) -> IResult<&str, RegId, AMDILTextParseError<&str>> {
+fn parse_regid(data: &str) -> NomGrammarResult<RegId> {
     let (data, name) = parse_regname(data)?;
 
     let (data, rel_addrs) = many0(
@@ -374,22 +322,10 @@ fn parse_regid(data: &str) -> IResult<&str, RegId, AMDILTextParseError<&str>> {
         rel_addrs,
     }))
 }
-fn parse_named_src(data: &str) -> IResult<&str, Src, AMDILTextParseError<&str>> {
-    let (data, regid) = parse_regid(data)?;
-    let (data, mods) = many0(parse_named_arg_mod)(data)?;
-    Ok((data, Src::Named(regid, mods)))
-}
-fn parse_hex_literal(data: &str) -> IResult<&str, Src, AMDILTextParseError<&str>> {
-    let (data, _) = tag("0x")(data)?;
-    let (data, hex_str) = take_while1(|c: char| c.is_ascii_hexdigit())(data)?;
-    let hex = u64::from_str_radix(hex_str, 16)
-        .map_err(|e| nom::Err::Error(AMDILTextParseError::ParseIntError(e)))?;
-    Ok((data, Src::HexLiteral(hex)))
-}
-fn parse_named_arg_mod(data: &str) -> IResult<&str, SrcMod, AMDILTextParseError<&str>> {
+fn parse_named_arg_mod(data: &str) -> NomGrammarResult<SrcMod> {
     alt((parse_swizzle_srcmod, parse_plaintext_srcmod, parse_negate_srcmod, parse_divcomp_srcmod))(data)
 }
-fn parse_swizzle_srcmod(data: &str) -> IResult<&str, SrcMod, AMDILTextParseError<&str>> {
+fn parse_swizzle_srcmod(data: &str) -> NomGrammarResult<SrcMod> {
     // `.[xyzw_]{1,4}`
     let (data, _) = tag(".")(data)?;
     let swizzle_parser = |data| {
@@ -401,7 +337,7 @@ fn parse_swizzle_srcmod(data: &str) -> IResult<&str, SrcMod, AMDILTextParseError
             'w' => Some(VectorComponent::W),
             '_' => None,
             // TODO 0 and 1 are also allowed, but not included in VectorComponent yet
-            _ => return Err(nom::Err::Error(AMDILTextParseError::BadVectorComponent(c))),
+            _ => return Err(nom::Err::Error(AMDILError::BadVectorComponent(c).into())),
         };
         Ok((data, comp))
     };
@@ -422,7 +358,7 @@ fn parse_swizzle_srcmod(data: &str) -> IResult<&str, SrcMod, AMDILTextParseError
     };
     Ok((data, SrcMod::Swizzled(MaskedSwizzle::new(comps))))
 }
-fn parse_plaintext_srcmod(data: &str) -> IResult<&str, SrcMod, AMDILTextParseError<&str>> {
+fn parse_plaintext_srcmod(data: &str) -> NomGrammarResult<SrcMod> {
     let (data, _) = tag("_")(data)?;
     let (data, modname) = take_while1(|c: char| c.is_alphanumeric())(data)?;
     let m = match modname {
@@ -432,11 +368,11 @@ fn parse_plaintext_srcmod(data: &str) -> IResult<&str, SrcMod, AMDILTextParseErr
         "invert" => SrcMod::Invert,
         "sign" => SrcMod::Sign,
         "x2" => SrcMod::X2,
-        _ => return Err(nom::Err::Error(AMDILTextParseError::BadSrcModifier(modname.to_owned())))
+        _ => return Err(nom::Err::Error(AMDILError::BadSrcModifier(modname.to_owned()).into()))
     };
     Ok((data, m))
 }
-fn parse_divcomp_srcmod(data: &str) -> IResult<&str, SrcMod, AMDILTextParseError<&str>> {
+fn parse_divcomp_srcmod(data: &str) -> NomGrammarResult<SrcMod> {
     let (data, _) = tag("_divcomp(")(data)?;
     let (data, c) = anychar(data)?;
     let comp = match c {
@@ -444,13 +380,13 @@ fn parse_divcomp_srcmod(data: &str) -> IResult<&str, SrcMod, AMDILTextParseError
         'y' => VectorComponent::Y,
         'z' => VectorComponent::Z,
         'w' => VectorComponent::W,
-        _ => return Err(nom::Err::Error(AMDILTextParseError::BadVectorComponent(c))),
+        _ => return Err(nom::Err::Error(AMDILError::BadVectorComponent(c).into())),
     };
     let (data, _) = tag(")")(data)?;
     
     Ok((data, SrcMod::DivComp(comp)))
 }
-fn parse_negate_srcmod(data: &str) -> IResult<&str, SrcMod, AMDILTextParseError<&str>> {
+fn parse_negate_srcmod(data: &str) -> NomGrammarResult<SrcMod> {
     let (data, _) = tag("_neg(")(data)?;
 
     let swizzle_parser = |data| {
@@ -460,7 +396,7 @@ fn parse_negate_srcmod(data: &str) -> IResult<&str, SrcMod, AMDILTextParseError<
             'y' => VectorComponent::Y,
             'z' => VectorComponent::Z,
             'w' => VectorComponent::W,
-            _ => return Err(nom::Err::Error(AMDILTextParseError::BadVectorComponent(c))),
+            _ => return Err(nom::Err::Error(AMDILError::BadVectorComponent(c).into())),
         };
         Ok((data, comp))
     };
