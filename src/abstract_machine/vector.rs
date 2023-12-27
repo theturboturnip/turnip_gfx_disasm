@@ -2,10 +2,6 @@
 
 use std::ops::Index;
 
-use crate::hlsl::kinds::{HLSLKind, HLSLKindBitmask};
-
-use super::{VMScalar, VMVector, VMName};
-
 /*
 impl<T: VMVectorNameRef> VMDataRef<T> for RefinableVMDataRef<VMScalarNameRef<T>> {
     fn name(&self) -> &T {
@@ -110,124 +106,124 @@ impl<T: VMVectorNameRef> VMVectorDataRef<T> for (T, MaskedSwizzle) {
 }
 */
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct VectorOf<T: VMScalar> {
-    pub ts: Vec<T>,
-    common_kind: HLSLKind
-}
-impl<T: VMScalar> VectorOf<T> {
-    pub fn new(ts: &[T]) -> Option<Self> {
-        assert!(ts.len() > 0);
-        let kind_mask = ts.iter().fold(Some(HLSLKindBitmask::all().into()), |kind, t| {
-            HLSLKind::intersection(kind?, t.toplevel_kind())
-        });
-        Some(Self { ts: ts.iter().map(|t| t.clone()).collect(), common_kind: kind_mask?.into() })
-    }
+// #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+// pub struct VectorOf<T: VMScalar> {
+//     pub ts: Vec<T>,
+//     common_kind: HLSLKind
+// }
+// impl<T: VMScalar> VectorOf<T> {
+//     pub fn new(ts: &[T]) -> Option<Self> {
+//         assert!(ts.len() > 0);
+//         let kind_mask = ts.iter().fold(Some(HLSLKindBitmask::all().into()), |kind, t| {
+//             HLSLKind::intersection(kind?, t.toplevel_kind())
+//         });
+//         Some(Self { ts: ts.iter().map(|t| t.clone()).collect(), common_kind: kind_mask?.into() })
+//     }
 
-    pub fn len(&self) -> usize {
-        self.ts.len()
-    } 
-}
-impl<T: VMScalar> VMName for VectorOf<T> {
-    fn is_pure_input(&self) -> bool {
-        self.ts.iter().all(T::is_pure_input)
-    }
+//     pub fn len(&self) -> usize {
+//         self.ts.len()
+//     } 
+// }
+// impl<T: VMScalar> VMName for VectorOf<T> {
+//     fn is_pure_input(&self) -> bool {
+//         self.ts.iter().all(T::is_pure_input)
+//     }
 
-    fn is_output(&self) -> bool {
-        self.ts.iter().all(T::is_output)
-    }
+//     fn is_output(&self) -> bool {
+//         self.ts.iter().all(T::is_output)
+//     }
 
-    fn toplevel_kind(&self) -> HLSLKind {
-        self.common_kind
-    }
-}
-impl<T: VMScalar> VMVector for VectorOf<T> {
-    fn n_components(&self) -> usize {
-        self.ts.len()
-    }
-}
+//     fn toplevel_kind(&self) -> HLSLKind {
+//         self.common_kind
+//     }
+// }
+// impl<T: VMScalar> VMVector for VectorOf<T> {
+//     fn n_components(&self) -> usize {
+//         self.ts.len()
+//     }
+// }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct HoleyVectorOf<T: VMScalar> {
-    pub ts: Vec<Option<T>>,
-    kind: HLSLKind
-}
-impl<T: VMScalar> HoleyVectorOf<T> {
-    pub fn new(ts: &[Option<T>]) -> Option<Self> {
-        let kind_mask = ts.iter().fold(Some(HLSLKindBitmask::all().into()), |kind, t| {
-            if let Some(t) = t {
-                HLSLKind::intersection(kind?, t.toplevel_kind())
-            } else {
-                kind
-            }
-        });
-        Some(Self { ts: ts.iter().map(|t| t.clone()).collect(), kind: kind_mask?.into() })
-    }
-}
-impl<T: VMScalar> VMName for HoleyVectorOf<T> {
-    fn is_pure_input(&self) -> bool {
-        self.ts.iter().all(|t| match t {
-            Some(t) => t.is_pure_input(),
-            None => true
-        })
-    }
+// #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+// pub struct HoleyVectorOf<T: VMScalar> {
+//     pub ts: Vec<Option<T>>,
+//     kind: HLSLKind
+// }
+// impl<T: VMScalar> HoleyVectorOf<T> {
+//     pub fn new(ts: &[Option<T>]) -> Option<Self> {
+//         let kind_mask = ts.iter().fold(Some(HLSLKindBitmask::all().into()), |kind, t| {
+//             if let Some(t) = t {
+//                 HLSLKind::intersection(kind?, t.toplevel_kind())
+//             } else {
+//                 kind
+//             }
+//         });
+//         Some(Self { ts: ts.iter().map(|t| t.clone()).collect(), kind: kind_mask?.into() })
+//     }
+// }
+// impl<T: VMScalar> VMName for HoleyVectorOf<T> {
+//     fn is_pure_input(&self) -> bool {
+//         self.ts.iter().all(|t| match t {
+//             Some(t) => t.is_pure_input(),
+//             None => true
+//         })
+//     }
 
-    fn is_output(&self) -> bool {
-        self.ts.iter().all(|t| match t {
-            Some(t) => t.is_output(),
-            None => true
-        })
-    }
+//     fn is_output(&self) -> bool {
+//         self.ts.iter().all(|t| match t {
+//             Some(t) => t.is_output(),
+//             None => true
+//         })
+//     }
 
-    fn toplevel_kind(&self) -> HLSLKind {
-        self.kind
-    }
-}
-impl<T: VMScalar> VMVector for HoleyVectorOf<T> {
-    fn n_components(&self) -> usize {
-        self.ts.len()
-    }
-}
+//     fn toplevel_kind(&self) -> HLSLKind {
+//         self.kind
+//     }
+// }
+// impl<T: VMScalar> VMVector for HoleyVectorOf<T> {
+//     fn n_components(&self) -> usize {
+//         self.ts.len()
+//     }
+// }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct ComponentOf<T: VMVector> {
-    pub vec: T,
-    pub comp: VectorComponent
-}
-impl<T: VMVector> ComponentOf<T> {
-    pub fn new(vec: T, comp: VectorComponent) -> Self {
-        assert!(comp.into_index() < vec.n_components());
-        Self {
-            vec, comp
-        }
-    }
-}
-impl<T: VMVector> VMName for ComponentOf<T> {
-    fn is_pure_input(&self) -> bool {
-        self.vec.is_pure_input()
-    }
+// #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+// pub struct ComponentOf<T: VMVector> {
+//     pub vec: T,
+//     pub comp: VectorComponent
+// }
+// impl<T: VMVector> ComponentOf<T> {
+//     pub fn new(vec: T, comp: VectorComponent) -> Self {
+//         assert!(comp.into_index() < vec.n_components());
+//         Self {
+//             vec, comp
+//         }
+//     }
+// }
+// impl<T: VMVector> VMName for ComponentOf<T> {
+//     fn is_pure_input(&self) -> bool {
+//         self.vec.is_pure_input()
+//     }
 
-    fn is_output(&self) -> bool {
-        self.vec.is_output()
-    }
+//     fn is_output(&self) -> bool {
+//         self.vec.is_output()
+//     }
 
-    fn toplevel_kind(&self) -> HLSLKind {
-        self.vec.toplevel_kind()
-    }
-}
-impl<T: VMVector> VMScalar for ComponentOf<T> {}
+//     fn toplevel_kind(&self) -> HLSLKind {
+//         self.vec.toplevel_kind()
+//     }
+// }
+// impl<T: VMVector> VMScalar for ComponentOf<T> {}
 
-impl<T: VMVector> HoleyVectorOf<ComponentOf<T>> {
-    pub fn from_vector_swizzle(v: T, swizzle: MaskedSwizzle) -> Self {
-        let ts: Vec<_> = swizzle.0.iter().map(|comp| {
-            match comp {
-                Some(comp) => Some(ComponentOf::new(v.clone(), *comp)),
-                None => None,
-            }
-        }).collect();
-        Self::new(&ts).expect("Using the same base vector should always result in a consistent kind.")
-    }
-}
+// impl<T: VMVector> HoleyVectorOf<ComponentOf<T>> {
+//     pub fn from_vector_swizzle(v: T, swizzle: MaskedSwizzle) -> Self {
+//         let ts: Vec<_> = swizzle.0.iter().map(|comp| {
+//             match comp {
+//                 Some(comp) => Some(ComponentOf::new(v.clone(), *comp)),
+//                 None => None,
+//             }
+//         }).collect();
+//         Self::new(&ts).expect("Using the same base vector should always result in a consistent kind.")
+//     }
+// }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum VectorComponent {

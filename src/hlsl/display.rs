@@ -1,9 +1,9 @@
 use std::fmt::{Display, Formatter};
 
-use crate::{abstract_machine::{vector::{VectorComponent, VectorOf}, VMVector, VMName}, Action};
+use crate::abstract_machine::{vector::VectorComponent, VMVector, VMName, expr::{UntypedHLSLScalar, UntypedHLSLVector, UntypedVector, ContigSwizzle}};
 
 use super::{
-    kinds::{HLSLConcreteKind, HLSLKind, HLSLKindBitmask, HLSLNumericKind}, HLSLRegister, HLSLScalar, HLSLVector, vm::HLSLAbstractVM, HLSLAction, syntax::HLSLOperator,
+    kinds::{HLSLConcreteKind, HLSLKind, HLSLKindBitmask, HLSLNumericKind}, HLSLRegister, HLSLAction, syntax::HLSLOperator,
 };
 
 pub struct DWrap<T>(pub T);
@@ -19,9 +19,10 @@ impl std::fmt::Display for HLSLRegister {
         }
     }
 }
-fn display_scalar_kind(f: &mut Formatter<'_>, scalar: &HLSLScalar, kind: HLSLKind) -> std::fmt::Result {
+fn display_scalar_kind(f: &mut Formatter<'_>, scalar: &UntypedHLSLScalar, kind: HLSLKind) -> std::fmt::Result {
     match scalar {
-        HLSLScalar::Component(reg, comp) => {
+        UntypedHLSLScalar::Expr { op, inputs } => write!(f, "{}", DWrap((op, inputs))),
+        UntypedHLSLScalar::Component(reg, comp) => {
             let minimum_kind = kind.intersection(reg.toplevel_kind());
             if minimum_kind.is_none() {
                 write!(f, "({})", kind)?;
@@ -34,9 +35,9 @@ fn display_scalar_kind(f: &mut Formatter<'_>, scalar: &HLSLScalar, kind: HLSLKin
                 VectorComponent::W => write!(f, "w"),
             }
         }
-        HLSLScalar::Literal(val) => {
+        UntypedHLSLScalar::Literal(val) => {
             match kind.mask() {
-                HLSLKindBitmask::NUMERIC_FLOAT => write!(f, "{:?}f", f32::from_bits(*val)),
+                HLSLKindBitmask::NUMERIC_FLOAT => write!(f, "{:?}f", f32::from_bits(*val as u32)),
                 HLSLKindBitmask::NUMERIC_SINT => write!(f, "{}", *val),
                 HLSLKindBitmask::NUMERIC_UINT => write!(f, "{}u", *val),
                 HLSLKindBitmask::NUMERIC => write!(f, "(num?)0x{:x}", *val),
@@ -47,66 +48,56 @@ fn display_scalar_kind(f: &mut Formatter<'_>, scalar: &HLSLScalar, kind: HLSLKin
         },
     }
 }
-impl std::fmt::Display for DWrap<(&HLSLScalar, HLSLKind)> {
+impl std::fmt::Display for DWrap<(&UntypedHLSLScalar, HLSLKind)> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         display_scalar_kind(f, self.0.0, self.0.1)
     }
 }
-impl std::fmt::Display for DWrap<&(HLSLScalar, HLSLKind)> {
+impl std::fmt::Display for DWrap<&(UntypedHLSLScalar, HLSLKind)> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         display_scalar_kind(f, &self.0.0, self.0.1)
     }
 }
-
-impl std::fmt::Display for DWrap<&(HLSLVector, HLSLKind)> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        // let (v, cs) = &self.0;
-        // write!(f, "{}{}", v.vector_name, cs)
-        let ts = &self.0.0.ts;
-        let kind = self.0.1;
-        let common_origin = match &ts[0] {
-            HLSLScalar::Component(reg, _) => {
-                if ts.iter().all(|t| match t {
-                    HLSLScalar::Component(other_reg, _) => other_reg == reg,
-                    HLSLScalar::Literal(_) => false,
-                }) {
-                    Some(reg)
-                } else {
-                    None
+fn display_vector_pure_swizzle(f: &mut Formatter<'_>, reg: &HLSLRegister, comps: &ContigSwizzle) -> std::fmt::Result {
+    write!(f, "{reg}.")?;
+    for c in comps.iter() {
+        write!(f, "{}", c)?;
+    }
+    Ok(())
+}
+fn display_vector_kind(f: &mut Formatter<'_>, v: &UntypedHLSLVector, kind: HLSLKind) -> std::fmt::Result {
+    match v {
+        UntypedVector::Construction(scalars) => if scalars.len() == 1 {
+            write!(f, "{}", DWrap((&scalars[0], kind)))
+        } else {
+            write!(f, "{}{}(", kind, v.n_components().unwrap())?;
+            let mut first = true;
+            for t in scalars.iter() {
+                if !first {
+                    write!(f, ", ")?;
                 }
-            },
-            HLSLScalar::Literal(_) => None,
-        };
-        // If all the scalars are components of the same register
-        match common_origin {
-            Some(common_origin) => {
-                write!(f, "{common_origin}.")?;
-                for t in ts.iter() {
-                    if let HLSLScalar::Component(_, c) = t {
-                        write!(f, "{}", c)?;
-                    } else {
-                        unreachable!("common_origin can only be Some if every t in ts is a HLSLScalar::Component")
-                    }
-                }
-                Ok(())
-            },
-            None => {
-                if ts.len() == 1 {
-                    write!(f, "{}", DWrap((&ts[0], kind)))
-                } else {
-                    write!(f, "{}{}(", self.0.1, self.0.0.n_components())?;
-                    let mut first = true;
-                    for t in ts.iter() {
-                        if !first {
-                            write!(f, ", ")?;
-                        }
-                        write!(f, "{}", DWrap((t, kind)))?;
-                        first = false;
-                    }
-                    write!(f, ")")
-                }
+                write!(f, "{}", DWrap((t, kind)))?;
+                first = false;
             }
-        }
+            write!(f, ")")
+        },
+        UntypedVector::PureSwizzle(reg, comps) => {
+            display_vector_pure_swizzle(f, reg, comps)
+        },
+        UntypedVector::PerCompExpr { op, inputs, ..} | UntypedVector::AllToAllExpr { op, inputs }=> {
+            let d = DWrap((op, inputs));
+            write!(f, "{}", d)
+        },
+    }
+}
+impl std::fmt::Display for DWrap<&(UntypedHLSLVector, HLSLKind)> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        display_vector_kind(f, &self.0.0, self.0.1)
+    }
+}
+impl std::fmt::Display for DWrap<(&UntypedHLSLVector, HLSLKind)> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        display_vector_kind(f, self.0.0, self.0.1)
     }
 }
 impl<'a, T: 'a> std::fmt::Display for DWrap<(&'a HLSLOperator, &'a Vec<T>)> where DWrap<&'a T>: std::fmt::Display {
@@ -146,7 +137,7 @@ impl<'a, T: 'a> std::fmt::Display for DWrap<(&'a HLSLOperator, &'a Vec<T>)> wher
                     crate::hlsl::syntax::BinaryArithmeticOp::BitwiseXor => write!(f, "{} ^ {}", DWrap(&inputs[0]), DWrap(&inputs[1])),
                 }
             },
-            HLSLOperator::NumericCast(_) => todo!(),
+            // HLSLOperator::NumericCast(_) => todo!(),
             HLSLOperator::SampleI(samp) => {
                 match samp {
                     crate::hlsl::syntax::SampleIntrinsic::Tex2D => {
@@ -187,7 +178,7 @@ impl<'a, T: 'a> std::fmt::Display for DWrap<(&'a HLSLOperator, &'a Vec<T>)> wher
                     },
                 }
             },
-            HLSLOperator::Constructor(_) => todo!(),
+            // HLSLOperator::Constructor(_) => todo!(),
         }
     }
 }
@@ -195,19 +186,17 @@ impl std::fmt::Display for HLSLAction {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
             Self::Assign {
-                op, output, inputs, ..
+                expr, output, kind
             } => {
-                write!(f, "{}{} {} = {};", output.1, output.0.n_components(), DWrap(output), DWrap((op, inputs)))
-                // for i in inputs {
-                //     write!(f, "{}, ", DWrap(i))?;
-                // }
-                // write!(f, ");")
+                write!(f, "{}{} ", kind, output.0.n_components())?;
+                display_vector_pure_swizzle(f, &output.0, &output.1)?;
+                write!(f, " = {};", DWrap((expr, *kind)))
             }
             Self::EarlyOut => {
                 write!(f, "discard;")
             }
-            Self::If { inputs, cond_operator, if_true, if_fals } => {
-                write!(f, "if ({}) {{\n", DWrap((cond_operator, inputs)))?;
+            Self::If { expr, if_true, if_fals } => {
+                write!(f, "if ({}) {{\n", DWrap((expr, HLSLKindBitmask::NUMERIC_UINT.into())))?;
                 for i in if_true {
                     write!(f, "\t{}\n", i)?;
                 }

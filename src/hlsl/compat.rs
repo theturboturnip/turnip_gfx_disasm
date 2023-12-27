@@ -7,7 +7,7 @@ use super::{vm::HLSLAbstractVM, HLSLRegister, HLSLAction};
 /// TODO figure out what we need from this trait.
 pub trait HLSLCompatibleAbstractVM: AbstractVM
 {
-    fn convert_action(a: &Action<Self::Vector, Self::Scalar>) -> HLSLAction;
+    fn convert_action(a: &Action<Self::Register>) -> HLSLAction;
     fn convert_register(r: &Self::Register) -> HLSLRegister;
 }
 

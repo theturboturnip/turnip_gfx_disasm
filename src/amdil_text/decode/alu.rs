@@ -2,9 +2,9 @@ use std::collections::HashMap;
 
 use crate::{
     abstract_machine::{
-        instructions::InstrArgs, vector::MaskedSwizzle, VMName,
+        instructions::InstrArgs, vector::MaskedSwizzle, VMName, expr::{UntypedVector, ContigSwizzle},
     },
-    amdil_text::vm::{AMDILMaskSwizVector, AMDILRegister, AMDILAction},
+    amdil_text::vm::{AMDILRegister, AMDILAction, AMDILVector},
     hlsl::{
         syntax::{ArithmeticOp, FauxBooleanOp, HLSLOperator, NumericIntrinsic, SampleIntrinsic},
         kinds::{HLSLConcreteKind, HLSLKind, HLSLKindBitmask, HLSLNumericKind},
@@ -27,7 +27,7 @@ enum InputMask {
 
 #[derive(Debug, Clone)]
 pub struct ALUInstruction {
-    args: InstrArgs<AMDILMaskSwizVector>,
+    args: InstrArgs<AMDILRegister>,
     op: HLSLOperator,
 }
 
@@ -39,28 +39,28 @@ struct ALUArgsSpec {
     output_kind: HLSLKind,
 }
 impl ALUArgsSpec {
-    fn sanitize_arguments(&self, output_elem: AMDILMaskSwizVector, input_elems: Vec<AMDILMaskSwizVector>) -> InstrArgs<AMDILMaskSwizVector> {
+    fn sanitize_arguments(&self, output_elem: (AMDILRegister, MaskedSwizzle), input_elems: Vec<(AMDILRegister, MaskedSwizzle)>) -> InstrArgs<AMDILRegister> {
         let mask_to_apply_to_input = match self.input_mask {
-            InputMask::InheritFromFirstOutput => output_elem.swizzle().copy_mask(),
+            InputMask::InheritFromFirstOutput => output_elem.1.copy_mask(),
             InputMask::TruncateTo(n) => MaskedSwizzle::identity(n.into()),
         };
 
-        let outputs = vec![(output_elem, self.output_kind)];
+        let dst = (output_elem.0, swizzle_to_contig(output_elem.1), self.output_kind);
 
-        let inputs: Vec<_> = input_elems
+        let srcs: Vec<_> = input_elems
             .into_iter()
             .zip(self.input_kinds.iter())
             .map(|(data, kind)| {
-                let swizzle = data.swizzle().masked_out(mask_to_apply_to_input);
-                let kind = kind.intersection(data.toplevel_kind()).unwrap();
-                let data = AMDILMaskSwizVector::new(data.register().clone(), swizzle);
+                let swizzle = data.1.masked_out(mask_to_apply_to_input);
+                let kind = kind.intersection(data.0.toplevel_kind()).unwrap();
+                let data = amdil_vec_of(data.0, swizzle);
                 (data, kind)
             })
             .collect();
 
-        assert_eq!(inputs.len(), self.input_kinds.len());
+        assert_eq!(srcs.len(), self.input_kinds.len());
 
-        InstrArgs { outputs, inputs }
+        InstrArgs { dst, srcs }
     }
 }
 type ALUInstructionSet = HashMap<&'static str, (ALUArgsSpec, HLSLOperator)>;
@@ -182,16 +182,16 @@ pub fn parse_alu<'a>(
     ) {
         ("sample", [("resource", tex_id), ("sampler", _sampler_id)]) => {
             let (data, dst) = parse_dst(data, dst_mods)?;
-            let dst = ctx.dst_to_maskswizvector(&dst)?;
+            let dst = ctx.dst_to_vector(&dst)?;
 
             let (data, srcs) = parse_many1_src(data)?;
-            let srcs: Result<Vec<AMDILMaskSwizVector>, AMDILError> =
-                srcs.iter().map(|a| ctx.src_to_maskswizvector(a)).collect();
+            let srcs: Result<Vec<_>, AMDILError> =
+                srcs.iter().map(|a| ctx.src_to_vector(a)).collect();
             let mut srcs = srcs?;
             // Insert the texture argument as the first input
             srcs.insert(
                 0,
-                AMDILMaskSwizVector::new(
+                (
                     AMDILRegister::Texture(tex_id.parse().unwrap()),
                     MaskedSwizzle::identity(1),
                 ),
@@ -217,11 +217,11 @@ pub fn parse_alu<'a>(
         Some((_static_name, instr_spec)) => {
             // Map matchable_args into VectorDataRefs
             let (data, dst) = parse_dst(data, dst_mods)?;
-            let dst = ctx.dst_to_maskswizvector(&dst)?;
+            let dst = ctx.dst_to_vector(&dst)?;
 
             let (data, srcs) = parse_many1_src(data)?;
-            let srcs: Result<Vec<AMDILMaskSwizVector>, AMDILError> =
-                srcs.iter().map(|a| ctx.src_to_maskswizvector(a)).collect();
+            let srcs: Result<Vec<_>, AMDILError> =
+                srcs.iter().map(|a| ctx.src_to_vector(a)).collect();
 
             let args = instr_spec.0.sanitize_arguments(dst, srcs?);
 
@@ -237,13 +237,25 @@ pub fn parse_alu<'a>(
 
 impl ALUInstruction {
     pub fn push_actions(&self, v: &mut Vec<AMDILAction>) {
-        v.extend(self.args
-            .outputs
-            .iter()
-            .map(|output| Action::Assign {
-                op: self.op,
-                inputs: self.args.inputs.clone(),
-                output: output.clone(),
-            }))
+        v.push(Action::Assign {
+            expr: UntypedVector::of_expr(self.op, self.args.srcs),
+            kind: self.args.dst.2,
+            output: (self.args.dst.0.clone(), self.args.dst.1.clone()),
+        })
     }
 }
+
+fn swizzle_to_contig(swizzle: MaskedSwizzle) -> ContigSwizzle {
+    swizzle.0.iter().filter_map(|comp_opt| *comp_opt).collect()
+}
+
+fn amdil_vec_of(reg: AMDILRegister, swizzle: MaskedSwizzle) -> AMDILVector {
+    AMDILVector::PureSwizzle(reg, swizzle_to_contig(swizzle))
+}
+
+// AMDILVector::Construction(vec![
+//     UntypedScalar::Literal(literal[0]),
+//     UntypedScalar::Literal(literal[1]),
+//     UntypedScalar::Literal(literal[2]),
+//     UntypedScalar::Literal(literal[3]),
+// ])

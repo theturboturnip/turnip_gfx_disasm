@@ -4,71 +4,27 @@
 
 use crate::hlsl::kinds::HLSLKind;
 
-use super::{AbstractVM, VMVector};
-
-/// Trait for a type that manages a set of possible instructions
-pub trait InstructionSet<TVM: AbstractVM>: Sized {
-    /// How instructions are identified
-    type InstructionID;
-
-    /// The concrete type used to represent the specification for all instructions
-    type InstructionSpec: InstructionSpec<TVM>;
-
-    /// Given an instruction ID, retreive the relevant specification if one exists
-    fn get_spec(&self, id: &Self::InstructionID) -> Option<Self::InstructionSpec>;
-}
-
-/// The specification for an instruction - how arguments should be used and how inputs/outputs relate to each other.
-///
-/// For convenience, exposes the functions contained in [ArgsSpec] and [DependencyRelation]
-pub trait InstructionSpec<TVM: AbstractVM> {
-    /// [DependencyRelation::determine_dependencies]
-    fn determine_dependencies(
-        &self,
-        args: &InstrArgs<TVM::Vector>,
-    ) -> Vec<(
-        TVM::Scalar,
-        Vec<(TVM::Scalar, HLSLKind)>,
-    )>;
-    /// [ArgsSpec::sanitize_arguments]
-    fn sanitize_arguments(&self, args: Vec<TVM::Vector>) -> InstrArgs<TVM::Vector>;
-}
-impl<TVM: AbstractVM, TArgsSpec: ArgsSpec<TVM>, TDepRelation: DependencyRelation<TVM>>
-    InstructionSpec<TVM> for (TArgsSpec, TDepRelation)
-{
-    fn sanitize_arguments(&self, args: Vec<TVM::Vector>) -> InstrArgs<TVM::Vector> {
-        self.0.sanitize_arguments(args)
-    }
-    fn determine_dependencies(
-        &self,
-        args: &InstrArgs<TVM::Vector>,
-    ) -> Vec<(
-        TVM::Scalar,
-        Vec<(TVM::Scalar, HLSLKind)>,
-    )> {
-        self.1.determine_dependencies(args)
-    }
-}
+use super::expr::{ContigSwizzle, UntypedVector};
 
 /// Struct holding the arguments to an instruction for a given VM
 #[derive(Debug, Clone)]
-pub struct InstrArgs<V: VMVector> {
-    pub outputs: Vec<(V, HLSLKind)>,
-    pub inputs: Vec<(V, HLSLKind)>,
+pub struct InstrArgs<TReg: Clone + PartialEq> {
+    pub dst: (TReg, ContigSwizzle, HLSLKind),
+    pub srcs: Vec<(UntypedVector<TReg>, HLSLKind)>,
 }
 
-/// Trait for types which can map the indivdual output scalars of an instruction to the input scalars that affect them.
-pub trait DependencyRelation<TVM: AbstractVM> {
-    /// Given a set of input and output elements, return a vector of mappings:
-    ///     (output scalar, inputs affecting that output)
-    fn determine_dependencies(
-        &self,
-        args: &InstrArgs<TVM::Vector>,
-    ) -> Vec<(
-        TVM::Scalar,
-        Vec<(TVM::Scalar, HLSLKind)>,
-    )>;
-}
+// /// Trait for types which can map the indivdual output scalars of an instruction to the input scalars that affect them.
+// pub trait DependencyRelation<TVM: AbstractVM> {
+//     /// Given a set of input and output elements, return a vector of mappings:
+//     ///     (output scalar, inputs affecting that output)
+//     fn determine_dependencies(
+//         &self,
+//         args: &InstrArgs<TVM::Register>,
+//     ) -> Vec<(
+//         UntypedScalar<TVM::Register>,
+//         Vec<(UntypedScalar<TVM::Register>, HLSLKind)>,
+//     )>;
+// }
 
 /// Impl for [DependencyRelation] that defines simple relations
 #[derive(Debug, Clone, Copy)]
@@ -82,67 +38,63 @@ pub enum SimpleDependencyRelation {
     /// e.g. `dp3_ieee r0.x, r1.xyz, r2.xyz` has dependency `[r1.xyz, r2.xyz] -> r0.x`
     AllToAll,
 }
-impl<TVM: AbstractVM> DependencyRelation<TVM> for SimpleDependencyRelation {
-    fn determine_dependencies(
-        &self,
-        args: &InstrArgs<TVM::Vector>,
-    ) -> Vec<(
-        TVM::Scalar,
-        Vec<(TVM::Scalar, HLSLKind)>,
-    )> {
-        // for output in outputs
-        //     for component in output
-        let expanded_outs = args
-            .outputs
-            .iter()
-            .map(|elem| TVM::decompose(&elem.0));
-        let expanded_inputs = args
-            .inputs
-            .iter()
-            .map(|elem| TVM::decompose(&elem.0).into_iter().map(|s| (s, elem.1)).collect::<Vec<_>>());
-        match self {
-            Self::AllToAll => {
-                // Put all inputs in a vector
-                let in_scalars: Vec<_> = expanded_inputs.flatten().collect();
-                // Return all of them for each output element
-                expanded_outs
-                    .flatten()
-                    .map(|out_scalar| (out_scalar, in_scalars.clone()))
-                    .collect()
-            }
+// impl<TVM: AbstractVM> DependencyRelation<TVM> for SimpleDependencyRelation {
+//     fn determine_dependencies(
+//         &self,
+//         args: &InstrArgs<TVM::Register>,
+//     ) -> Vec<(
+//         UntypedScalar<TVM::Register>,
+//         Vec<(UntypedScalar<TVM::Register>, HLSLKind)>,
+//     )> {
+//         // for output in outputs
+//         //     for component in output
+//         let expanded_dsts = args
+//             .dst
+//             .1
+//             .iter()
+//             .map(|comp| UntypedScalar::Component(args.dst.0, *comp));
+//         let expanded_inputs = args
+//             .srcs
+//             .iter()
+//             .map(|(vec, kind)| {
+//                 (vec.decompose(), kind)
+//             });
+//         match self {
+//             Self::AllToAll => {
+//                 // Put all inputs in a vector
+//                 let in_scalars: Vec<_> = expanded_inputs.flatten().collect();
+//                 // Return all of them for each output element
+//                 expanded_dsts
+//                     .map(|out_scalar| (out_scalar, in_scalars.clone()))
+//                     .collect()
+//             }
 
-            Self::PerComponent => {
-                // Vector of inputs => Vector of (Vector of input scalar)
-                let in_vecs: Vec<Vec<_>> = expanded_inputs.collect();
-                let mut deps = vec![];
-                // For each output
-                for output in expanded_outs {
-                    // For each scalar #i in output
-                    let required_len = output.len();
-                    for (i, comp) in output.into_iter().enumerate() {
-                        // Add a dependency on (input[0][i], input[1][i]...)
-                        deps.push((
-                            comp,
-                            in_vecs
-                                .iter()
-                                .map(|in_vec| {
-                                    // Safety - will produce wrong results otherwise
-                                    assert_eq!(in_vec.len(), required_len);
-                                    in_vec[i].clone()
-                                })
-                                .collect(),
-                        ))
-                    }
-                }
-                deps
-            }
-        }
-    }
-}
-
-pub trait ArgsSpec<TVM: AbstractVM> {
-    /// Given a set of arguments to an instruction, split them into (outputs, inputs) and clean them up
-    ///
-    /// TODO Result<> type, probably just use anyhow
-    fn sanitize_arguments(&self, args: Vec<TVM::Vector>) -> InstrArgs<TVM::Vector>;
-}
+//             Self::PerComponent => {
+//                 assert_eq!(find_common(args.srcs.iter(), |v| v.0.n_components()), Some(expanded_dsts.len()));
+//                 // Vector of inputs => Vector of (Vector of input scalar)
+//                 let in_vecs: Vec<Vec<_>> = expanded_inputs.collect();
+//                 let mut deps = vec![];
+//                 // For each output
+//                 for output in expanded_dsts {
+//                     // For each scalar #i in output
+//                     let required_len = output.len();
+//                     for (i, comp) in output.into_iter().enumerate() {
+//                         // Add a dependency on (input[0][i], input[1][i]...)
+//                         deps.push((
+//                             comp,
+//                             in_vecs
+//                                 .iter()
+//                                 .map(|in_vec| {
+//                                     // Safety - will produce wrong results otherwise
+//                                     assert_eq!(in_vec.len(), required_len);
+//                                     in_vec[i].clone()
+//                                 })
+//                                 .collect(),
+//                         ))
+//                     }
+//                 }
+//                 deps
+//             }
+//         }
+//     }
+// }

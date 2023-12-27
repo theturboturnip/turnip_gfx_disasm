@@ -1,11 +1,14 @@
 use std::hash::Hash;
 
-use crate::hlsl::{syntax::HLSLOperator, kinds::HLSLKind};
+use crate::hlsl::kinds::HLSLKind;
+
+use expr::{UntypedVector, UntypedScalar, ContigSwizzle};
 
 pub mod analysis;
 pub mod display;
 pub mod instructions;
 pub mod vector;
+pub mod expr;
 
 /// A name of an item referenced by some VM.
 pub trait VMName: Clone + PartialEq + Eq + Hash + std::fmt::Debug {
@@ -82,34 +85,32 @@ impl<TName: VMName> Refinable for RefinableRef<TName> {
 ///
 /// Defines an abstract machine where each instruction operates on scalar elements.
 pub trait AbstractVM: std::fmt::Debug + Sized {
-    /// The smallest element a VM operates on
-    type Scalar: VMScalar;
+    // /// The smallest element a VM operates on
+    // type Scalar: VMScalar;
     // Scalars may originate from the same location in the VM's mind: e.g. myVector.xyz all come from myVector.
     type Register: VMVector; 
-    /// An arbitrary vector of Scalars that an instruction can operate on.
-    /// An instruction could use vec3(myVector.x, myOtherVector.y, myThirdVector.z) as an argument or an output.
-    type Vector: VMVector;
+    // /// An arbitrary vector of Scalars that an instruction can operate on.
+    // /// An instruction could use vec3(myVector.x, myOtherVector.y, myThirdVector.z) as an argument or an output.
+    // type Vector: VMVector;
 
-    /// Given a vector, return the list of scalars it contains. If Vector has masked elements, they are not counted.
-    fn decompose(v: &Self::Vector) -> Vec<Self::Scalar>;
+    // /// Given a vector, return the list of scalars it contains. If Vector has masked elements, they are not counted.
+    // fn decompose(v: &Self::Vector) -> Vec<Self::Scalar>;
 }
 
 #[derive(Debug, Clone)]
-pub enum Action<TVector, TScalar> {
+pub enum Action<TReg: Clone + PartialEq> {
     /// Assign a value derived from a set of inputs using an [HLSLOperator] to an output.
     ///
     /// The names for all inputs and output must have been previously declared.
     Assign {
-        // TODO move to using InstrArgs
-        output: (TVector, HLSLKind),
-        op: HLSLOperator,
-        inputs: Vec<(TVector, HLSLKind)>,
+        output: (TReg, ContigSwizzle),
+        kind: HLSLKind, // TODO put this into output
+        expr: UntypedVector<TReg>
     },
-    /// Early out based on a set of inputs
+    /// discard; statement
     EarlyOut,
     If {
-        inputs: Vec<(TScalar, HLSLKind)>,
-        cond_operator: HLSLOperator,
+        expr: UntypedScalar<TReg>,
         if_true: Vec<Self>,
         if_fals: Vec<Self>,
     }
@@ -119,7 +120,7 @@ pub enum Action<TVector, TScalar> {
 pub trait Program<TVM: AbstractVM> {
     /// The list of Registers that are used by the program. Either pure inputs or outputs. 
     fn io_declarations(&self) -> &Vec<TVM::Register>;
-    fn actions(&self) -> &Vec<Action<TVM::Vector, TVM::Scalar>>;
+    fn actions(&self) -> &Vec<Action<TVM::Register>>;
 }
 
 /// Trait for structs that can turn an arbitrary representation of a program (e.g. binary data) into a [Program] for a given [ScalarAbstractVM]
@@ -129,4 +130,15 @@ pub trait Decoder<TVM: AbstractVM> {
     type Err;
 
     fn decode(&self, data: Self::Input) -> Result<Self::Program, Self::Err>;
+}
+
+/// Utility function for determining if all elements collection return the same value when a mapping function is called 
+pub fn find_common<'a, TIn: 'a, TOut: PartialEq, I: Iterator<Item = &'a TIn>, F: Fn(&TIn) -> Option<TOut>>(mut iter: I, f: F) -> Option<TOut> {
+    let init = f(iter.next().unwrap())?;
+    for i in iter {
+        if f(i)? != init {
+            return None
+        }
+    }
+    Some(init)
 }

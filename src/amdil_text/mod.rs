@@ -1,6 +1,6 @@
 use std::marker::PhantomData;
 
-use crate::{Decoder, Program, abstract_machine::{VMName, vector::ComponentOf}, Action, hlsl::{kinds::HLSLKindBitmask, syntax::HLSLOperator}};
+use crate::{Decoder, Program, abstract_machine::{VMName, expr::UntypedScalar}, Action};
 
 mod decode;
 pub use decode::AMDILError;
@@ -56,8 +56,7 @@ impl<'a> Decoder<AMDILAbstractVM> for AMDILDecoder<'a> {
                 Instruction::EarlyOut(vec, comp) => {
                     actions.push(
                         Action::If {
-                            inputs: vec![(ComponentOf{ vec: vec.clone(), comp: *comp }, HLSLKindBitmask::NUMERIC.into())],
-                            cond_operator: HLSLOperator::Assign,
+                            expr: UntypedScalar::Component(vec.clone(), *comp), // HLSLKindBitmask::NUMERIC.into()
                             if_true: vec![Action::EarlyOut],
                             if_fals: vec![]
                         }

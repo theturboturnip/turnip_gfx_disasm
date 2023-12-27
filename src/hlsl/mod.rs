@@ -1,4 +1,4 @@
-use crate::{abstract_machine::{vector::{VectorOf, VectorComponent}, VMName, VMVector, VMScalar}, Action};
+use crate::{abstract_machine::{VMName, VMVector}, Action};
 
 use self::kinds::{HLSLKind, HLSLKindBitmask};
 
@@ -57,50 +57,4 @@ impl VMVector for HLSLRegister {
     }
 }
 
-/// A reference to a single scalar in the HLSL virtual machine
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub enum HLSLScalar {
-    Component(HLSLRegister, VectorComponent),
-    Literal(u32),
-}
-impl HLSLScalar {
-    pub fn new(reg: HLSLRegister, comp: VectorComponent) -> Self {
-        assert!(comp.into_index() < reg.n_components());
-        Self::Component(reg, comp)
-    }
-    pub fn lit(bits: u32) -> Self {
-        Self::Literal(bits)
-    }
-}
-impl VMName for HLSLScalar {
-    fn is_pure_input(&self) -> bool {
-        match self {
-            Self::Component(reg, _) => reg.is_pure_input(),
-            Self::Literal(_) => true,
-        }
-    }
-
-    fn is_output(&self) -> bool {
-        match self {
-            Self::Component(reg, _) => reg.is_output(),
-            Self::Literal(_) => false,
-        }
-    }
-
-    fn toplevel_kind(&self) -> HLSLKind {
-        match self {
-            Self::Component(reg, _) => reg.toplevel_kind(),
-            Self::Literal(_) => HLSLKindBitmask::NUMERIC.into(),
-        }
-    }
-}
-impl VMScalar for HLSLScalar {}
-
-
-pub type HLSLVector = VectorOf<HLSLScalar>;
-
-// /// A reference to a swizzled vector in the HLSL virtual machine
-// pub type HLSLVectorDataRef = (HLSLVector, MaskedSwizzle);
-// impl UnconcreteOpTarget for HLSLVectorDataRef {}
-
-pub type HLSLAction = Action<HLSLVector, HLSLScalar>;
+pub type HLSLAction = Action<HLSLRegister>;

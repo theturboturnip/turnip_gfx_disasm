@@ -145,17 +145,17 @@ impl OperatorKindspec {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum HLSLOperator {
-    Assign,
+    Assign, // TODO kill this
     Unary(UnaryOp),
     Arithmetic(ArithmeticOp),
     BinaryArithmetic(BinaryArithmeticOp),
-    NumericCast(NumericCastTo),
+    // NumericCast(NumericCastTo),
     SampleI(SampleIntrinsic),
     NumericI(NumericIntrinsic),
     FauxBoolean(FauxBooleanOp),
-    Constructor(ConstructorOp),
+    // Constructor(ConstructorOp),
 }
 impl Operator for HLSLOperator {
     fn get_kindspec(&self) -> OperatorKindspec {
@@ -168,11 +168,11 @@ impl Operator for HLSLOperator {
             HLSLOperator::Unary(x) => x.get_kindspec(),
             HLSLOperator::Arithmetic(x) => x.get_kindspec(),
             HLSLOperator::BinaryArithmetic(x) => x.get_kindspec(),
-            HLSLOperator::NumericCast(x) => x.get_kindspec(),
+            // HLSLOperator::NumericCast(x) => x.get_kindspec(),
             HLSLOperator::SampleI(x) => x.get_kindspec(),
             HLSLOperator::NumericI(x) => x.get_kindspec(),
             HLSLOperator::FauxBoolean(x) => x.get_kindspec(),
-            HLSLOperator::Constructor(x) => x.get_kindspec(),
+            // HLSLOperator::Constructor(x) => x.get_kindspec(),
         }
     }
 
@@ -182,11 +182,11 @@ impl Operator for HLSLOperator {
             HLSLOperator::Unary(x) => x.n_inputs(),
             HLSLOperator::Arithmetic(x) => x.n_inputs(),
             HLSLOperator::BinaryArithmetic(x) => x.n_inputs(),
-            HLSLOperator::NumericCast(x) => x.n_inputs(),
+            // HLSLOperator::NumericCast(x) => x.n_inputs(),
             HLSLOperator::SampleI(x) => x.n_inputs(),
             HLSLOperator::NumericI(x) => x.n_inputs(),
             HLSLOperator::FauxBoolean(x) => x.n_inputs(),
-            HLSLOperator::Constructor(x) => x.n_inputs(),
+            // HLSLOperator::Constructor(x) => x.n_inputs(),
         }
     }
 
@@ -196,17 +196,17 @@ impl Operator for HLSLOperator {
             HLSLOperator::Unary(x) => x.dep_rel(),
             HLSLOperator::Arithmetic(x) => x.dep_rel(),
             HLSLOperator::BinaryArithmetic(x) => x.dep_rel(),
-            HLSLOperator::NumericCast(x) => x.dep_rel(),
+            // HLSLOperator::NumericCast(x) => x.dep_rel(),
             HLSLOperator::SampleI(x) => x.dep_rel(),
             HLSLOperator::NumericI(x) => x.dep_rel(),
             HLSLOperator::FauxBoolean(x) => x.dep_rel(),
-            HLSLOperator::Constructor(x) => x.dep_rel(),
+            // HLSLOperator::Constructor(x) => x.dep_rel(),
         }
     }
 }
 
 /// Unary operations that operate on a single value and return a single value
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum UnaryOp {
     /// Inverts each bit of X
     ///
@@ -246,7 +246,7 @@ impl Operator for UnaryOp {
 }
 
 /// Integer/float arithmetic operations, which take two inputs X and Y and return one output.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum ArithmeticOp {
     /// Adds X and Y
     ///
@@ -289,7 +289,7 @@ impl Operator for ArithmeticOp {
 }
 
 /// Binary/bitwise operations which take two inputs X and Y and return a single output.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum BinaryArithmeticOp {
     LeftShift,
     RightShift,
@@ -336,28 +336,28 @@ impl Operator for BinaryArithmeticOp {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct NumericCastTo(pub HLSLNumericKind);
-impl Operator for NumericCastTo {
-    fn get_kindspec(&self) -> OperatorKindspec {
-        OperatorKindspec::new(
-            vec![HLSLOperandKind::Hole(0)],
-            self.0.into(),
-            vec![HLSLKindBitmask::NUMERIC.into()],
-        )
-    }
+// #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+// pub struct NumericCastTo(pub HLSLNumericKind);
+// impl Operator for NumericCastTo {
+//     fn get_kindspec(&self) -> OperatorKindspec {
+//         OperatorKindspec::new(
+//             vec![HLSLOperandKind::Hole(0)],
+//             self.0.into(),
+//             vec![HLSLKindBitmask::NUMERIC.into()],
+//         )
+//     }
 
-    fn n_inputs(&self) -> usize {
-        1
-    }
+//     fn n_inputs(&self) -> usize {
+//         1
+//     }
 
-    fn dep_rel(&self) -> SimpleDependencyRelation {
-        SimpleDependencyRelation::PerComponent
-    }
-}
+//     fn dep_rel(&self) -> SimpleDependencyRelation {
+//         SimpleDependencyRelation::PerComponent
+//     }
+// }
 
 /// Texture sampling intrinsic functions, which take a texture argument and at least one other input to produce a single output.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum SampleIntrinsic {
     Tex2D,
 }
@@ -387,7 +387,7 @@ impl Operator for SampleIntrinsic {
 }
 
 /// Numeric intrinsic functions
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum NumericIntrinsic {
     Dot,
     Min,
@@ -421,7 +421,7 @@ impl Operator for NumericIntrinsic {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum FauxBooleanOp {
     Lt,
     Le,
@@ -469,7 +469,7 @@ impl Operator for FauxBooleanOp {
 
 /// For constructing new vectors from old scalars
 /// e.g. Vec2 => float2(a.x, b.y)
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum ConstructorOp {
     Vec2,
     Vec3,
@@ -517,36 +517,5 @@ impl Operator for ConstructorOp {
     fn dep_rel(&self) -> SimpleDependencyRelation {
         // TODO need something better than this
         SimpleDependencyRelation::AllToAll
-    }
-}
-
-pub trait UnconcreteOpTarget: std::fmt::Debug {}
-
-/// Data on an operation performed on a set of inputs producing an output, each of which may not have a concrete type.
-///
-/// NOTE: TData may be an Rc<RefCell<Variable>>, which during the course of analysis may have its type refined.
-#[derive(Debug, Clone)]
-pub struct UnconcreteOpResult<TData: UnconcreteOpTarget> {
-    /// The operation being performed.
-    pub op: HLSLOperator,
-    /// List of input values, which each have a (potentially not-concrete) type.
-    ///
-    /// Checked by the [new] constructor to have the same number of elements as `op.n_inputs()`.
-    pub inputs: Vec<TData>,
-    /// The name of the output value
-    pub output: TData,
-}
-impl<TData: UnconcreteOpTarget> UnconcreteOpResult<TData> {
-    pub fn new(op: HLSLOperator, inputs: Vec<TData>, output: TData) -> Self {
-        if op.n_inputs() != inputs.len() {
-            panic!(
-                "Op {:?} takes {} inputs but UnconcreteOpResult got {} ({:?})",
-                op,
-                op.n_inputs(),
-                inputs.len(),
-                inputs
-            );
-        }
-        Self { op, inputs, output }
     }
 }

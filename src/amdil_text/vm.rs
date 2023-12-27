@@ -6,11 +6,11 @@
 //! Inputs to instructions can be swizzled i.e. can have their components reordered or reused (v0.xyxx, v3.wzwx etc. are valid)
 
 use crate::Action;
-use crate::abstract_machine::vector::{MaskedSwizzle, ComponentOf, VectorOf};
+use crate::abstract_machine::expr::UntypedVector;
 use crate::abstract_machine::{
     AbstractVM, VMName, VMVector
 };
-use crate::hlsl::{HLSLVector, HLSLScalar, HLSLRegister, HLSLAction};
+use crate::hlsl::{HLSLRegister, HLSLAction};
 use crate::hlsl::compat::HLSLCompatibleAbstractVM;
 use crate::hlsl::kinds::{HLSLKind, HLSLKindBitmask};
 
@@ -19,30 +19,29 @@ use crate::hlsl::kinds::{HLSLKind, HLSLKindBitmask};
 pub enum AMDILAbstractVM {}
 impl AbstractVM for AMDILAbstractVM {
     type Register = AMDILRegister;
-    type Scalar = ComponentOf<AMDILRegister>;
-    type Vector = AMDILMaskSwizVector;
+    // type Scalar = ComponentOf<AMDILRegister>;
+    // type Vector = AMDILMaskSwizVector;
 
-    fn decompose(v: &Self::Vector) -> Vec<Self::Scalar> {
-        let reg = v.register();
-        v.swizzle().0.iter().filter_map(|c| match c {
-            None => None,
-            Some(comp) => Some(ComponentOf::new(reg.clone(), *comp))
-        }).collect()
-    }
+    // fn decompose(v: &Self::Vector) -> Vec<Self::Scalar> {
+    //     let reg = v.register();
+    //     v.swizzle().0.iter().filter_map(|c| match c {
+    //         None => None,
+    //         Some(comp) => Some(ComponentOf::new(reg.clone(), *comp))
+    //     }).collect()
+    // }
 }
-pub type AMDILAction = Action<AMDILMaskSwizVector, ComponentOf<AMDILRegister>>;
+pub type AMDILAction = Action<AMDILRegister>;
 impl HLSLCompatibleAbstractVM for AMDILAbstractVM {
     fn convert_action(a: &AMDILAction) -> HLSLAction {
         match a {
-            Action::Assign { output, op, inputs } => Action::Assign {
-                output: ((&output.0).into(), output.1),
-                op: *op,
-                inputs: inputs.into_iter().map(|(vec, kind)| (vec.into(), *kind)).collect()
+            Action::Assign { output, kind, expr } => Action::Assign {
+                output: (Self::convert_register(&output.0), output.1),
+                kind: *kind,
+                expr: expr.map_reg(Self::convert_register)
             },
             Action::EarlyOut => Action::EarlyOut,
-            Action::If { inputs, cond_operator, if_true, if_fals } => Action::If {
-                inputs: inputs.into_iter().map(|(comp, kind)| (comp.into(), *kind)).collect(),
-                cond_operator: *cond_operator,
+            Action::If { expr, if_true, if_fals } => Action::If {
+                expr: expr.map_reg(Self::convert_register),
                 if_true: if_true.into_iter().map(Self::convert_action).collect(),
                 if_fals: if_fals.into_iter().map(Self::convert_action).collect()
             },
@@ -105,81 +104,81 @@ impl VMVector for AMDILRegister {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct AMDILMaskSwizVector(AMDILRegister, MaskedSwizzle);
-impl AMDILMaskSwizVector {
-    pub fn new(reg: AMDILRegister, swizzle: MaskedSwizzle) -> Self {
-        Self(reg, swizzle)
-    }
+pub type AMDILVector = UntypedVector<AMDILRegister>;
 
-    pub fn register(&self) -> &AMDILRegister {
-        &self.0
-    }
-    pub fn swizzle(&self) -> MaskedSwizzle {
-        self.1
-    }
+// impl AMDILVector {
+//     pub fn new(reg: AMDILRegister, swizzle: MaskedSwizzle) -> Self {
+//         Self(reg, swizzle)
+//     }
 
-    pub fn named_register(name: String, swizzle: MaskedSwizzle) -> Self {
-        Self::new(AMDILRegister::NamedRegister(name), swizzle)
-    }
-    pub fn literal(data: Box<[u64; 4]>, swizzle: MaskedSwizzle) -> Self {
-        Self::new(AMDILRegister::Literal(data), swizzle)
-    }
-    pub fn named_buffer(name: String, idx: u64, swizzle: MaskedSwizzle) -> Self {
-        Self::new(AMDILRegister::NamedBuffer { name, idx }, swizzle)
-    }
-    pub fn named_input_register(name: String, swizzle: MaskedSwizzle) -> Self {
-        Self::new(AMDILRegister::NamedInputRegister(name), swizzle)
-    }
-    pub fn named_output_register(name: String, swizzle: MaskedSwizzle) -> Self {
-        Self::new(AMDILRegister::NamedOutputRegister(name), swizzle)
-    }
-}
-impl VMName for AMDILMaskSwizVector {
-    fn is_pure_input(&self) -> bool {
-        self.0.is_pure_input()
-    }
+//     pub fn register(&self) -> &AMDILRegister {
+//         &self.0
+//     }
+//     pub fn swizzle(&self) -> MaskedSwizzle {
+//         self.1
+//     }
 
-    fn is_output(&self) -> bool {
-        self.0.is_output()
-    }
+//     pub fn named_register(name: String, swizzle: MaskedSwizzle) -> Self {
+//         Self::new(AMDILRegister::NamedRegister(name), swizzle)
+//     }
+//     pub fn literal(data: Box<[u64; 4]>, swizzle: MaskedSwizzle) -> Self {
+//         Self::new(AMDILRegister::Literal(data), swizzle)
+//     }
+//     pub fn named_buffer(name: String, idx: u64, swizzle: MaskedSwizzle) -> Self {
+//         Self::new(AMDILRegister::NamedBuffer { name, idx }, swizzle)
+//     }
+//     pub fn named_input_register(name: String, swizzle: MaskedSwizzle) -> Self {
+//         Self::new(AMDILRegister::NamedInputRegister(name), swizzle)
+//     }
+//     pub fn named_output_register(name: String, swizzle: MaskedSwizzle) -> Self {
+//         Self::new(AMDILRegister::NamedOutputRegister(name), swizzle)
+//     }
+// }
+// impl VMName for AMDILMaskSwizVector {
+//     fn is_pure_input(&self) -> bool {
+//         self.0.is_pure_input()
+//     }
 
-    fn toplevel_kind(&self) -> HLSLKind {
-        self.0.toplevel_kind()
-    }
-}
-impl VMVector for AMDILMaskSwizVector {
-    fn n_components(&self) -> usize {
-        self.1.num_used_components() // TODO: ???
-    }
-}
-impl From<&AMDILMaskSwizVector> for HLSLVector {
-    fn from(value: &AMDILMaskSwizVector) -> Self {
+//     fn is_output(&self) -> bool {
+//         self.0.is_output()
+//     }
 
-        VectorOf::new(&AMDILAbstractVM::decompose(&value).into_iter().map(|comp| {
-            match comp.vec {
-                AMDILRegister::NamedRegister(name) => HLSLScalar::Component(HLSLRegister::GenericRegister(name, 4), comp.comp),
-                AMDILRegister::Literal(arr) => HLSLScalar::Literal(arr[comp.comp.into_index()] as u32),
-                AMDILRegister::NamedBuffer { name, idx } => HLSLScalar::Component(HLSLRegister::ArrayElement { of: Box::new(HLSLRegister::ShaderInput(name, 4)), idx }, comp.comp),
-                AMDILRegister::NamedInputRegister(name) => HLSLScalar::Component(HLSLRegister::ShaderInput(name, 4), comp.comp),
-                AMDILRegister::NamedOutputRegister(name) => HLSLScalar::Component(HLSLRegister::ShaderOutput(name, 4), comp.comp),
-                AMDILRegister::Texture(idx) => HLSLScalar::Component(HLSLRegister::Texture(idx), comp.comp),
-            }
-        }).collect::<Vec<_>>()).unwrap()
-    }
-}
-impl From<&ComponentOf<AMDILRegister>> for HLSLScalar {
-    fn from(comp: &ComponentOf<AMDILRegister>) -> Self {
-        match &comp.vec {
-            AMDILRegister::NamedRegister(name) => HLSLScalar::Component(HLSLRegister::GenericRegister(name.clone(), 4), comp.comp),
-            AMDILRegister::Literal(arr) => HLSLScalar::Literal(arr[comp.comp.into_index()] as u32),
-            AMDILRegister::NamedBuffer { name, idx } => HLSLScalar::Component(HLSLRegister::ArrayElement { of: Box::new(HLSLRegister::ShaderInput(name.clone(), 4)), idx: *idx }, comp.comp),
-            AMDILRegister::NamedInputRegister(name) => HLSLScalar::Component(HLSLRegister::ShaderInput(name.clone(), 4), comp.comp),
-            AMDILRegister::NamedOutputRegister(name) => HLSLScalar::Component(HLSLRegister::ShaderOutput(name.clone(), 4), comp.comp),
-            AMDILRegister::Texture(idx) => HLSLScalar::Component(HLSLRegister::Texture(*idx), comp.comp),
-        }
-    }
-}
+//     fn toplevel_kind(&self) -> HLSLKind {
+//         self.0.toplevel_kind()
+//     }
+// }
+// impl VMVector for AMDILMaskSwizVector {
+//     fn n_components(&self) -> usize {
+//         self.1.num_used_components() // TODO: ???
+//     }
+// }
+// impl From<&AMDILMaskSwizVector> for HLSLVector {
+//     fn from(value: &AMDILMaskSwizVector) -> Self {
+
+//         VectorOf::new(&AMDILAbstractVM::decompose(&value).into_iter().map(|comp| {
+//             match comp.vec {
+//                 AMDILRegister::NamedRegister(name) => HLSLScalar::Component(HLSLRegister::GenericRegister(name, 4), comp.comp),
+//                 AMDILRegister::Literal(arr) => HLSLScalar::Literal(arr[comp.comp.into_index()] as u32),
+//                 AMDILRegister::NamedBuffer { name, idx } => HLSLScalar::Component(HLSLRegister::ArrayElement { of: Box::new(HLSLRegister::ShaderInput(name, 4)), idx }, comp.comp),
+//                 AMDILRegister::NamedInputRegister(name) => HLSLScalar::Component(HLSLRegister::ShaderInput(name, 4), comp.comp),
+//                 AMDILRegister::NamedOutputRegister(name) => HLSLScalar::Component(HLSLRegister::ShaderOutput(name, 4), comp.comp),
+//                 AMDILRegister::Texture(idx) => HLSLScalar::Component(HLSLRegister::Texture(idx), comp.comp),
+//             }
+//         }).collect::<Vec<_>>()).unwrap()
+//     }
+// }
+// impl From<&ComponentOf<AMDILRegister>> for HLSLScalar {
+//     fn from(comp: &ComponentOf<AMDILRegister>) -> Self {
+//         match &comp.vec {
+//             AMDILRegister::NamedRegister(name) => HLSLScalar::Component(HLSLRegister::GenericRegister(name.clone(), 4), comp.comp),
+//             AMDILRegister::Literal(arr) => HLSLScalar::Literal(arr[comp.comp.into_index()] as u32),
+//             AMDILRegister::NamedBuffer { name, idx } => HLSLScalar::Component(HLSLRegister::ArrayElement { of: Box::new(HLSLRegister::ShaderInput(name.clone(), 4)), idx: *idx }, comp.comp),
+//             AMDILRegister::NamedInputRegister(name) => HLSLScalar::Component(HLSLRegister::ShaderInput(name.clone(), 4), comp.comp),
+//             AMDILRegister::NamedOutputRegister(name) => HLSLScalar::Component(HLSLRegister::ShaderOutput(name.clone(), 4), comp.comp),
+//             AMDILRegister::Texture(idx) => HLSLScalar::Component(HLSLRegister::Texture(*idx), comp.comp),
+//         }
+//     }
+// }
 
 // impl VMName for AMDILDataRef {
 //     fn is_pure_input(&self) -> bool {

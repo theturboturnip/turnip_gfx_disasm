@@ -3,7 +3,7 @@
 
 use std::collections::HashMap;
 
-use crate::{abstract_machine::vector::MaskedSwizzle, amdil_text::vm::AMDILMaskSwizVector};
+use crate::{abstract_machine::vector::MaskedSwizzle, amdil_text::vm::AMDILRegister};
 
 use super::{grammar::{Src, RegId, SrcMod, RegRelativeAddr, Dst}, error::AMDILError};
 
@@ -22,7 +22,7 @@ impl AMDILContext {
         self.named_literals.insert(name, literal);
     }
 
-    pub fn src_to_maskswizvector(&self, src: &Src) -> Result<AMDILMaskSwizVector, AMDILError> {
+    pub fn src_to_vector(&self, src: &Src) -> Result<(AMDILRegister, MaskedSwizzle), AMDILError> {
         match &src.mods[..] {
             &[] => self.swizzled_regid_to_maskswizvector(&src.regid, None),
             &[SrcMod::Swizzled(swizzle)] => self.swizzled_regid_to_maskswizvector(&src.regid, Some(swizzle)),
@@ -30,7 +30,7 @@ impl AMDILContext {
         }
     }
 
-    pub fn dst_to_maskswizvector(&self, dst: &Dst) -> Result<AMDILMaskSwizVector, AMDILError> {
+    pub fn dst_to_vector(&self, dst: &Dst) -> Result<(AMDILRegister, MaskedSwizzle), AMDILError> {
         if dst.mods.is_empty() {
             self.swizzled_regid_to_maskswizvector(&dst.regid, Some(dst.write_mask.into()))
         } else {
@@ -38,7 +38,7 @@ impl AMDILContext {
         }
     }
 
-    fn swizzled_regid_to_maskswizvector(&self, regid: &RegId, swizzle: Option<MaskedSwizzle>) -> Result<AMDILMaskSwizVector, AMDILError> {
+    fn swizzled_regid_to_maskswizvector(&self, regid: &RegId, swizzle: Option<MaskedSwizzle>) -> Result<(AMDILRegister, MaskedSwizzle), AMDILError> {
         let swizzle = swizzle.unwrap_or(MaskedSwizzle::identity(4));
         match &regid.rel_addrs[..] {
             &[] => self.swizzled_name_to_named_vector_data_ref(&regid.name, swizzle),
@@ -51,15 +51,15 @@ impl AMDILContext {
         &self, 
         name: &String,
         swizzle: MaskedSwizzle,
-    ) -> Result<AMDILMaskSwizVector, AMDILError> {
+    ) -> Result<(AMDILRegister, MaskedSwizzle), AMDILError> {
         let vdr = match name.chars().nth(0) {
             Some('l') => {
                 let literal = self.named_literals.get(name).unwrap();
-                AMDILMaskSwizVector::literal(literal.clone(), swizzle)
+                (AMDILRegister::Literal(literal.clone()), MaskedSwizzle::identity(4))
             },
-            Some('v') => AMDILMaskSwizVector::named_input_register(name.clone(), swizzle),
-            Some('o') => AMDILMaskSwizVector::named_output_register(name.clone(), swizzle),
-            Some('r') => AMDILMaskSwizVector::named_register(name.clone(), swizzle),
+            Some('v') => (AMDILRegister::NamedInputRegister(name.clone()), swizzle),
+            Some('o') => (AMDILRegister::NamedOutputRegister(name.clone()), swizzle),
+            Some('r') => (AMDILRegister::NamedRegister(name.clone()), swizzle),
             _ => {
                 return Err(AMDILError::Generic(format!(
                     "unexpected argument name '{}'",
@@ -75,9 +75,9 @@ impl AMDILContext {
         name: &String,
         idx: u64,
         swizzle: MaskedSwizzle,
-    ) -> Result<AMDILMaskSwizVector, AMDILError> {
+    ) -> Result<(AMDILRegister, MaskedSwizzle), AMDILError> {
         if name.starts_with("cb") {
-            Ok(AMDILMaskSwizVector::named_buffer(name.clone(), idx, swizzle))
+            Ok((AMDILRegister::NamedBuffer{ name: name.clone(), idx }, swizzle))
         } else {
             Err(AMDILError::Generic(format!(
                 "unexpected indexable argument name '{}'",

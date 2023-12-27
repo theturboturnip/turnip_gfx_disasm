@@ -18,7 +18,7 @@ pub enum Instruction {
     Decl(AMDILDeclaration),
     Alu(ALUInstruction),
     /// Early out based on the a set of args
-    EarlyOut(AMDILRegister, VectorComponent),
+    EarlyOut(AMDILRegister, VectorComponent), // TODO use UntypedScalar::Expr{} for nonzero or == zero
 }
 
 pub fn parse_lines(data: &str) -> Result<Vec<Instruction>, AMDILError> {
@@ -40,9 +40,9 @@ fn parse_instruction(ctx: &mut AMDILContext, data: &str) -> Result<Instruction, 
 
         "discard_logicalnz" => {
             let (data, src) = parse_src(data)?;
-            let src = ctx.src_to_maskswizvector(&src)?;
-            assert!(src.swizzle().0[0].is_some());
-            (data, Instruction::EarlyOut(src.register().clone(), src.swizzle().0[0].unwrap()))
+            let src = ctx.src_to_vector(&src)?;
+            assert!(src.1.0[0].is_some());
+            (data, Instruction::EarlyOut(src.0.clone(), src.1.0[0].unwrap()))
         },
 
         d if d.starts_with("dcl_") => {
@@ -124,9 +124,9 @@ fn parse_declare<'a>(ctx: &mut AMDILContext, data: &'a str, instr: String, ctrl_
             ))))
         },
         "dcl_global_flags" => {
-            let (data, _) = parse_src(data)?; // e.g. refactoringAllowed
-            Ok((data, Instruction::DontCare(dst.regid.name)))
+            Ok((data, Instruction::DontCare(instr)))
         },
+        "dcl_user_data_api" => Ok((data, Instruction::DontCare(instr))), // TODO parse this
         "dcl_resource" => match matchable_ctrl_specs(&ctrl_specifiers)[..] {
             [
                 ("id", id),
