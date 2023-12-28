@@ -4,13 +4,13 @@
 
 use crate::hlsl::kinds::HLSLKind;
 
-use super::expr::{ContigSwizzle, UntypedVector};
+use super::expr::{ContigSwizzle, Vector};
 
 /// Struct holding the arguments to an instruction for a given VM
 #[derive(Debug, Clone)]
 pub struct InstrArgs<TReg: Clone + PartialEq> {
     pub dst: (TReg, ContigSwizzle, HLSLKind),
-    pub srcs: Vec<(UntypedVector<TReg>, HLSLKind)>,
+    pub srcs: Vec<Vector<TReg>>,
 }
 
 // /// Trait for types which can map the indivdual output scalars of an instruction to the input scalars that affect them.

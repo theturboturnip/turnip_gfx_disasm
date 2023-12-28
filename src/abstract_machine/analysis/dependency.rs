@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
 
 use crate::{
     abstract_machine::{
-        AbstractVM, VMName, expr::UntypedScalar
+        AbstractVM, VMName, expr::Scalar, vector::VectorComponent
     },
     hlsl::kinds::{HLSLKind, HLSLKindBitmask},
     Action,
@@ -10,11 +10,11 @@ use crate::{
 
 /// Dependency solver for scalar-based abstract VMs
 pub struct ScalarDependencies<TVM: AbstractVM> {
-    discard_dependencies: HashSet<(UntypedScalar<TVM::Register>, HLSLKind)>,
+    discard_dependencies: HashSet<Scalar<TVM::Register>>,
     /// Mapping of <non-pure-input> to <pure inputs it depends on>
     dependents: HashMap<
-        UntypedScalar<TVM::Register>,
-        HashSet<(UntypedScalar<TVM::Register>, HLSLKind)>,
+        (TVM::Register, VectorComponent),
+        HashSet<Scalar<TVM::Register>>,
     >,
 }
 impl<TVM: AbstractVM> Clone for ScalarDependencies<TVM> {
@@ -32,10 +32,10 @@ impl<TVM: AbstractVM> ScalarDependencies<TVM> {
 
     fn resolve_input_on(
         &self,
-        resolved_inputs: &mut HashSet<(UntypedScalar<TVM::Register>, HLSLKind)>,
-        input: &(UntypedScalar<TVM::Register>, HLSLKind),
+        resolved_inputs: &mut HashSet<Scalar<TVM::Register>>,
+        input: &Scalar<TVM::Register>,
     ) {
-        if input.0.is_pure_input() {
+        if input.is_pure_input() {
             // Pure inputs are not resolved into their dependencies
             resolved_inputs.insert(input.clone());
         } else {
@@ -52,9 +52,9 @@ impl<TVM: AbstractVM> ScalarDependencies<TVM> {
     ///
     /// e.g. if the action introduces a dependency of GeneralPurposeRegister(1) onto Output(o),
     /// set `self.dependents[Output(o)]` to the contents of `self.dependents[GeneralPurposeRegister(1)]`
-    pub fn accum_action(&mut self, action: &Action<TVM::Register>, control_flow_inputs: &HashSet<(UntypedScalar<TVM::Register>, HLSLKind)>) {
+    pub fn accum_action(&mut self, action: &Action<TVM::Register>, control_flow_inputs: &HashSet<Scalar<TVM::Register>>) {
         match action {
-            Action::Assign { output, kind, expr } => {
+            Action::Assign { output, expr } => {
                 if output.0.is_pure_input() {
                     println!(
                             "Weird! Someone is writing to a pure input. Ignoring dependency {:?} -> {:?}",
@@ -62,9 +62,9 @@ impl<TVM: AbstractVM> ScalarDependencies<TVM> {
                         );
                 }
 
-                let output_scls = output.1.iter().map(|comp| UntypedScalar::Component(output.0.clone(), *comp)).collect();
+                let output_scls = output.1.iter().map(|comp| (output.0.clone(), *comp)).collect();
 
-                for (output_scl, input_scls) in expr.scalar_deps(output_scls, *kind){
+                for (output_scl, input_scls) in expr.scalar_deps(output_scls) {
                     let mut resolved_inputs = HashSet::new();
                     for input_scl in input_scls.iter() {
                         self.resolve_input_on(&mut resolved_inputs, &input_scl);
@@ -82,7 +82,7 @@ impl<TVM: AbstractVM> ScalarDependencies<TVM> {
             Action::If { expr, if_true, if_fals, .. } => {
                 // Make `inputs` a dependency on everything touched inside the if_true AND if_fals
                 let mut next_control_flow_inputs = control_flow_inputs.clone();
-                for input_scalar in expr.deps(HLSLKindBitmask::NUMERIC.into()) {
+                for input_scalar in expr.deps() {
                     self.resolve_input_on(&mut next_control_flow_inputs, &input_scalar);
                 }
 
@@ -112,12 +112,12 @@ impl<TVM: AbstractVM> ScalarDependencies<TVM> {
 
     pub fn dependents(
         &self,
-    ) -> &HashMap<UntypedScalar<TVM::Register>, HashSet<(UntypedScalar<TVM::Register>, HLSLKind)>>
+    ) -> &HashMap<Scalar<TVM::Register>, HashSet<(Scalar<TVM::Register>, HLSLKind)>>
     {
         &self.dependents
     }
 
-    pub fn discard_dependencies(&self) -> &HashSet<(UntypedScalar<TVM::Register>, HLSLKind)> {
+    pub fn discard_dependencies(&self) -> &HashSet<(Scalar<TVM::Register>, HLSLKind)> {
         &self.discard_dependencies
     }
 }

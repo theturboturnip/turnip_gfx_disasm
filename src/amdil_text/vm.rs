@@ -6,7 +6,7 @@
 //! Inputs to instructions can be swizzled i.e. can have their components reordered or reused (v0.xyxx, v3.wzwx etc. are valid)
 
 use crate::Action;
-use crate::abstract_machine::expr::UntypedVector;
+use crate::abstract_machine::expr::Vector;
 use crate::abstract_machine::{
     AbstractVM, VMName, VMVector
 };
@@ -34,9 +34,8 @@ pub type AMDILAction = Action<AMDILRegister>;
 impl HLSLCompatibleAbstractVM for AMDILAbstractVM {
     fn convert_action(a: &AMDILAction) -> HLSLAction {
         match a {
-            Action::Assign { output, kind, expr } => Action::Assign {
+            Action::Assign { output, expr } => Action::Assign {
                 output: (Self::convert_register(&output.0), output.1),
-                kind: *kind,
                 expr: expr.map_reg(Self::convert_register)
             },
             Action::EarlyOut => Action::EarlyOut,
@@ -104,7 +103,7 @@ impl VMVector for AMDILRegister {
     }
 }
 
-pub type AMDILVector = UntypedVector<AMDILRegister>;
+pub type AMDILVector = Vector<AMDILRegister>;
 
 // impl AMDILVector {
 //     pub fn new(reg: AMDILRegister, swizzle: MaskedSwizzle) -> Self {

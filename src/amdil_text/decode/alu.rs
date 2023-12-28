@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use crate::{
     abstract_machine::{
-        instructions::InstrArgs, vector::MaskedSwizzle, VMName, expr::{UntypedVector, ContigSwizzle},
+        instructions::InstrArgs, vector::MaskedSwizzle, VMName, expr::{Vector, ContigSwizzle},
     },
     amdil_text::vm::{AMDILRegister, AMDILAction, AMDILVector},
     hlsl::{
@@ -53,8 +53,7 @@ impl ALUArgsSpec {
             .map(|(data, kind)| {
                 let swizzle = data.1.masked_out(mask_to_apply_to_input);
                 let kind = kind.intersection(data.0.toplevel_kind()).unwrap();
-                let data = amdil_vec_of(data.0, swizzle);
-                (data, kind)
+                amdil_vec_of(data.0, swizzle, kind)
             })
             .collect();
 
@@ -238,8 +237,7 @@ pub fn parse_alu<'a>(
 impl ALUInstruction {
     pub fn push_actions(&self, v: &mut Vec<AMDILAction>) {
         v.push(Action::Assign {
-            expr: UntypedVector::of_expr(self.op, self.args.srcs),
-            kind: self.args.dst.2,
+            expr: Vector::of_expr(self.op, self.args.srcs, self.args.dst.2),
             output: (self.args.dst.0.clone(), self.args.dst.1.clone()),
         })
     }
@@ -249,8 +247,8 @@ fn swizzle_to_contig(swizzle: MaskedSwizzle) -> ContigSwizzle {
     swizzle.0.iter().filter_map(|comp_opt| *comp_opt).collect()
 }
 
-fn amdil_vec_of(reg: AMDILRegister, swizzle: MaskedSwizzle) -> AMDILVector {
-    AMDILVector::PureSwizzle(reg, swizzle_to_contig(swizzle))
+fn amdil_vec_of(reg: AMDILRegister, swizzle: MaskedSwizzle, kind: HLSLKind) -> AMDILVector {
+    AMDILVector::PureSwizzle(reg, swizzle_to_contig(swizzle), kind)
 }
 
 // AMDILVector::Construction(vec![

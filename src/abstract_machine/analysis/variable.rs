@@ -1,6 +1,6 @@
 use std::{cell::RefCell, rc::Rc, collections::{HashMap, HashSet}};
 
-use crate::{hlsl::{kinds::{HLSLKind, HLSLOperandKind, HLSLKindBitmask}, compat::{HLSLCompatibleAbstractVM, HLSLCompatProgram}, HLSLRegister, vm::HLSLAbstractVM, HLSLScalar, HLSLAction, syntax::{Operator, HLSLOperator}}, abstract_machine::{vector::{VectorComponent, VectorOf}, VMName, VMVector, VMScalar, find_common, expr::{UntypedScalar, UntypedVector, UntypedHLSLVector, ContigSwizzle}}, AbstractVM, Program, Action};
+use crate::{hlsl::{kinds::{HLSLKind, HLSLOperandKind, HLSLKindBitmask}, compat::{HLSLCompatibleAbstractVM, HLSLCompatProgram}, HLSLRegister, vm::HLSLAbstractVM, HLSLScalar, HLSLAction, syntax::{Operator, HLSLOperator}}, abstract_machine::{vector::{VectorComponent, VectorOf}, VMName, VMVector, VMScalar, find_common, expr::{Scalar, Vector, HLSLVector, ContigSwizzle}}, AbstractVM, Program, Action};
 
 
 type MutRef<T> = Rc<RefCell<T>>;
@@ -48,7 +48,7 @@ impl VMVector for Variable {
     }
 }
 
-type MutScalarVar = UntypedScalar<MutRef<Variable>>;
+type MutScalarVar = Scalar<MutRef<Variable>>;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct ScalarVar {
@@ -193,7 +193,7 @@ impl VariableState {
     /// 
     /// Will create new input vectors if they haven't been seen before?
     /// TODO could replace this with more complete array handling...
-    fn remap_scalars_to_input_vector(&mut self, v: &UntypedHLSLVector, mut kind: HLSLKind) -> (UntypedVector<MutRef<Variable>>, HLSLKind) {
+    fn remap_scalars_to_input_vector(&mut self, v: &HLSLVector, mut kind: HLSLKind) -> (Vector<MutRef<Variable>>, HLSLKind) {
         let new_v = v.map_scalar(|reg, reg_comp| {
             let (var, var_comp) = match self.scalar_map.lookup(reg.clone(), reg_comp) {
                 Some((var, var_comp)) => (var, var_comp),
@@ -270,7 +270,7 @@ impl VariableState {
         (var, new_swizzle, kind)
     }
 
-    fn apply_operand_type_inference(&self, op: &HLSLOperator, output: &mut (MutRef<Variable>, ContigSwizzle), output_kind: &mut HLSLKind, inputs: &mut Vec<(UntypedVector<MutRef<Variable>>, HLSLKind)>) {
+    fn apply_operand_type_inference(&self, op: &HLSLOperator, output: &mut (MutRef<Variable>, ContigSwizzle), output_kind: &mut HLSLKind, inputs: &mut Vec<(Vector<MutRef<Variable>>, HLSLKind)>) {
         let kindspec = op.get_kindspec();
         // eprintln!("\n--------------------------\nKindspec for {:?}: {:?}", op, &kindspec);
         // eprintln!("Inputs: {:?}\nOutput: {:?}", inputs.iter().map(|(_, kind)| kind).collect::<Vec<_>>(), output.1);
@@ -327,7 +327,7 @@ impl VariableState {
 
     fn process_action(&mut self, action: &HLSLAction) -> MutVarAction {
         match action {
-            Action::Assign { output, kind, expr } => {
+            Action::Assign { output, expr } => {
                 // Extra type inference is useful at this stage!
                 // Consider an AMDIL machine which produces a program with two actions:
                 // - r0.x = div v0.x, v0.y
@@ -341,7 +341,6 @@ impl VariableState {
                 let mut output = self.remap_scalars_to_output_vector(
                     &output.0,
                     output.1,
-                    *kind
                 );
 
                 // We should do the inference here, because this is where we have the most information.

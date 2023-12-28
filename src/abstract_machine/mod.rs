@@ -2,7 +2,7 @@ use std::hash::Hash;
 
 use crate::hlsl::kinds::HLSLKind;
 
-use expr::{UntypedVector, UntypedScalar, ContigSwizzle};
+use expr::{Vector, Scalar, ContigSwizzle};
 
 pub mod analysis;
 pub mod display;
@@ -104,13 +104,12 @@ pub enum Action<TReg: Clone + PartialEq> {
     /// The names for all inputs and output must have been previously declared.
     Assign {
         output: (TReg, ContigSwizzle),
-        kind: HLSLKind, // TODO put this into output
-        expr: UntypedVector<TReg>
+        expr: Vector<TReg> // This also stores the HLSLKind of the output
     },
     /// discard; statement
     EarlyOut,
     If {
-        expr: UntypedScalar<TReg>,
+        expr: Scalar<TReg>,
         if_true: Vec<Self>,
         if_fals: Vec<Self>,
     }
