@@ -35,7 +35,6 @@ pub enum RegRelativeAddr {
 pub struct Dst {
     pub regid: RegId,
     pub write_mask: [DstWrite; 4],
-    pub mods: Vec<DstMod>
 }
 
 /// Section 2.2.5
@@ -81,9 +80,24 @@ impl Src {
     }
 }
 
+pub struct DstMods {
+    pub saturate: bool,
+    pub shift_scale: Option<DstMul>,
+}
+impl Default for DstMods {
+    fn default() -> Self {
+        Self { saturate: false, shift_scale: None }
+    }
+}
+
+pub enum DstMul {
+    Mul(f32),
+    Div(f32),
+}
+
 /// Section 3.4 "Destination Modifiers"
 #[derive(Debug, Clone)]
-pub enum DstMod {
+enum DstMod {
     /// Multiply value by 2 before storing
     /// 
     /// Can be applied to float (or double) but not integer or unsigned operands
@@ -192,7 +206,7 @@ pub enum SrcMod {
 /// Parse the name of an instruction, plus control specifiers and destination modifiers AND the following space if one was present.
 pub fn parse_instruction_name(
     data: &str,
-) -> NomGrammarResult<(String, Vec<CtrlSpec>, Vec<DstMod>)> {
+) -> NomGrammarResult<(String, Vec<CtrlSpec>, DstMods)> {
     let (data, full_name) = take_while1(|c| c != ' ')(data)?;
 
     // The components of the instruction name are underscore-separated
@@ -200,16 +214,16 @@ pub fn parse_instruction_name(
         complete(separated_list1(tag("_"), take_while1(|c| c != '_')))(full_name)?;
     let mut instr = components[0].to_owned();
     let mut ctrl_specifiers = vec![];
-    let mut dst_mods = vec![];
+    let mut dst_mods = DstMods::default();
     for comp in components[1..].into_iter() {
         match *comp {
-            "x2" => dst_mods.push(DstMod::X2),
-            "x4" => dst_mods.push(DstMod::X4),
-            "x8" => dst_mods.push(DstMod::X8),
-            "d2" => dst_mods.push(DstMod::D2),
-            "d4" => dst_mods.push(DstMod::D4),
-            "d8" => dst_mods.push(DstMod::D8),
-            "sat" => dst_mods.push(DstMod::Sat),
+            "x2" => dst_mods.shift_scale = Some(DstMul::Mul(2.0f32)),
+            "x4" => dst_mods.shift_scale = Some(DstMul::Mul(4.0f32)),
+            "x8" => dst_mods.shift_scale = Some(DstMul::Mul(8.0f32)),
+            "d2" => dst_mods.shift_scale = Some(DstMul::Div(2.0f32)),
+            "d4" => dst_mods.shift_scale = Some(DstMul::Div(4.0f32)),
+            "d8" => dst_mods.shift_scale = Some(DstMul::Div(8.0f32)),
+            "sat" => dst_mods.saturate = true,
             _ => if let Ok((_, instr_mod)) = parse_ctrlspec(*comp) {
                 ctrl_specifiers.push(instr_mod);
             } else if ctrl_specifiers.len() == 0 {
@@ -291,7 +305,7 @@ pub fn parse_hex_literal(data: &str) -> NomGrammarResult<u64> {
     Ok((data, hex))
 }
 /// Parse a destination (output) register, consuming a following ", " if present
-pub fn parse_dst<'a>(data: &'a str, mods: Vec<DstMod>) -> NomGrammarResult<Dst> {
+pub fn parse_dst<'a>(data: &'a str) -> NomGrammarResult<Dst> {
     let (data, regid) = parse_regid(data)?;
 
     let parse_comp = |expected_write: char, data: &'a str| {
@@ -322,7 +336,6 @@ pub fn parse_dst<'a>(data: &'a str, mods: Vec<DstMod>) -> NomGrammarResult<Dst> 
     Ok((data, Dst {
         regid,
         write_mask,
-        mods,
     }))
 }
 fn parse_regname(data: &str) -> NomGrammarResult<String> {

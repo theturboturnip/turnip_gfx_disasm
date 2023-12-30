@@ -169,19 +169,15 @@ impl AMDILContext {
     }
 
     pub fn dst_to_vector(&self, dst: Dst) -> Result<(AMDILRegister, ContigSwizzle), AMDILError> {
-        if dst.mods.is_empty() {
-            let reg = match self.regid_to_register(dst.regid)? {
-                RegOrLiteral::Reg(reg) => reg,
-                RegOrLiteral::Literal(_) => panic!("Tried to use a literal as a dst, this is never possible"),
-            };
+        let reg = match self.regid_to_register(dst.regid)? {
+            RegOrLiteral::Reg(reg) => reg,
+            RegOrLiteral::Literal(_) => panic!("Tried to use a literal as a dst, this is never possible"),
+        };
 
-            let comps: MaskedSwizzle = dst.write_mask.into();
-            let comps: ContigSwizzle = comps.0.iter().filter_map(|c| *c).collect();
+        let comps: MaskedSwizzle = dst.write_mask.into();
+        let comps: ContigSwizzle = comps.0.iter().filter_map(|c| *c).collect();
 
-            Ok((reg, comps))
-        } else {
-            todo!("more complex parsing, need to handle dstmods {:?}", dst.mods)
-        }
+        Ok((reg, comps))
     }
 
     fn regid_to_register(

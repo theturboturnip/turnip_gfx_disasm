@@ -2,9 +2,9 @@ use std::collections::HashMap;
 
 use crate::{
     abstract_machine::{
-        instructions::InstrArgs, vector::MaskedSwizzle, VMName, expr::{Vector, ContigSwizzle},
+        instructions::InstrArgs, vector::MaskedSwizzle, VMName, expr::{Vector, ContigSwizzle, Scalar},
     },
-    amdil_text::vm::{AMDILRegister, AMDILAction, AMDILVector},
+    amdil_text::{vm::{AMDILRegister, AMDILAction, AMDILVector}, decode::grammar::DstMul},
     hlsl::{
         syntax::{ArithmeticOp, FauxBooleanOp, HLSLOperator, NumericIntrinsic, SampleIntrinsic, BinaryArithmeticOp, UnaryOp, NumericCastTo},
         kinds::{HLSLConcreteKind, HLSLKind, HLSLKindBitmask, HLSLNumericKind},
@@ -14,7 +14,7 @@ use crate::{
 use lazy_static::lazy_static;
 
 use super::{
-    registers::{AMDILContext, InstructionInput}, grammar::{parse_many1_src, parse_dst, DstMod, CtrlSpec, Src, RegId, SrcMod, Dst}, matchable_ctrl_specs, error::AMDILError,
+    registers::{AMDILContext, InstructionInput}, grammar::{parse_many1_src, parse_dst, CtrlSpec, Src, RegId, SrcMod, Dst, DstMods}, matchable_ctrl_specs, error::AMDILError,
 };
 
 #[derive(Debug, Clone, Copy)]
@@ -27,7 +27,8 @@ enum InputMask {
 
 #[derive(Debug, Clone)]
 pub struct ALUInstruction {
-    args: InstrArgs<AMDILRegister>,
+    dst: (AMDILRegister, ContigSwizzle),
+    expr: AMDILVector,
     op: HLSLOperator,
 }
 
@@ -39,14 +40,13 @@ struct ALUArgsSpec {
     output_kind: HLSLKind,
 }
 impl ALUArgsSpec {
-    fn sanitize_arguments(&self, ctx: &AMDILContext, output_elem: Dst, input_elems: Vec<InstructionInput>) -> Result<InstrArgs<AMDILRegister>, AMDILError> {
+    fn make_instruction(&self, ctx: &AMDILContext, op: HLSLOperator, output_elem: Dst, input_elems: Vec<InstructionInput>, dst_mods: DstMods) -> Result<ALUInstruction, AMDILError> {
         let mask_to_apply_to_input = match self.input_mask {
             InputMask::InheritFromFirstOutput => output_elem.write_mask.into(),
             InputMask::TruncateTo(n) => MaskedSwizzle::identity(n.into()),
         };
 
-        let (dst_reg, dst_comps) = ctx.dst_to_vector(output_elem)?;
-        let dst = (dst_reg, dst_comps, self.output_kind);
+        let dst = ctx.dst_to_vector(output_elem)?;
 
         let srcs: Result<Vec<(AMDILVector, HLSLKind)>, AMDILError> = input_elems
             .into_iter()
@@ -60,7 +60,38 @@ impl ALUArgsSpec {
 
         assert_eq!(srcs.len(), self.input_kinds.len());
 
-        Ok(InstrArgs { dst, srcs })
+        let expr = Vector::of_expr(op, srcs, self.output_kind);
+        // Apply the shift-scale of the dst mod
+        let expr = if let Some(shift_scale) = dst_mods.shift_scale {
+            let (op, other_input) = match shift_scale {
+                DstMul::Mul(x) => (HLSLOperator::Arithmetic(ArithmeticOp::Times), x),
+                DstMul::Div(x) => (HLSLOperator::Arithmetic(ArithmeticOp::Div), x),
+            };
+            // Spread the multiplier/divisor out to a vector of appropriate length
+            let other_input = Vector::of_scalars(
+                vec![Scalar::Literal(other_input.to_bits() as u64); dst.1.len()]
+            );
+            Vector::of_expr(
+                op,
+                vec![
+                    (expr, HLSLKind::NUMERIC_FLOAT),
+                    (other_input, HLSLKind::NUMERIC_FLOAT),
+                ],
+                HLSLKind::NUMERIC_FLOAT
+            )
+        } else { expr };
+        // Then apply the saturate
+        let expr = if dst_mods.saturate {
+            Vector::of_expr(
+                HLSLOperator::NumericI(NumericIntrinsic::Saturate),
+                vec![
+                    (expr, HLSLKind::NUMERIC_FLOAT)
+                ],
+                HLSLKind::NUMERIC_FLOAT
+            )
+        } else { expr };
+
+        Ok(ALUInstruction { dst, expr, op })
     }
 }
 type ALUInstructionSet = HashMap<&'static str, (ALUArgsSpec, HLSLOperator)>;
@@ -264,7 +295,7 @@ lazy_static! {
 }
 
 pub fn parse_alu<'a>(
-    data: &'a str, instr: String, ctrl_specifiers: Vec<CtrlSpec>, dst_mods: Vec<DstMod>,
+    data: &'a str, instr: String, ctrl_specifiers: Vec<CtrlSpec>, dst_mods: DstMods,
     ctx: &AMDILContext,
 ) -> Result<(&'a str, ALUInstruction), AMDILError> {
     match (
@@ -272,7 +303,7 @@ pub fn parse_alu<'a>(
         &matchable_ctrl_specs(&ctrl_specifiers)[..],
     ) {
         ("sample", [("resource", tex_id), ("sampler", _sampler_id)]) => {
-            let (data, dst) = parse_dst(data, dst_mods)?;
+            let (data, dst) = parse_dst(data)?;
             let (data, mut srcs) = parse_many1_src(data)?;
             // Insert the texture argument as the first input
             srcs.insert(
@@ -289,25 +320,19 @@ pub fn parse_alu<'a>(
                 output_kind: HLSLKind::NUMERIC_FLOAT,
             };
 
-            return Ok((data, ALUInstruction {
-                args: arg_spec.sanitize_arguments(ctx, dst, srcs)?,
-                op: HLSLOperator::SampleI(SampleIntrinsic::Tex2D),
-            }));
+            return Ok((data, arg_spec.make_instruction(ctx, HLSLOperator::SampleI(SampleIntrinsic::Tex2D), dst, srcs, dst_mods)?));
         }
         _ => {}
     };
     match ALU_INSTR_DEFS.get_key_value(instr.as_str()) {
         Some((_static_name, instr_spec)) => {
             // Map matchable_args into VectorDataRefs
-            let (data, dst) = parse_dst(data, dst_mods)?;
+            let (data, dst) = parse_dst(data)?;
             let (data, srcs) = parse_many1_src(data)?;
-            let args = instr_spec.0.sanitize_arguments(ctx, dst, srcs)?;
+            let instr = instr_spec.0.make_instruction(ctx, instr_spec.1, dst, srcs, dst_mods)?;
 
             // ok, produce the instruction
-            Ok((data, ALUInstruction {
-                args,
-                op: instr_spec.1,
-            }))
+            Ok((data, instr))
         }
         None => return Err(AMDILError::UnkInstruction(instr, ctrl_specifiers)),
     }
@@ -316,8 +341,8 @@ pub fn parse_alu<'a>(
 impl ALUInstruction {
     pub fn push_actions(self, v: &mut Vec<AMDILAction>) {
         v.push(Action::Assign {
-            expr: Vector::of_expr(self.op, self.args.srcs, self.args.dst.2),
-            output: (self.args.dst.0, self.args.dst.1),
+            expr: self.expr,
+            output: self.dst,
         })
     }
 }

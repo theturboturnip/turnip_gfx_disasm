@@ -121,7 +121,7 @@ impl<TReg: Reg> Vector<TReg> {
         let mut v = match op.dep_rel() {
             super::instructions::SimpleDependencyRelation::PerComponent => {
                 // inputs must all be the same length
-                let n_comps = find_common(inputs.iter(), |(v, usage)| v.n_components()).unwrap();
+                let n_comps = find_common(inputs.iter(), |(v, usage)| v.n_components()).expect("PerComp wrapping AllToAll doesn't work right now");
                 Self::PerCompExpr { op, inputs, output_kind, n_comps }
             },
             super::instructions::SimpleDependencyRelation::AllToAll => {

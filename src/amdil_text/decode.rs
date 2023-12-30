@@ -8,7 +8,7 @@ use alu::{parse_alu, ALUInstruction};
 
 use crate::{amdil_text::decode::grammar::RegRelativeAddr, abstract_machine::{vector::VectorComponent, expr::Scalar}, hlsl::{syntax::{BinaryArithmeticOp, FauxBooleanOp, HLSLOperator}, kinds::{HLSLKind, HLSLKindBitmask}}};
 
-use self::{grammar::{parse_instruction_name, parse_dst, parse_src, DstWrite, parse_hex_literal, CtrlSpec, DstMod, Dst}, registers::AMDILContext, error::NomGrammarResult};
+use self::{grammar::{parse_instruction_name, parse_dst, parse_src, DstWrite, parse_hex_literal, CtrlSpec, DstMods, Dst}, registers::AMDILContext, error::NomGrammarResult};
 
 use super::vm::{AMDILDeclaration, AMDILRegister};
 
@@ -56,7 +56,7 @@ fn parse_instruction(ctx: &mut AMDILContext, data: &str) -> Result<Instruction, 
         },
 
         d if d.starts_with("dcl_") => {
-            parse_declare(ctx, data, instr, ctrl_specifiers, dst_mods)?
+            parse_declare(ctx, data, instr, ctrl_specifiers)?
         },
 
         _ => {
@@ -72,9 +72,9 @@ fn parse_instruction(ctx: &mut AMDILContext, data: &str) -> Result<Instruction, 
     Ok(instr)
 }
 
-fn parse_declare<'a>(ctx: &mut AMDILContext, data: &'a str, instr: String, ctrl_specifiers: Vec<CtrlSpec>, mods: Vec<DstMod>) -> Result<(&'a str, Instruction), AMDILError> {
+fn parse_declare<'a>(ctx: &mut AMDILContext, data: &'a str, instr: String, ctrl_specifiers: Vec<CtrlSpec>) -> Result<(&'a str, Instruction), AMDILError> {
     let parse_dst = || -> NomGrammarResult<(Dst, u8)> {
-        let (data, dst) = parse_dst(data, mods)?;
+        let (data, dst) = parse_dst(data)?;
         // This is usually .x, .xy, .xyz, .xyzw; but if one of the components is unused then it can also be v1._yzw.
         // The length of the vector = the maximum index of a written component + 1
         let n_comps = dst.write_mask
