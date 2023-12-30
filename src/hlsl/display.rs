@@ -75,7 +75,7 @@ fn display_vector_kind(f: &mut Formatter<'_>, v: &HLSLVector, usage_kind: &HLSLK
         Vector::Construction(scalars, output_kind) => if scalars.len() == 1 {
             write!(f, "{}", DWrap((&scalars[0], *output_kind)))
         } else {
-            write!(f, "{}{}(", output_kind, v.n_components().unwrap())?;
+            write!(f, "{}{}(", output_kind, v.n_components())?;
             let mut first = true;
             for scalar in scalars.iter() {
                 if !first {
@@ -90,9 +90,9 @@ fn display_vector_kind(f: &mut Formatter<'_>, v: &HLSLVector, usage_kind: &HLSLK
             display_vector_pure_swizzle(f, reg, comps)
         },
         // TODO take output_kind and cast if necessary?
-        Vector::PerCompExpr { op, inputs, ..} | Vector::AllToAllExpr { op, inputs, .. }=> {
+        Vector::Expr { op, inputs, ..} => {
             let d = DWrap((op, inputs));
-            write!(f, "{}", d)
+            write!(f, "({})", d)
         },
     }
 }

@@ -18,11 +18,13 @@
 //! This matters for kind inference.
 //! Inside AMDIL registers are typeless so effectively output_kind = ANY in most cases, but 
 
+use std::num::NonZeroU8;
+
 use arrayvec::ArrayVec;
 
 use crate::{abstract_machine::{VMName, vector::VectorComponent, VMScalar, VMVector}, hlsl::{syntax::{HLSLOperator, Operator}, kinds::{HLSLKind, HLSLOperandKind, KindRefinementResult}, HLSLRegister}};
 
-use super::find_common;
+use super::{find_common, instructions::SimpleDependencyRelation};
 
 pub type ContigSwizzle = ArrayVec<VectorComponent, 4>;
 
@@ -52,31 +54,20 @@ pub enum Vector<TReg: Reg> {
     /// e.g. adding two vectors together (r0.xyz + r1.xyz) makes each output component depend on the corresponding inputs
     /// x -> (r0.x, r1.x), y -> (r0.y, r1.y), etc.
     /// 
-    /// Requires all the inputs to have the same number of components.
+    /// Expressions with per-component dependency relations
+    /// - e.g. adding two vectors together (r0.xyz + r1.xyz) makes each output component depend on the corresponding inputs
+    /// - x -> (r0.x, r1.x), y -> (r0.y, r1.y), etc.
+    /// require all the inputs to have the same number of components.
     /// 
     /// Stores the usage_kind for each input, and the output_kind of the expression,
     /// all of which are calculated through type inference.
     /// usage_kind of the expression is stored externally.
-    PerCompExpr {
+    Expr {
         op: HLSLOperator,
         inputs: Vec<(Self, HLSLKind)>,
         output_kind: HLSLKind,
         n_comps: usize,
     },
-    /// An expression using an all-to-all dependency relation. 
-    /// e.g. sampling a texture with a UV makes each output component depend on (texture, u, v).
-    /// The output is not of known length (!) so this cannot be directly used inside a PerCompExpr.
-    /// 
-    /// Does not place any restrictions on the inputs.
-    /// 
-    /// Stores the usage_kind for each input, and the output_kind of the expression,
-    /// all of which are calculated through type inference.
-    /// usage_kind of the expression is stored externally.
-    AllToAllExpr {
-        op: HLSLOperator,
-        inputs: Vec<(Self, HLSLKind)>,
-        output_kind: HLSLKind,
-    }
 }
 
 impl<TReg: Reg> Vector<TReg> {
@@ -84,8 +75,7 @@ impl<TReg: Reg> Vector<TReg> {
         match self {
             Vector::Construction(_, usage_kind) => *usage_kind,
             Vector::PureSwizzle(_, _, usage_kind) => *usage_kind,
-            Vector::PerCompExpr { op, n_comps, inputs, output_kind } => *output_kind,
-            Vector::AllToAllExpr { op, inputs, output_kind } => *output_kind,
+            Vector::Expr { op, n_comps, inputs, output_kind } => *output_kind,
         }
     }
 
@@ -115,18 +105,21 @@ impl<TReg: Reg> Vector<TReg> {
         v
     }
 
-    pub fn of_expr(op: HLSLOperator, inputs: Vec<(Self, HLSLKind)>, output_kind: HLSLKind) -> Self {
+    pub fn of_expr(op: HLSLOperator, inputs: Vec<(Self, HLSLKind)>, output_kind: HLSLKind, output_n_comps: usize) -> Self {
         assert_eq!(op.n_inputs(), inputs.len());
         
         let mut v = match op.dep_rel() {
             super::instructions::SimpleDependencyRelation::PerComponent => {
                 // inputs must all be the same length
-                let n_comps = find_common(inputs.iter(), |(v, usage)| v.n_components()).expect("PerComp wrapping AllToAll doesn't work right now");
-                Self::PerCompExpr { op, inputs, output_kind, n_comps }
+                let n_comps = find_common(inputs.iter(), |(v, usage)| Some(v.n_components())).expect("PerComponent expressions need their inputs to have the same number of components");
+                if n_comps != output_n_comps {
+                    panic!("output_n_comps {output_n_comps} should match input n_comps {n_comps}")
+                }
+                Self::Expr { op, inputs, output_kind, n_comps }
             },
             super::instructions::SimpleDependencyRelation::AllToAll => {
                 // No restrictions on input
-                Self::AllToAllExpr { op, inputs, output_kind }
+                Self::Expr { op, inputs, output_kind, n_comps: output_n_comps }
             },
         };
 
@@ -142,7 +135,7 @@ impl<TReg: Reg> Vector<TReg> {
     //     match self {
     //         Vector::Construction(scalars, usage_kind) => todo!(),
     //         Vector::PureSwizzle(_, _, _) => todo!(),
-    //         Vector::PerCompExpr { op, n_comps, inputs, output_kind } => todo!(),
+    //         Vector::Expr { op, n_comps, inputs, output_kind } => todo!(),
     //         Vector::AllToAllExpr { op, inputs, output_kind } => todo!(),
     //     }
     // }
@@ -158,14 +151,9 @@ impl<TReg: Reg> Vector<TReg> {
                 comps.clone(),
                 *usage_kind,
             ),
-            Self::PerCompExpr { op, n_comps, inputs, output_kind } => Vector::PerCompExpr {
+            Self::Expr { op, n_comps, inputs, output_kind } => Vector::Expr {
                 op: *op,
                 n_comps: *n_comps,
-                inputs: inputs.iter().map(|(v, usage)| (v.map_reg(f), *usage)).collect(),
-                output_kind: *output_kind,
-            },
-            Self::AllToAllExpr { op, inputs, output_kind } => Vector::AllToAllExpr {
-                op: *op,
                 inputs: inputs.iter().map(|(v, usage)| (v.map_reg(f), *usage)).collect(),
                 output_kind: *output_kind,
             },
@@ -187,19 +175,10 @@ impl<TReg: Reg> Vector<TReg> {
                     }).collect(),
                 )
             }
-            Self::PerCompExpr { op, n_comps, inputs, output_kind } => {
-                let mut v = Vector::PerCompExpr {
+            Self::Expr { op, n_comps, inputs, output_kind } => {
+                let mut v = Vector::Expr {
                     op: *op,
                     n_comps: *n_comps,
-                    inputs: inputs.iter().map(|(v, usage)| (v.map_scalar(f), *usage)).collect(),
-                    output_kind: *output_kind,
-                };
-                v.recompute_output_kind_from_internal_output_kinds();
-                v
-            },
-            Self::AllToAllExpr { op, inputs, output_kind } => {
-                let mut v = Vector::AllToAllExpr {
-                    op: *op,
                     inputs: inputs.iter().map(|(v, usage)| (v.map_scalar(f), *usage)).collect(),
                     output_kind: *output_kind,
                 };
@@ -213,17 +192,15 @@ impl<TReg: Reg> Vector<TReg> {
         match self {
             Vector::Construction(_, output_kind) => *output_kind,
             Vector::PureSwizzle(_, _, output_kind) => *output_kind,
-            Vector::PerCompExpr { output_kind, .. } => *output_kind,
-            Vector::AllToAllExpr { output_kind, .. } => *output_kind,
+            Vector::Expr { output_kind, .. } => *output_kind,
         }
     }
 
-    pub fn n_components(&self) -> Option<usize> {
+    pub fn n_components(&self) -> usize {
         match self {
-            Self::Construction(scalars, ..) => Some(scalars.len()),
-            Self::PureSwizzle(_, comps, _) => Some(comps.len()),
-            Self::PerCompExpr { n_comps, .. } => Some(*n_comps),
-            Self::AllToAllExpr { .. } => None,
+            Self::Construction(scalars, ..) => scalars.len(),
+            Self::PureSwizzle(_, comps, _) => comps.len(),
+            Self::Expr { n_comps, .. } => *n_comps,
         }
     }
 
@@ -247,35 +224,37 @@ impl<TReg: Reg> Vector<TReg> {
                     })
                     .collect()
             },
-            Self::PerCompExpr { op, n_comps, inputs, output_kind } => {
-                assert_eq!(n_dst_comps, *n_comps);
+            Self::Expr { op, n_comps, inputs, output_kind } => match op.dep_rel() {
+                SimpleDependencyRelation::PerComponent => {
+                    assert_eq!(n_dst_comps, *n_comps);
 
-                // Decompose each input into a vector of n_dst_comps dependencies
-                let decomposed_inputs: Vec<_> = inputs
-                    .iter()
-                    .map(|(v, usage)| v.scalar_deps(n_dst_comps))
-                    .collect();
+                    // Decompose each input into a vector of n_dst_comps dependencies
+                    let decomposed_inputs: Vec<_> = inputs
+                        .iter()
+                        .map(|(v, usage)| v.scalar_deps(n_dst_comps))
+                        .collect();
 
-                // For i in 0..n_dst_comps, collect the dependencies from scalar #i of each decomposed input
-                (0..n_dst_comps)
-                    .into_iter()
-                    .map(|i| {
-                        let mut v = vec![];
-                        for decomposed_input in decomposed_inputs.iter() {
-                            v.extend(decomposed_input[i].iter().map(|x| x.clone())) // TODO this is probably unnecessary
-                        }
-                        v
-                    })
-                    .collect()
-            },
-            Self::AllToAllExpr { op, inputs, output_kind } => {
-                let all_scalars: Vec<_> = inputs.iter().map( |(v, usage)| v.all_involved_scalars()).flatten().collect();
-                
-                // Each scalar i from 0..n_dst_comps depends on *all* output scalars
-                (0..n_dst_comps)
-                    .into_iter()
-                    .map(|i| all_scalars.clone())
-                    .collect()
+                    // For i in 0..n_dst_comps, collect the dependencies from scalar #i of each decomposed input
+                    (0..n_dst_comps)
+                        .into_iter()
+                        .map(|i| {
+                            let mut v = vec![];
+                            for decomposed_input in decomposed_inputs.iter() {
+                                v.extend(decomposed_input[i].iter().map(|x| x.clone())) // TODO this is probably unnecessary
+                            }
+                            v
+                        })
+                        .collect()
+                },
+                SimpleDependencyRelation::AllToAll => {
+                    let all_scalars: Vec<_> = inputs.iter().map( |(v, usage)| v.all_involved_scalars()).flatten().collect();
+                    
+                    // Each scalar i from 0..n_dst_comps depends on *all* output scalars
+                    (0..n_dst_comps)
+                        .into_iter()
+                        .map(|i| all_scalars.clone())
+                        .collect()
+                },
             },
         }
     }
@@ -293,7 +272,7 @@ impl<TReg: Reg> Vector<TReg> {
                     .map(|comp| (reg.clone(), *comp, *output_kind)) // The usage kind of this scalar = the output kind of this swizzle
                     .collect()
             },
-            Self::PerCompExpr { inputs, .. } | Self::AllToAllExpr { inputs, .. }=> {
+            Self::Expr { inputs, .. } => {
                 inputs.iter().map( |(v, usage)| v.all_involved_scalars()).flatten().collect()
             },
         }
@@ -336,8 +315,7 @@ impl<TReg: Reg> Vector<TReg> {
                     None
                 }
             },
-            Vector::PerCompExpr { op, inputs, output_kind, .. } |
-            Vector::AllToAllExpr { op, inputs, output_kind } => {
+            Vector::Expr { op, inputs, output_kind, .. } => {
                 let old_output_kind = *output_kind;
                 for (input, input_usage) in inputs.iter_mut() {
                     // If any of our inputs have had their output kinds changed, try to refine their usage
@@ -417,8 +395,7 @@ impl<TReg: Reg> Vector<TReg> {
                     reg.refine_output_kind_if_possible(*output_kind);         
                 }
             },
-            Vector::PerCompExpr { op, inputs, output_kind, .. } |
-            Vector::AllToAllExpr { op, inputs, output_kind } => 
+            Vector::Expr { op, inputs, output_kind, .. } => 
                 if output_kind.refine_if_possible(usage_constraint).did_refine() {
                     let mut kindspec = op.get_kindspec();
                     // The kindspec gives us either a concrete kind or a hole index for each input and output.
@@ -473,8 +450,7 @@ pub type HLSLVector = Vector<HLSLRegister>;
 impl<TReg: VMVector + Reg> VMName for Vector<TReg> {
     fn is_pure_input(&self) -> bool {
         match self {
-            Self::AllToAllExpr { .. } => todo!(),
-            Self::PerCompExpr { n_comps, .. } => todo!(),
+            Self::Expr { n_comps, .. } => todo!(),
             Self::Construction { .. } => false,
             Self::PureSwizzle(reg, ..) => reg.is_pure_input(),
         }
@@ -482,8 +458,7 @@ impl<TReg: VMVector + Reg> VMName for Vector<TReg> {
 
     fn is_output(&self) -> bool {
         match self {
-            Self::AllToAllExpr { .. } => todo!(),
-            Self::PerCompExpr { n_comps, .. } => todo!(),
+            Self::Expr { n_comps, .. } => todo!(),
             Self::Construction { .. } => false,
             Self::PureSwizzle(reg, ..) => reg.is_output(),
         }
@@ -496,8 +471,7 @@ impl<TReg: VMVector + Reg> VMName for Vector<TReg> {
 impl<TReg: VMVector + Reg> VMVector for Vector<TReg> {
     fn n_components(&self) -> usize {
         match self {
-            Self::AllToAllExpr { .. } => todo!(),
-            Self::PerCompExpr { n_comps, .. } => *n_comps,
+            Self::Expr { n_comps, .. } => *n_comps,
             Self::Construction(items, _) => items.len(),
             Self::PureSwizzle(_, comps, _) => comps.len(),            
         }

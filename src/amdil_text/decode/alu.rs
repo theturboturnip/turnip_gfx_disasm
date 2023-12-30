@@ -47,6 +47,7 @@ impl ALUArgsSpec {
         };
 
         let dst = ctx.dst_to_vector(output_elem)?;
+        let dst_n_comps = dst.1.len();
 
         let srcs: Result<Vec<(AMDILVector, HLSLKind)>, AMDILError> = input_elems
             .into_iter()
@@ -60,7 +61,7 @@ impl ALUArgsSpec {
 
         assert_eq!(srcs.len(), self.input_kinds.len());
 
-        let expr = Vector::of_expr(op, srcs, self.output_kind);
+        let expr = Vector::of_expr(op, srcs, self.output_kind, dst_n_comps);
         // Apply the shift-scale of the dst mod
         let expr = if let Some(shift_scale) = dst_mods.shift_scale {
             let (op, other_input) = match shift_scale {
@@ -69,7 +70,7 @@ impl ALUArgsSpec {
             };
             // Spread the multiplier/divisor out to a vector of appropriate length
             let other_input = Vector::of_scalars(
-                vec![Scalar::Literal(other_input.to_bits() as u64); dst.1.len()]
+                vec![Scalar::Literal(other_input.to_bits() as u64); dst_n_comps]
             );
             Vector::of_expr(
                 op,
@@ -77,7 +78,8 @@ impl ALUArgsSpec {
                     (expr, HLSLKind::NUMERIC_FLOAT),
                     (other_input, HLSLKind::NUMERIC_FLOAT),
                 ],
-                HLSLKind::NUMERIC_FLOAT
+                HLSLKind::NUMERIC_FLOAT,
+                dst_n_comps
             )
         } else { expr };
         // Then apply the saturate
@@ -87,7 +89,8 @@ impl ALUArgsSpec {
                 vec![
                     (expr, HLSLKind::NUMERIC_FLOAT)
                 ],
-                HLSLKind::NUMERIC_FLOAT
+                HLSLKind::NUMERIC_FLOAT,
+                dst_n_comps
             )
         } else { expr };
 
