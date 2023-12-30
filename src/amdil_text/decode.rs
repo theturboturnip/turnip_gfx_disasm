@@ -23,7 +23,8 @@ pub enum Instruction {
 
 pub fn parse_lines(data: &str) -> Result<Vec<Instruction>, AMDILErrorContext> {
     let mut ctx = AMDILContext::new();
-    data.lines()
+    data.trim_end_matches(char::from(0)) // trim off the trailing \0
+        .lines()
         // Filter out empty lines
         .filter(|data| data.len() > 0)
         .map(|data| {
@@ -59,7 +60,7 @@ fn parse_instruction(ctx: &mut AMDILContext, data: &str) -> Result<Instruction, 
     };
 
     if data.len() != 0 {
-        println!("warning: didn't parse '{}'", data);
+        panic!("didn't parse '{}'", data);
     }
 
     Ok(instr)
