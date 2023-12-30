@@ -61,9 +61,9 @@ pub enum AMDILError {
 impl<I> From<nom::Err<GrammarError<I>>> for AMDILError {
     fn from(value: nom::Err<GrammarError<I>>) -> Self {
         match value {
-            nom::Err::Incomplete(_) => panic!(""),
+            nom::Err::Incomplete(_) => panic!("AMDILError is not intended to be used with streaming"),
             nom::Err::Error(e) | nom::Err::Failure(e) => match e {
-                GrammarError::Nom(_, _) => unreachable!(),
+                GrammarError::Nom(state, err) => AMDILError::Generic(format!("Nom error {err:?}")),
                 GrammarError::AMDIL(a) => a,
             }
         }
