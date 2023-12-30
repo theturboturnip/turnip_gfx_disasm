@@ -53,7 +53,9 @@ impl HLSLCompatibleAbstractVM for AMDILAbstractVM {
             AMDILRegister::NamedBuffer { name, idx } => HLSLRegister::ArrayElement { of: Box::new(HLSLRegister::ShaderInput(name.clone(), 4)), idx: *idx },
             AMDILRegister::NamedInputRegister(name) => HLSLRegister::ShaderInput(name.clone(), 4),
             AMDILRegister::NamedOutputRegister(name) => HLSLRegister::ShaderOutput(name.clone(), 4),
-            AMDILRegister::Texture(idx) => HLSLRegister::Texture(*idx),
+            AMDILRegister::Texture2D(idx) => HLSLRegister::Texture2D(*idx),
+            AMDILRegister::Texture3D(idx) => HLSLRegister::Texture3D(*idx),
+            AMDILRegister::TextureCube(idx) => HLSLRegister::TextureCube(*idx),
             AMDILRegister::NamedRegister(name) => HLSLRegister::GenericRegister(name.clone(), 4)
         }
     }
@@ -66,12 +68,14 @@ pub enum AMDILRegister {
     NamedBuffer { name: String, idx: u64 },
     NamedInputRegister(String),
     NamedOutputRegister(String),
-    Texture(u64),
+    Texture2D(u64),
+    Texture3D(u64),
+    TextureCube(u64)
 }
 impl VMName for AMDILRegister {
     fn is_pure_input(&self) -> bool {
         match self {
-            Self::Texture(_) => true, // Assuming textures are read only
+            Self::Texture2D(_) | Self::TextureCube(_) => true, // Assuming textures are read only
             Self::Literal(..) => true,
             Self::NamedInputRegister(..) => true,
             // TODO consider concept of i/o buffers
@@ -89,7 +93,8 @@ impl VMName for AMDILRegister {
 
     fn toplevel_kind(&self) -> HLSLKind {
         match self {
-            Self::Texture(_) => HLSLKind::TEXTURE2D,
+            Self::Texture2D(_) => HLSLKind::TEXTURE2D,
+            Self::TextureCube(_) => HLSLKind::TEXTURECUBE,
             _ => HLSLKind::NUMERIC,
         }
     }
@@ -97,7 +102,8 @@ impl VMName for AMDILRegister {
 impl VMVector for AMDILRegister {
     fn n_components(&self) -> usize {
         match self {
-            Self::Texture(_) => 1,
+            Self::Texture2D(_) => 1,
+            Self::TextureCube(_) => 1,
             _ => 4,
         }
     }
@@ -228,7 +234,9 @@ pub type AMDILVector = Vector<AMDILRegister>;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum AMDILDeclaration {
-    TextureResource(u64),
+    Texture2D(u64),
+    Texture3D(u64),
+    TextureCube(u64),
     NamedLiteral(String, [u64; 4]),
     NamedBuffer {
         name: String,
@@ -250,7 +258,9 @@ pub enum AMDILDeclaration {
 impl AMDILDeclaration {
     pub fn get_decl(&self) -> Option<AMDILRegister> {
         match self {
-            AMDILDeclaration::TextureResource(id) => Some(AMDILRegister::Texture(*id)),
+            AMDILDeclaration::Texture2D(id) => Some(AMDILRegister::Texture2D(*id)),
+            AMDILDeclaration::Texture3D(id) => Some(AMDILRegister::Texture3D(*id)),
+            AMDILDeclaration::TextureCube(id) => Some(AMDILRegister::TextureCube(*id)),
             AMDILDeclaration::NamedInputRegister {
                 name,
                 len: _,

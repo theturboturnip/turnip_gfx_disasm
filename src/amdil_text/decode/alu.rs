@@ -316,10 +316,10 @@ pub fn parse_alu<'a>(
 
             let arg_spec = ALUArgsSpec {
                 input_kinds: vec![
-                    HLSLConcreteKind::Texture2D.into(),
+                    HLSLKind::TEXTURE,
                     HLSLKind::NUMERIC_FLOAT,
                 ],
-                input_mask: InputMask::TruncateTo(2),
+                input_mask: InputMask::TruncateTo(2), // TODO that aint right
                 output_kind: HLSLKind::NUMERIC_FLOAT,
             };
 

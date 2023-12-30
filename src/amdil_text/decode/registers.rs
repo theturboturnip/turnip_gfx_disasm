@@ -39,7 +39,7 @@ impl AMDILContext {
                 src.apply_mask(mask);
                 self.src_to_vector(src)
             },
-            InstructionInput::Texture(idx) => Ok(amdil_vec_of(AMDILRegister::Texture(idx), MaskedSwizzle::identity(1))),
+            InstructionInput::Texture(idx) => Ok(amdil_vec_of(AMDILRegister::Texture2D(idx), MaskedSwizzle::identity(1))),
         }
     }
 
@@ -56,7 +56,7 @@ impl AMDILContext {
                 Ok(Self::build_scalar(0, reg, comp, &src.mods))
             },
             InstructionInput::Texture(idx) => Ok(Scalar::Component(
-                AMDILRegister::Texture(idx),
+                AMDILRegister::Texture2D(idx),
                 VectorComponent::X,
             )),
         }

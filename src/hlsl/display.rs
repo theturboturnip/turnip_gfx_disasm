@@ -12,7 +12,9 @@ impl std::fmt::Display for HLSLRegister {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         // TODO have a formatter that takes type into account
         match self {
-            Self::Texture(id) => write!(f, "tex{:0>3}", id),
+            Self::TextureCube(id) => write!(f, "texCube{:0>3}", id),
+            Self::Texture2D(id) => write!(f, "tex2D{:0>3}", id),
+            Self::Texture3D(id) => write!(f, "tex3D{:0>3}", id),
             Self::GenericRegister(id, _) => write!(f, "var_{}", id),
             Self::ShaderInput(name, _) | Self::ShaderOutput(name, _) => write!(f, "{}", name),
             Self::ArrayElement { of: elem, idx } => write!(f, "{}[{}]", elem, idx),
@@ -289,6 +291,8 @@ impl Display for HLSLConcreteKind {
         match self {
             Self::Numeric(n) => write!(f, "{}", n),
             Self::Texture2D => write!(f, "texture2D"),
+            Self::Texture3D => write!(f, "texture3D"),
+            Self::TextureCube => write!(f, "textureCube"),
         }
     }
 }

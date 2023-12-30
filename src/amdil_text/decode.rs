@@ -162,7 +162,27 @@ fn parse_declare<'a>(ctx: &mut AMDILContext, data: &'a str, instr: String, ctrl_
                 ("fmtz", "float"),
                 ("fmtw", "float"), // dummy comment to force formatting
             ] => {
-                Ok((data, Instruction::Decl(AMDILDeclaration::TextureResource(id.parse().unwrap()))))
+                Ok((data, Instruction::Decl(AMDILDeclaration::Texture2D(id.parse().unwrap()))))
+            }
+            [
+                ("id", id),
+                ("type", "3d"),
+                ("fmtx", "float"),
+                ("fmty", "float"),
+                ("fmtz", "float"),
+                ("fmtw", "float"), // dummy comment to force formatting
+            ] => {
+                Ok((data, Instruction::Decl(AMDILDeclaration::Texture3D(id.parse().unwrap()))))
+            }
+            [
+                ("id", id),
+                ("type", "cubemap"),
+                ("fmtx", "float"),
+                ("fmty", "float"),
+                ("fmtz", "float"),
+                ("fmtw", "float"), // dummy comment to force formatting
+            ] => {
+                Ok((data, Instruction::Decl(AMDILDeclaration::TextureCube(id.parse().unwrap()))))
             }
             _ => return Err(AMDILError::UnkInstruction(instr, ctrl_specifiers))
         }

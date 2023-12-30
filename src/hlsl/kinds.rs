@@ -11,6 +11,8 @@ pub enum HLSLNumericKind {
 pub enum HLSLConcreteKind {
     Numeric(HLSLNumericKind),
     Texture2D,
+    Texture3D,
+    TextureCube,
 }
 impl From<HLSLNumericKind> for HLSLConcreteKind {
     fn from(num: HLSLNumericKind) -> Self {
@@ -46,9 +48,12 @@ impl HLSLKind {
     pub const NUMERIC_UINT: Self = Self(HLSLKindBitmask::NUMERIC_UINT);
     pub const NUMERIC_SINT: Self = Self(HLSLKindBitmask::NUMERIC_SINT);
     pub const TEXTURE2D: Self = Self(HLSLKindBitmask::TEXTURE2D);
+    pub const TEXTURE3D: Self = Self(HLSLKindBitmask::TEXTURE3D);
+    pub const TEXTURECUBE: Self = Self(HLSLKindBitmask::TEXTURECUBE);
 
     pub const NUMERIC: Self = Self(HLSLKindBitmask::NUMERIC);
     pub const INTEGER: Self = Self(HLSLKindBitmask::INTEGER);
+    pub const TEXTURE: Self = Self(HLSLKindBitmask::TEXTURE);
 
     pub const ALL: Self = Self(HLSLKindBitmask::ALL);
 
@@ -143,11 +148,14 @@ bitflags! {
         const NUMERIC_UINT = 0b0000_0010;
         const NUMERIC_SINT = 0b0000_0100;
         const TEXTURE2D = 0b0001_0000;
+        const TEXTURE3D = 0b0010_0000;
+        const TEXTURECUBE = 0b0100_0000;
 
         const NUMERIC = Self::NUMERIC_FLOAT.bits | Self::NUMERIC_SINT.bits | Self::NUMERIC_UINT.bits;
         const INTEGER = Self::NUMERIC_SINT.bits | Self::NUMERIC_UINT.bits;
+        const TEXTURE = Self::TEXTURE2D.bits | Self::TEXTURE3D.bits | Self::TEXTURECUBE.bits;
 
-        const ALL = Self::TEXTURE2D.bits | Self::NUMERIC.bits;
+        const ALL = Self::TEXTURE.bits | Self::NUMERIC.bits;
     }
 }
 impl From<HLSLNumericKind> for HLSLKindBitmask {
@@ -164,6 +172,8 @@ impl From<HLSLConcreteKind> for HLSLKindBitmask {
         match t {
             HLSLConcreteKind::Numeric(num) => num.into(),
             HLSLConcreteKind::Texture2D => HLSLKindBitmask::TEXTURE2D,
+            HLSLConcreteKind::Texture3D => HLSLKindBitmask::TEXTURE3D,
+            HLSLConcreteKind::TextureCube => HLSLKindBitmask::TEXTURECUBE,
         }
     }
 }
@@ -174,6 +184,8 @@ impl HLSLKindBitmask {
             HLSLKindBitmask::NUMERIC_SINT => Some(HLSLNumericKind::SignedInt.into()),
             HLSLKindBitmask::NUMERIC_UINT => Some(HLSLNumericKind::UnsignedInt.into()),
             HLSLKindBitmask::TEXTURE2D => Some(HLSLConcreteKind::Texture2D),
+            HLSLKindBitmask::TEXTURE3D => Some(HLSLConcreteKind::Texture3D),
+            HLSLKindBitmask::TEXTURECUBE => Some(HLSLConcreteKind::TextureCube),
             _ => None,
         }
     }
