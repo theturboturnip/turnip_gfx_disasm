@@ -189,6 +189,14 @@ impl<'a, T: 'a> std::fmt::Display for DWrap<(&'a HLSLOperator, &'a Vec<T>)> wher
                         assert_eq!(inputs.len(), 1);
                         write!(f, "exp2({})", DWrap(&inputs[0]))
                     },
+                    super::syntax::NumericIntrinsic::Saturate => {
+                        assert_eq!(inputs.len(), 1);
+                        write!(f, "saturate({})", DWrap(&inputs[0]))
+                    },
+                    super::syntax::NumericIntrinsic::Abs => {
+                        assert_eq!(inputs.len(), 1);
+                        write!(f, "abs({})", DWrap(&inputs[0]))
+                    },
                 }
             },
             HLSLOperator::FauxBoolean(b) => {

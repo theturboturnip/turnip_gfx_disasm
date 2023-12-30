@@ -3,7 +3,7 @@
 
 use std::collections::HashMap;
 
-use crate::{abstract_machine::{vector::{MaskedSwizzle, VectorComponent}, expr::{ContigSwizzle, Scalar, Reg}}, amdil_text::vm::{AMDILRegister, AMDILVector}, hlsl::{kinds::{HLSLKind, HLSLNumericKind, HLSLKindBitmask}, syntax::{HLSLOperator, ArithmeticOp, UnaryOp}}};
+use crate::{abstract_machine::{vector::{MaskedSwizzle, VectorComponent}, expr::{ContigSwizzle, Scalar, Reg}}, amdil_text::vm::{AMDILRegister, AMDILVector}, hlsl::{kinds::{HLSLKind, HLSLNumericKind, HLSLKindBitmask}, syntax::{HLSLOperator, ArithmeticOp, UnaryOp, NumericIntrinsic}}};
 
 use super::{grammar::{Src, RegId, SrcMod, RegRelativeAddr, Dst, SrcMods}, error::AMDILError};
 
@@ -118,7 +118,14 @@ impl AMDILContext {
         };
         // 7. _abs  -  takes  the  absolute  value  of  components
         let s = if mods.abs {
-            todo!("abs")
+            Scalar::Expr {
+                // In this context it forces float, even though HLSL abs() can work on sint too
+                op: HLSLOperator::NumericI(NumericIntrinsic::Abs),
+                inputs: vec![
+                    (s, HLSLKind::NUMERIC_FLOAT),
+                ],
+                output_kind: HLSLKind::NUMERIC_FLOAT
+            }
         } else { s };
         // 8. neg(comp)  -  provides  per-component  negate
         let s = if mods.neg[i] {
@@ -132,7 +139,13 @@ impl AMDILContext {
         } else { s };
         // 9. clamp  -  clamps  the  value
         let s = if mods.clamp {
-            todo!("clamp")
+            Scalar::Expr {
+                op: HLSLOperator::NumericI(NumericIntrinsic::Saturate),
+                inputs: vec![
+                    (s, HLSLKind::NUMERIC_FLOAT),
+                ],
+                output_kind: HLSLKind::NUMERIC_FLOAT
+            }
         } else { s };
 
         s   
