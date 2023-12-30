@@ -93,7 +93,7 @@ impl<TReg: Reg> Vector<TReg> {
     /// 
     /// If they're all Components of the same register, create PureSwizzle.
     /// Else, create a Construction
-    pub fn of_scalars(scalars: Vec<Scalar<TReg>>, output_kind: HLSLKind) -> Self {
+    pub fn of_scalars(scalars: Vec<Scalar<TReg>>) -> Self {
         // TODO refine output_kind with the output_kind of the scalars
         let mut v = if let Some(reg) = find_common(scalars.iter(), |scalar| {
             match scalar {
@@ -105,9 +105,9 @@ impl<TReg: Reg> Vector<TReg> {
                 Scalar::Literal(..) | Scalar::Expr { .. } => unreachable!(),
                 Scalar::Component(_, c) => c,
             }).collect();
-            Self::PureSwizzle(reg.clone(), comps, output_kind)
+            Self::PureSwizzle(reg.clone(), comps, HLSLKindBitmask::ALL.into())
         } else {
-            Self::Construction(scalars, output_kind)
+            Self::Construction(scalars, HLSLKindBitmask::ALL.into())
         };
 
         v.recompute_output_kind_from_internal_output_kinds();
@@ -177,7 +177,6 @@ impl<TReg: Reg> Vector<TReg> {
             Self::Construction(scalars, output_kind) => {
                 Vector::of_scalars(
                     scalars.iter().map(|scalar| scalar.map_scalar(f, *output_kind)).collect(),
-                    *output_kind
                 )
             }
             Self::PureSwizzle(reg, comps, output_kind) => {
@@ -186,7 +185,6 @@ impl<TReg: Reg> Vector<TReg> {
                         let (reg, comp) = f(reg, *comp, *output_kind);
                         Scalar::Component(reg, comp)
                     }).collect(),
-                    *output_kind
                 )
             }
             Self::PerCompExpr { op, n_comps, inputs, output_kind } => {

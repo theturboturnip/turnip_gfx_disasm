@@ -6,7 +6,7 @@ pub use error::{AMDILError, AMDILErrorContext};
 
 use alu::{parse_alu, ALUInstruction};
 
-use crate::{amdil_text::decode::grammar::RegRelativeAddr, abstract_machine::vector::VectorComponent};
+use crate::{amdil_text::decode::grammar::RegRelativeAddr, abstract_machine::{vector::VectorComponent, expr::Scalar}, hlsl::{syntax::{BinaryArithmeticOp, FauxBooleanOp, HLSLOperator}, kinds::{HLSLKind, HLSLKindBitmask}}};
 
 use self::{grammar::{parse_instruction_name, parse_dst, parse_src, DstWrite, parse_hex_literal, CtrlSpec, DstMod}, registers::AMDILContext};
 
@@ -18,7 +18,7 @@ pub enum Instruction {
     Decl(AMDILDeclaration),
     Alu(ALUInstruction),
     /// Early out based on the a set of args
-    EarlyOut(AMDILRegister, VectorComponent), // TODO use UntypedScalar::Expr{} for nonzero or == zero
+    EarlyOut(Scalar<AMDILRegister>),
 }
 
 pub fn parse_lines(data: &str) -> Result<Vec<Instruction>, AMDILErrorContext> {
@@ -44,9 +44,15 @@ fn parse_instruction(ctx: &mut AMDILContext, data: &str) -> Result<Instruction, 
 
         "discard_logicalnz" => {
             let (data, src) = parse_src(data)?;
-            let src = ctx.src_to_vector(&src)?;
-            assert!(src.1.0[0].is_some());
-            (data, Instruction::EarlyOut(src.0.clone(), src.1.0[0].unwrap()))
+            let src = ctx.input_to_scalar(src)?;
+            (data, Instruction::EarlyOut(Scalar::Expr {
+                op: HLSLOperator::FauxBoolean(FauxBooleanOp::Ne),
+                inputs: vec![
+                    (src, HLSLKindBitmask::NUMERIC.into()),
+                    (Scalar::Literal(0), HLSLKindBitmask::NUMERIC.into())
+                ],
+                output_kind: HLSLKindBitmask::NUMERIC.into()
+            }))
         },
 
         d if d.starts_with("dcl_") => {

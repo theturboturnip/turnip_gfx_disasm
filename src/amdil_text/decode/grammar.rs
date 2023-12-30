@@ -9,7 +9,7 @@ use nom::{
 
 use crate::abstract_machine::vector::{MaskedSwizzle, VectorComponent};
 
-use super::error::{NomGrammarResult, GrammarError, AMDILError};
+use super::{error::{NomGrammarResult, GrammarError, AMDILError}, Instruction, registers::InstructionInput};
 
 #[derive(Debug, Clone)]
 pub struct CtrlSpec {
@@ -66,7 +66,19 @@ impl From<[DstWrite; 4]> for MaskedSwizzle {
 #[derive(Debug, Clone)]
 pub struct Src {
     pub regid: RegId,
-    pub mods: Vec<SrcMod>
+    pub mods: SrcMods,
+}
+impl Src {
+    pub fn apply_mask(&mut self, mask: MaskedSwizzle) {
+        self.mods.swizzle = match self.mods.swizzle {
+            Some(current_swizz) => {
+                Some(current_swizz.masked_out(mask))
+            },
+            None => {
+                Some(MaskedSwizzle::identity(4).masked_out(mask))
+            }
+        }
+    }
 }
 
 /// Section 3.4 "Destination Modifiers"
@@ -98,6 +110,21 @@ pub enum DstMod {
     D8,
     /// Saturate or clamp result to [0,1].
     Sat
+}
+
+/// Encodes all the modifiers for a source in a single small struct
+#[derive(Debug, Clone, Default)]
+pub struct SrcMods {
+    pub swizzle: Option<MaskedSwizzle>,
+    pub invert: bool,
+    pub bias: bool,
+    pub x2: bool,
+    // no bx2 field - that's equivalent to setting bias and x2 both to true
+    pub sign: bool,
+    pub div_comp: Option<VectorComponent>,
+    pub abs: bool,
+    pub neg: [bool; 4],
+    pub clamp: bool,
 }
 
 /// Section 3.6 "Source Modifiers"
@@ -219,14 +246,39 @@ fn parse_ctrlspec(data: &str) -> NomGrammarResult<CtrlSpec> {
     ))
 }
 /// Parse a source (input) register, consuming a following ", " if present
-pub fn parse_src(data: &str) -> NomGrammarResult<Src> {
+pub fn parse_src(data: &str) -> NomGrammarResult<InstructionInput> {
     // args are either a hex literal or a named arg
     let (data, regid) = parse_regid(data)?;
     let (data, mods) = many0(parse_named_arg_mod)(data)?;
+
+    let mut combined_mods = SrcMods::default();
+    for m in mods {
+        match m {
+            SrcMod::Swizzled(swizzle) => combined_mods.swizzle = Some(swizzle),
+            SrcMod::Invert => combined_mods.invert = true,
+            SrcMod::Bias => combined_mods.bias = true,
+            SrcMod::X2 => combined_mods.x2 = true,
+            SrcMod::Bx2 => {
+                combined_mods.bias = true;
+                combined_mods.x2 = true;
+            },
+            SrcMod::Sign => combined_mods.sign = true,
+            SrcMod::DivComp(c) => combined_mods.div_comp = Some(c),
+            SrcMod::Abs => combined_mods.abs = true,
+            SrcMod::Neg(comps) => combined_mods.neg = [
+                comps.contains(&VectorComponent::X),
+                comps.contains(&VectorComponent::Y),
+                comps.contains(&VectorComponent::Z),
+                comps.contains(&VectorComponent::W),
+            ],
+            SrcMod::Clamp => combined_mods.clamp = true
+        }
+    }
+
     let (data, _) = opt(tag(", "))(data)?;
-    Ok((data, Src{ regid, mods }))
+    Ok((data, InstructionInput::Src(Src{ regid, mods: combined_mods })))
 }
-pub fn parse_many1_src(data: &str) -> NomGrammarResult<Vec<Src>> {
+pub fn parse_many1_src(data: &str) -> NomGrammarResult<Vec<InstructionInput>> {
     many1(parse_src)(data)
 }
 /// Parse a hex literal, sometimes used in place of an input, consuming a following ", " if present

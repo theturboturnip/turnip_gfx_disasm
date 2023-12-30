@@ -42,6 +42,16 @@ impl KindRefinementResult {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct HLSLKind(HLSLKindBitmask);
 impl HLSLKind {
+    pub const NUMERIC_FLOAT: Self = Self(HLSLKindBitmask::NUMERIC_FLOAT);
+    pub const NUMERIC_UINT: Self = Self(HLSLKindBitmask::NUMERIC_UINT);
+    pub const NUMERIC_SINT: Self = Self(HLSLKindBitmask::NUMERIC_SINT);
+    pub const TEXTURE2D: Self = Self(HLSLKindBitmask::TEXTURE2D);
+
+    pub const NUMERIC: Self = Self(HLSLKindBitmask::NUMERIC);
+    pub const INTEGER: Self = Self(HLSLKindBitmask::INTEGER);
+
+    pub const ALL: Self = Self(HLSLKindBitmask::ALL);
+
     pub fn try_concretize(&self) -> Option<HLSLConcreteKind> {
         self.0.try_concretize()
     }

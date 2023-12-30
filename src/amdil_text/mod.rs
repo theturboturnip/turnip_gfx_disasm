@@ -53,10 +53,10 @@ impl<'a> Decoder<AMDILAbstractVM> for AMDILDecoder<'a> {
                     }
                 },
                 Instruction::Alu(alu) => alu.push_actions(&mut actions),
-                Instruction::EarlyOut(vec, comp) => {
+                Instruction::EarlyOut(scalar) => {
                     actions.push(
                         Action::If {
-                            expr: Scalar::Component(vec.clone(), comp),
+                            expr: scalar,
                             if_true: vec![Action::EarlyOut],
                             if_fals: vec![]
                         }
