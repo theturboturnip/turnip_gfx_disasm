@@ -3,7 +3,7 @@
 
 use std::collections::HashMap;
 
-use crate::{abstract_machine::{vector::{MaskedSwizzle, VectorComponent}, expr::{ContigSwizzle, Scalar}}, amdil_text::vm::{AMDILRegister, AMDILVector}, hlsl::{kinds::{HLSLKind, HLSLNumericKind, HLSLKindBitmask}, syntax::{HLSLOperator, ArithmeticOp, UnaryOp}}};
+use crate::{abstract_machine::{vector::{MaskedSwizzle, VectorComponent}, expr::{ContigSwizzle, Scalar, Reg}}, amdil_text::vm::{AMDILRegister, AMDILVector}, hlsl::{kinds::{HLSLKind, HLSLNumericKind, HLSLKindBitmask}, syntax::{HLSLOperator, ArithmeticOp, UnaryOp}}};
 
 use super::{grammar::{Src, RegId, SrcMod, RegRelativeAddr, Dst, SrcMods}, error::AMDILError};
 
@@ -39,7 +39,7 @@ impl AMDILContext {
                 src.apply_mask(mask);
                 self.src_to_vector(src)
             },
-            InstructionInput::Texture(idx) => Ok(amdil_vec_of(AMDILRegister::Texture(idx), MaskedSwizzle::identity(1), todo!("kind"))),
+            InstructionInput::Texture(idx) => Ok(amdil_vec_of(AMDILRegister::Texture(idx), MaskedSwizzle::identity(1))),
         }
     }
 
@@ -200,6 +200,7 @@ fn swizzle_to_contig(swizzle: MaskedSwizzle) -> ContigSwizzle {
     swizzle.0.iter().filter_map(|comp_opt| *comp_opt).collect()
 }
 
-fn amdil_vec_of(reg: AMDILRegister, swizzle: MaskedSwizzle, kind: HLSLKind) -> AMDILVector {
+fn amdil_vec_of(reg: AMDILRegister, swizzle: MaskedSwizzle) -> AMDILVector {
+    let kind = reg.output_kind();
     AMDILVector::PureSwizzle(reg, swizzle_to_contig(swizzle), kind)
 }

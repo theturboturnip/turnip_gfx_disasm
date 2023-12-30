@@ -8,7 +8,7 @@ use alu::{parse_alu, ALUInstruction};
 
 use crate::{amdil_text::decode::grammar::RegRelativeAddr, abstract_machine::{vector::VectorComponent, expr::Scalar}, hlsl::{syntax::{BinaryArithmeticOp, FauxBooleanOp, HLSLOperator}, kinds::{HLSLKind, HLSLKindBitmask}}};
 
-use self::{grammar::{parse_instruction_name, parse_dst, parse_src, DstWrite, parse_hex_literal, CtrlSpec, DstMod}, registers::AMDILContext};
+use self::{grammar::{parse_instruction_name, parse_dst, parse_src, DstWrite, parse_hex_literal, CtrlSpec, DstMod, Dst}, registers::AMDILContext, error::NomGrammarResult};
 
 use super::vm::{AMDILDeclaration, AMDILRegister};
 
@@ -73,24 +73,31 @@ fn parse_instruction(ctx: &mut AMDILContext, data: &str) -> Result<Instruction, 
 }
 
 fn parse_declare<'a>(ctx: &mut AMDILContext, data: &'a str, instr: String, ctrl_specifiers: Vec<CtrlSpec>, mods: Vec<DstMod>) -> Result<(&'a str, Instruction), AMDILError> {
-    let (data, dst) = parse_dst(data, mods)?;
-    // This is usually .x, .xy, .xyz, .xyzw; but if one of the components is unused then it can also be v1._yzw.
-    // The length of the vector = the maximum index of a written component + 1
-    let len = dst.write_mask
-        .iter()
-        .enumerate()
-        .filter_map(|(i, dstwrite)| {
-            match dstwrite {
-                DstWrite::Write => Some(i),
-                DstWrite::NoWrite => None,
-            }
-        })
-        .max().unwrap() as u8 + 1;
+    let parse_dst = || -> NomGrammarResult<(Dst, u8)> {
+        let (data, dst) = parse_dst(data, mods)?;
+        // This is usually .x, .xy, .xyz, .xyzw; but if one of the components is unused then it can also be v1._yzw.
+        // The length of the vector = the maximum index of a written component + 1
+        let n_comps = dst.write_mask
+            .iter()
+            .enumerate()
+            .filter_map(|(i, dstwrite)| {
+                match dstwrite {
+                    DstWrite::Write => Some(i),
+                    DstWrite::NoWrite => None,
+                }
+            })
+            .max().unwrap() as u8 + 1;
+
+        Ok((data, (dst, n_comps)))
+    };
+    
+    
     match instr.as_str() {
         "dcl_cb" => {
+            let (data, (dst, _n_comps)) = parse_dst()?;
             assert_eq!(dst.regid.rel_addrs.len(), 1);
             let len = if let RegRelativeAddr::Literal(len) = dst.regid.rel_addrs[0] {
-                len 
+                len
             } else {
                 panic!("Can't dcl_cb with non-literal length");
             };
@@ -100,7 +107,7 @@ fn parse_declare<'a>(ctx: &mut AMDILContext, data: &'a str, instr: String, ctrl_
             })))
         }
         "dcl_input_generic" => {
-            
+            let (data, (dst, len)) = parse_dst()?;
             Ok((data, Instruction::Decl(AMDILDeclaration::NamedInputRegister {
                 name: dst.regid.name,
                 len,
@@ -108,6 +115,7 @@ fn parse_declare<'a>(ctx: &mut AMDILContext, data: &'a str, instr: String, ctrl_
             })))
         }
         "dcl_output_generic" => {
+            let (data, (dst, len)) = parse_dst()?;
             Ok((data, Instruction::Decl(AMDILDeclaration::NamedOutputRegister {
                 name: dst.regid.name,
                 len,
@@ -116,6 +124,7 @@ fn parse_declare<'a>(ctx: &mut AMDILContext, data: &'a str, instr: String, ctrl_
         }
 
         "dcl_output_position" => {
+            let (data, (dst, len)) = parse_dst()?;
             Ok((data, Instruction::Decl(AMDILDeclaration::NamedOutputRegister {
                 name: dst.regid.name,
                 len,
@@ -124,6 +133,7 @@ fn parse_declare<'a>(ctx: &mut AMDILContext, data: &'a str, instr: String, ctrl_
         }
         
         "dcl_literal" => {
+            let (data, (dst, _n_comps)) = parse_dst()?;
             let (data, x) = parse_hex_literal(data)?;
             let (data, y) = parse_hex_literal(data)?;
             let (data, z) = parse_hex_literal(data)?;
@@ -136,9 +146,13 @@ fn parse_declare<'a>(ctx: &mut AMDILContext, data: &'a str, instr: String, ctrl_
             ))))
         },
         "dcl_global_flags" => {
+            let (data, (_dst, _len)) = parse_dst()?;
             Ok((data, Instruction::DontCare(instr)))
         },
-        "dcl_user_data_api" => Ok((data, Instruction::DontCare(instr))), // TODO parse this
+        "dcl_user_data_api" => {
+            let (data, (_dst, _len)) = parse_dst()?;
+            Ok((data, Instruction::DontCare(instr)))
+        }, // TODO parse this
         "dcl_resource" => match matchable_ctrl_specs(&ctrl_specifiers)[..] {
             [
                 ("id", id),
