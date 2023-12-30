@@ -25,6 +25,25 @@ impl<I> ParseError<I> for GrammarError<I> {
 }
 
 #[derive(Debug, Error)]
+pub struct AMDILErrorContext {
+    line: String,
+    err: AMDILError,
+}
+impl AMDILErrorContext {
+    pub fn new(line: &str, err: AMDILError) -> Self {
+        Self {
+            line: line.to_owned(),
+            err
+        }
+    }
+}
+impl std::fmt::Display for AMDILErrorContext {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "error {} in line '{}'", self.err, self.line)
+    }
+}
+
+#[derive(Debug, Error)]
 pub enum AMDILError {
     #[error("Error parsing integer: {0}")]
     ParseIntError(ParseIntError),

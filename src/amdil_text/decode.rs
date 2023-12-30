@@ -2,7 +2,7 @@ mod alu;
 mod registers;
 mod grammar;
 mod error;
-pub use error::AMDILError;
+pub use error::{AMDILError, AMDILErrorContext};
 
 use alu::{parse_alu, ALUInstruction};
 
@@ -21,12 +21,15 @@ pub enum Instruction {
     EarlyOut(AMDILRegister, VectorComponent), // TODO use UntypedScalar::Expr{} for nonzero or == zero
 }
 
-pub fn parse_lines(data: &str) -> Result<Vec<Instruction>, AMDILError> {
+pub fn parse_lines(data: &str) -> Result<Vec<Instruction>, AMDILErrorContext> {
     let mut ctx = AMDILContext::new();
     data.lines()
         // Filter out empty lines
         .filter(|data| data.len() > 0)
-        .map(|data| Ok(parse_instruction(&mut ctx, data)?))
+        .map(|data| {
+            parse_instruction(&mut ctx, data)
+                .map_err(|err| AMDILErrorContext::new(data, err))
+        })
         .collect()
 }
 fn parse_instruction(ctx: &mut AMDILContext, data: &str) -> Result<Instruction, AMDILError> {

@@ -1,9 +1,9 @@
 use std::marker::PhantomData;
 
-use crate::{Decoder, Program, abstract_machine::{VMName, expr::Scalar}, Action, hlsl::kinds::HLSLKindBitmask};
+use crate::{Decoder, Program, abstract_machine::{VMName, expr::Scalar}, Action};
 
 mod decode;
-pub use decode::AMDILError;
+pub use decode::AMDILErrorContext;
 
 pub mod vm;
 
@@ -37,9 +37,9 @@ impl<'a> AMDILDecoder<'a> {
 impl<'a> Decoder<AMDILAbstractVM> for AMDILDecoder<'a> {
     type Input = &'a str;
     type Program = AMDILProgram;
-    type Err = AMDILError;
+    type Err = AMDILErrorContext;
 
-    fn decode(&self, data: Self::Input) -> Result<AMDILProgram, AMDILError> {
+    fn decode(&self, data: Self::Input) -> Result<AMDILProgram, AMDILErrorContext> {
         let instructions = decode::parse_lines(data)?;
 
         let mut actions = vec![];

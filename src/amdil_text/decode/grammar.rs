@@ -326,6 +326,10 @@ fn parse_named_arg_mod(data: &str) -> NomGrammarResult<SrcMod> {
     alt((parse_swizzle_srcmod, parse_plaintext_srcmod, parse_negate_srcmod, parse_divcomp_srcmod))(data)
 }
 fn parse_swizzle_srcmod(data: &str) -> NomGrammarResult<SrcMod> {
+    // TODO augh. ambiguity with underscores
+    // cb2[4].y_neg(xyzw)
+    // is the _ part of the swizzle or the neg?
+
     // `.[xyzw_]{1,4}`
     let (data, _) = tag(".")(data)?;
     let swizzle_parser = |data| {
