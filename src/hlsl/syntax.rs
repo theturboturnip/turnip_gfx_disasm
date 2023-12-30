@@ -170,7 +170,7 @@ pub enum HLSLOperator {
     Unary(UnaryOp),
     Arithmetic(ArithmeticOp),
     BinaryArithmetic(BinaryArithmeticOp),
-    // NumericCast(NumericCastTo),
+    NumericCast(NumericCastTo),
     SampleI(SampleIntrinsic),
     NumericI(NumericIntrinsic),
     FauxBoolean(FauxBooleanOp),
@@ -187,7 +187,7 @@ impl Operator for HLSLOperator {
             HLSLOperator::Unary(x) => x.get_kindspec(),
             HLSLOperator::Arithmetic(x) => x.get_kindspec(),
             HLSLOperator::BinaryArithmetic(x) => x.get_kindspec(),
-            // HLSLOperator::NumericCast(x) => x.get_kindspec(),
+            HLSLOperator::NumericCast(x) => x.get_kindspec(),
             HLSLOperator::SampleI(x) => x.get_kindspec(),
             HLSLOperator::NumericI(x) => x.get_kindspec(),
             HLSLOperator::FauxBoolean(x) => x.get_kindspec(),
@@ -201,7 +201,7 @@ impl Operator for HLSLOperator {
             HLSLOperator::Unary(x) => x.n_inputs(),
             HLSLOperator::Arithmetic(x) => x.n_inputs(),
             HLSLOperator::BinaryArithmetic(x) => x.n_inputs(),
-            // HLSLOperator::NumericCast(x) => x.n_inputs(),
+            HLSLOperator::NumericCast(x) => x.n_inputs(),
             HLSLOperator::SampleI(x) => x.n_inputs(),
             HLSLOperator::NumericI(x) => x.n_inputs(),
             HLSLOperator::FauxBoolean(x) => x.n_inputs(),
@@ -215,7 +215,7 @@ impl Operator for HLSLOperator {
             HLSLOperator::Unary(x) => x.dep_rel(),
             HLSLOperator::Arithmetic(x) => x.dep_rel(),
             HLSLOperator::BinaryArithmetic(x) => x.dep_rel(),
-            // HLSLOperator::NumericCast(x) => x.dep_rel(),
+            HLSLOperator::NumericCast(x) => x.dep_rel(),
             HLSLOperator::SampleI(x) => x.dep_rel(),
             HLSLOperator::NumericI(x) => x.dep_rel(),
             HLSLOperator::FauxBoolean(x) => x.dep_rel(),
@@ -355,25 +355,25 @@ impl Operator for BinaryArithmeticOp {
     }
 }
 
-// #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
-// pub struct NumericCastTo(pub HLSLNumericKind);
-// impl Operator for NumericCastTo {
-//     fn get_kindspec(&self) -> OperatorKindspec {
-//         OperatorKindspec::new(
-//             vec![HLSLOperandKind::Hole(0)],
-//             self.0.into(),
-//             vec![HLSLKindBitmask::NUMERIC.into()],
-//         )
-//     }
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct NumericCastTo(pub HLSLNumericKind);
+impl Operator for NumericCastTo {
+    fn get_kindspec(&self) -> OperatorKindspec {
+        OperatorKindspec::new(
+            vec![HLSLOperandKind::Hole(0)],
+            self.0.into(),
+            vec![HLSLKindBitmask::NUMERIC.into()],
+        )
+    }
 
-//     fn n_inputs(&self) -> usize {
-//         1
-//     }
+    fn n_inputs(&self) -> usize {
+        1
+    }
 
-//     fn dep_rel(&self) -> SimpleDependencyRelation {
-//         SimpleDependencyRelation::PerComponent
-//     }
-// }
+    fn dep_rel(&self) -> SimpleDependencyRelation {
+        SimpleDependencyRelation::PerComponent
+    }
+}
 
 /// Texture sampling intrinsic functions, which take a texture argument and at least one other input to produce a single output.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -413,8 +413,14 @@ pub enum NumericIntrinsic {
     Max,
     /// Multiply-add
     Mad,
+    // Square-root
+    Sqrt,
     /// Reciporical of the square root - per component
     Rsqrt,
+    /// pow(e, x)
+    Exp,
+    /// pow(2, x)
+    Exp2,
 }
 impl Operator for NumericIntrinsic {
     fn get_kindspec(&self) -> OperatorKindspec {
@@ -430,10 +436,10 @@ impl Operator for NumericIntrinsic {
                 HLSLOperandKind::Hole(0),
                 vec![HLSLKindBitmask::NUMERIC.into()],
             ),
-            Self::Rsqrt => OperatorKindspec::new(
+            Self::Sqrt | Self::Rsqrt | Self::Exp | Self::Exp2 => OperatorKindspec::new(
                 vec![HLSLOperandKind::Hole(0)],
                 HLSLOperandKind::Hole(0),
-                vec![HLSLKindBitmask::NUMERIC.into()], // TODO this only really makes sense for float...
+                vec![HLSLKindBitmask::NUMERIC_FLOAT.into()],
             ),
         }
     }
@@ -442,7 +448,7 @@ impl Operator for NumericIntrinsic {
         match self {
             Self::Min | Self::Max | Self::Dot => 2,
             Self::Mad => 3,
-            Self::Rsqrt => 1,
+            Self::Sqrt | Self::Rsqrt | Self::Exp | Self::Exp2 => 1,
         }
     }
 
@@ -450,7 +456,7 @@ impl Operator for NumericIntrinsic {
         // v3 = max(v1, v2)
         // implies v3.x = max(v1.x, v2.x) etc
         match self {
-            Self::Min | Self::Max | Self::Mad | Self::Rsqrt => SimpleDependencyRelation::PerComponent,
+            Self::Min | Self::Max | Self::Mad | Self::Sqrt | Self::Rsqrt | Self::Exp | Self::Exp2 => SimpleDependencyRelation::PerComponent,
             Self::Dot => SimpleDependencyRelation::AllToAll,
         }
     }

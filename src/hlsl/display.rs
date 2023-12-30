@@ -143,7 +143,10 @@ impl<'a, T: 'a> std::fmt::Display for DWrap<(&'a HLSLOperator, &'a Vec<T>)> wher
                     crate::hlsl::syntax::BinaryArithmeticOp::BitwiseXor => write!(f, "{} ^ {}", DWrap(&inputs[0]), DWrap(&inputs[1])),
                 }
             },
-            // HLSLOperator::NumericCast(_) => todo!(),
+            HLSLOperator::NumericCast(crate::hlsl::syntax::NumericCastTo(target)) => {
+                assert_eq!(inputs.len(), 1);
+                write!(f, "({}){}", target, DWrap(&inputs[0]))
+            },
             HLSLOperator::SampleI(samp) => {
                 match samp {
                     crate::hlsl::syntax::SampleIntrinsic::Tex2D => {
@@ -170,9 +173,21 @@ impl<'a, T: 'a> std::fmt::Display for DWrap<(&'a HLSLOperator, &'a Vec<T>)> wher
                         assert_eq!(inputs.len(), 3);
                         write!(f, "mad({}, {}, {})", DWrap(&inputs[0]), DWrap(&inputs[1]), DWrap(&inputs[2]))
                     },
+                    super::syntax::NumericIntrinsic::Sqrt => {
+                        assert_eq!(inputs.len(), 1);
+                        write!(f, "sqrt({})", DWrap(&inputs[0]))
+                    },
                     super::syntax::NumericIntrinsic::Rsqrt => {
                         assert_eq!(inputs.len(), 1);
                         write!(f, "rsqrt({})", DWrap(&inputs[0]))
+                    },
+                    super::syntax::NumericIntrinsic::Exp => {
+                        assert_eq!(inputs.len(), 1);
+                        write!(f, "exp({})", DWrap(&inputs[0]))
+                    },
+                    super::syntax::NumericIntrinsic::Exp2 => {
+                        assert_eq!(inputs.len(), 1);
+                        write!(f, "exp2({})", DWrap(&inputs[0]))
                     },
                 }
             },

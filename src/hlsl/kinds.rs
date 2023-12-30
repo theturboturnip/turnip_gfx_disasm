@@ -1,13 +1,13 @@
 use bitflags::bitflags;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum HLSLNumericKind {
     Float,
     UnsignedInt,
     SignedInt,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum HLSLConcreteKind {
     Numeric(HLSLNumericKind),
     Texture2D,
