@@ -68,9 +68,9 @@ type ALUInstructionSet = HashMap<&'static str, (ALUArgsSpec, HLSLOperator)>;
 fn float_arith(op: ArithmeticOp) -> (ALUArgsSpec, HLSLOperator) {
     (
         ALUArgsSpec {
-            input_kinds: vec![HLSLNumericKind::Float.into(), HLSLNumericKind::Float.into()],
+            input_kinds: vec![HLSLKind::NUMERIC_FLOAT, HLSLKind::NUMERIC_FLOAT],
             input_mask: InputMask::InheritFromFirstOutput,
-            output_kind: HLSLNumericKind::Float.into(),
+            output_kind: HLSLKind::NUMERIC_FLOAT,
         },
         HLSLOperator::Arithmetic(op),
     )
@@ -81,7 +81,7 @@ fn logical_cmp(cmp: FauxBooleanOp, arg_kind: HLSLKind) -> (ALUArgsSpec, HLSLOper
         ALUArgsSpec {
             input_kinds: vec![arg_kind, arg_kind],
             input_mask: InputMask::InheritFromFirstOutput,
-            output_kind: HLSLKindBitmask::INTEGER.into(),
+            output_kind: HLSLKind::INTEGER,
         },
         HLSLOperator::FauxBoolean(cmp)
     )
@@ -90,9 +90,9 @@ fn logical_cmp(cmp: FauxBooleanOp, arg_kind: HLSLKind) -> (ALUArgsSpec, HLSLOper
 fn logical_op(op: BinaryArithmeticOp) -> (ALUArgsSpec, HLSLOperator) {
     (
         ALUArgsSpec {
-            input_kinds: vec![HLSLKindBitmask::INTEGER.into(), HLSLKindBitmask::INTEGER.into()],
+            input_kinds: vec![HLSLKind::INTEGER, HLSLKind::INTEGER],
             input_mask: InputMask::InheritFromFirstOutput,
-            output_kind: HLSLKindBitmask::INTEGER.into(),
+            output_kind: HLSLKind::INTEGER,
         },
         HLSLOperator::BinaryArithmetic(op)
     )
@@ -102,49 +102,49 @@ lazy_static! {
     static ref ALU_INSTR_DEFS: ALUInstructionSet = HashMap::from([
         ("mov", (
             ALUArgsSpec {
-                input_kinds: vec![HLSLKindBitmask::all().into()],
+                input_kinds: vec![HLSLKind::ALL],
                 input_mask: InputMask::InheritFromFirstOutput,
-                output_kind: HLSLKindBitmask::all().into()
+                output_kind: HLSLKind::ALL
             },
             HLSLOperator::Assign,
         )),
         ("dp4_ieee", (
             ALUArgsSpec {
-                input_kinds: vec![HLSLNumericKind::Float.into(), HLSLNumericKind::Float.into()],
+                input_kinds: vec![HLSLKind::NUMERIC_FLOAT, HLSLKind::NUMERIC_FLOAT],
                 input_mask: InputMask::TruncateTo(4),
-                output_kind: HLSLNumericKind::Float.into(),
+                output_kind: HLSLKind::NUMERIC_FLOAT,
             },
             HLSLOperator::NumericI(NumericIntrinsic::Dot),
         )),
         ("dp3_ieee", (
             ALUArgsSpec {
-                input_kinds: vec![HLSLNumericKind::Float.into(), HLSLNumericKind::Float.into()],
+                input_kinds: vec![HLSLKind::NUMERIC_FLOAT, HLSLKind::NUMERIC_FLOAT],
                 input_mask: InputMask::TruncateTo(3),
-                output_kind: HLSLNumericKind::Float.into(),
+                output_kind: HLSLKind::NUMERIC_FLOAT,
             },
             HLSLOperator::NumericI(NumericIntrinsic::Dot),
         )),
         ("dp2_ieee", (
             ALUArgsSpec {
-                input_kinds: vec![HLSLNumericKind::Float.into(), HLSLNumericKind::Float.into()],
+                input_kinds: vec![HLSLKind::NUMERIC_FLOAT, HLSLKind::NUMERIC_FLOAT],
                 input_mask: InputMask::TruncateTo(2),
-                output_kind: HLSLNumericKind::Float.into(),
+                output_kind: HLSLKind::NUMERIC_FLOAT,
             },
             HLSLOperator::NumericI(NumericIntrinsic::Dot),
         )),
         ("min_ieee", (
             ALUArgsSpec {
-                input_kinds: vec![HLSLNumericKind::Float.into(), HLSLNumericKind::Float.into()],
+                input_kinds: vec![HLSLKind::NUMERIC_FLOAT, HLSLKind::NUMERIC_FLOAT],
                 input_mask: InputMask::InheritFromFirstOutput,
-                output_kind: HLSLNumericKind::Float.into(),
+                output_kind: HLSLKind::NUMERIC_FLOAT,
             },
             HLSLOperator::NumericI(NumericIntrinsic::Min),
         )),
         ("max_ieee", (
             ALUArgsSpec {
-                input_kinds: vec![HLSLNumericKind::Float.into(), HLSLNumericKind::Float.into()],
+                input_kinds: vec![HLSLKind::NUMERIC_FLOAT, HLSLKind::NUMERIC_FLOAT],
                 input_mask: InputMask::InheritFromFirstOutput,
-                output_kind: HLSLNumericKind::Float.into(),
+                output_kind: HLSLKind::NUMERIC_FLOAT,
             },
             HLSLOperator::NumericI(NumericIntrinsic::Max),
         )),
@@ -161,17 +161,17 @@ lazy_static! {
         // TODO mad_ieee has different NaN handling
         ("mad", (
             ALUArgsSpec {
-                input_kinds: vec![HLSLNumericKind::Float.into(), HLSLNumericKind::Float.into(), HLSLNumericKind::Float.into()],
+                input_kinds: vec![HLSLKind::NUMERIC_FLOAT, HLSLKind::NUMERIC_FLOAT, HLSLKind::NUMERIC_FLOAT],
                 input_mask: InputMask::InheritFromFirstOutput,
-                output_kind: HLSLNumericKind::Float.into(),
+                output_kind: HLSLKind::NUMERIC_FLOAT,
             },
             HLSLOperator::NumericI(NumericIntrinsic::Mad)
         )),
         ("mad_ieee", (
             ALUArgsSpec {
-                input_kinds: vec![HLSLNumericKind::Float.into(), HLSLNumericKind::Float.into(), HLSLNumericKind::Float.into()],
+                input_kinds: vec![HLSLKind::NUMERIC_FLOAT, HLSLKind::NUMERIC_FLOAT, HLSLKind::NUMERIC_FLOAT],
                 input_mask: InputMask::InheritFromFirstOutput,
-                output_kind: HLSLNumericKind::Float.into(),
+                output_kind: HLSLKind::NUMERIC_FLOAT,
             },
             HLSLOperator::NumericI(NumericIntrinsic::Mad)
         )),
@@ -180,9 +180,9 @@ lazy_static! {
         // TODO plain "rsq" has weird behaviour - it only computes rsq of the w component.
         ("rsq_vec", (
             ALUArgsSpec {
-                input_kinds: vec![HLSLNumericKind::Float.into()],
+                input_kinds: vec![HLSLKind::NUMERIC_FLOAT],
                 input_mask: InputMask::InheritFromFirstOutput,
-                output_kind: HLSLNumericKind::Float.into(),
+                output_kind: HLSLKind::NUMERIC_FLOAT,
             },
             HLSLOperator::NumericI(NumericIntrinsic::Rsqrt)
         )),
@@ -190,42 +190,42 @@ lazy_static! {
         // exn raises e to the power of x (w component only), exp and exp_vec raise 2 to the power of x
         ("exp_vec", (
             ALUArgsSpec {
-                input_kinds: vec![HLSLNumericKind::Float.into()],
+                input_kinds: vec![HLSLKind::NUMERIC_FLOAT],
                 input_mask: InputMask::InheritFromFirstOutput,
-                output_kind: HLSLNumericKind::Float.into(),
+                output_kind: HLSLKind::NUMERIC_FLOAT,
             },
             HLSLOperator::NumericI(NumericIntrinsic::Exp2)
         )),
         // TODO as for rsq, sqrt operates on component w but sqrt_vec does the whole thing
         ("sqrt_vec", (
             ALUArgsSpec {
-                input_kinds: vec![HLSLNumericKind::Float.into()],
+                input_kinds: vec![HLSLKind::NUMERIC_FLOAT],
                 input_mask: InputMask::InheritFromFirstOutput,
-                output_kind: HLSLNumericKind::Float.into(),
+                output_kind: HLSLKind::NUMERIC_FLOAT,
             },
             HLSLOperator::NumericI(NumericIntrinsic::Sqrt)
         )),
 
-        ("lt", logical_cmp(FauxBooleanOp::Lt, HLSLNumericKind::Float.into())),
-        ("le", logical_cmp(FauxBooleanOp::Le, HLSLNumericKind::Float.into())),
-        ("gt", logical_cmp(FauxBooleanOp::Gt, HLSLNumericKind::Float.into())),
-        ("ge", logical_cmp(FauxBooleanOp::Ge, HLSLNumericKind::Float.into())),
+        ("lt", logical_cmp(FauxBooleanOp::Lt, HLSLKind::NUMERIC_FLOAT)),
+        ("le", logical_cmp(FauxBooleanOp::Le, HLSLKind::NUMERIC_FLOAT)),
+        ("gt", logical_cmp(FauxBooleanOp::Gt, HLSLKind::NUMERIC_FLOAT)),
+        ("ge", logical_cmp(FauxBooleanOp::Ge, HLSLKind::NUMERIC_FLOAT)),
 
-        ("ieq", logical_cmp(FauxBooleanOp::Eq, HLSLKindBitmask::INTEGER.into())),
-        ("ine", logical_cmp(FauxBooleanOp::Ne, HLSLKindBitmask::INTEGER.into())),
-        ("ilt", logical_cmp(FauxBooleanOp::Lt, HLSLKindBitmask::NUMERIC_SINT.into())),
-        ("ige", logical_cmp(FauxBooleanOp::Ge, HLSLKindBitmask::NUMERIC_SINT.into())),
-        ("ult", logical_cmp(FauxBooleanOp::Lt, HLSLKindBitmask::NUMERIC_UINT.into())),
-        ("uge", logical_cmp(FauxBooleanOp::Ge, HLSLKindBitmask::NUMERIC_UINT.into())),
+        ("ieq", logical_cmp(FauxBooleanOp::Eq, HLSLKind::INTEGER)),
+        ("ine", logical_cmp(FauxBooleanOp::Ne, HLSLKind::INTEGER)),
+        ("ilt", logical_cmp(FauxBooleanOp::Lt, HLSLKind::NUMERIC_SINT)),
+        ("ige", logical_cmp(FauxBooleanOp::Ge, HLSLKind::NUMERIC_SINT)),
+        ("ult", logical_cmp(FauxBooleanOp::Lt, HLSLKind::NUMERIC_UINT)),
+        ("uge", logical_cmp(FauxBooleanOp::Ge, HLSLKind::NUMERIC_UINT)),
 
         ("iand", logical_op(BinaryArithmeticOp::BitwiseAnd)),
         ("ior", logical_op(BinaryArithmeticOp::BitwiseOr)),
         ("ixor", logical_op(BinaryArithmeticOp::BitwiseXor)),
         ("inot", (
             ALUArgsSpec {
-                input_kinds: vec![HLSLKindBitmask::INTEGER.into()],
+                input_kinds: vec![HLSLKind::INTEGER],
                 input_mask: InputMask::InheritFromFirstOutput,
-                output_kind: HLSLKindBitmask::INTEGER.into(),
+                output_kind: HLSLKind::INTEGER,
             },
             HLSLOperator::Unary(UnaryOp::BinaryNot)
         )),
@@ -236,9 +236,9 @@ lazy_static! {
                 // second and third input could be anything, output kind could be anything
                 // they should all be the same length! (page 7-154)
                 // can do cmov_logical r0.xyz r1.xyz r2.xyz r3.xyz: r3.x = r2.x if r0.x else r1.x and so forth for x,y,z
-                input_kinds: vec![HLSLNumericKind::UnsignedInt.into(), HLSLKindBitmask::all().into(), HLSLKindBitmask::all().into()],
+                input_kinds: vec![HLSLKind::NUMERIC_UINT, HLSLKind::ALL, HLSLKind::ALL],
                 input_mask: InputMask::InheritFromFirstOutput,
-                output_kind: HLSLKindBitmask::all().into(),
+                output_kind: HLSLKind::ALL,
             },
             HLSLOperator::FauxBoolean(FauxBooleanOp::Ternary)
         )),
@@ -274,10 +274,10 @@ pub fn parse_alu<'a>(
             let arg_spec = ALUArgsSpec {
                 input_kinds: vec![
                     HLSLConcreteKind::Texture2D.into(),
-                    HLSLNumericKind::Float.into(),
+                    HLSLKind::NUMERIC_FLOAT,
                 ],
                 input_mask: InputMask::TruncateTo(2),
-                output_kind: HLSLNumericKind::Float.into(),
+                output_kind: HLSLKind::NUMERIC_FLOAT,
             };
 
             return Ok((data, ALUInstruction {

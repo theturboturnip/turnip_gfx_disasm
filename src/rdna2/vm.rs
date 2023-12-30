@@ -72,7 +72,7 @@ impl VMVectorNameRef for RDNA2DataRef {
 
     fn base_hlsl_kind(&self) -> crate::hlsl::types::HLSLKind {
         // TODO check this is right
-        HLSLKindBitmask::NUMERIC.into()
+        HLSLKind::NUMERIC
     }
 }
 impl VMDataRef<RDNA2DataRef> for RDNA2DataRef {

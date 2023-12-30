@@ -20,7 +20,7 @@
 
 use arrayvec::ArrayVec;
 
-use crate::{abstract_machine::{VMName, vector::VectorComponent, VMScalar, VMVector}, hlsl::{syntax::{HLSLOperator, Operator}, kinds::{HLSLKind, HLSLOperandKind, HLSLKindBitmask, KindRefinementResult}, HLSLRegister}};
+use crate::{abstract_machine::{VMName, vector::VectorComponent, VMScalar, VMVector}, hlsl::{syntax::{HLSLOperator, Operator}, kinds::{HLSLKind, HLSLOperandKind, KindRefinementResult}, HLSLRegister}};
 
 use super::find_common;
 
@@ -105,9 +105,9 @@ impl<TReg: Reg> Vector<TReg> {
                 Scalar::Literal(..) | Scalar::Expr { .. } => unreachable!(),
                 Scalar::Component(_, c) => c,
             }).collect();
-            Self::PureSwizzle(reg.clone(), comps, HLSLKindBitmask::ALL.into())
+            Self::PureSwizzle(reg.clone(), comps, HLSLKind::ALL)
         } else {
-            Self::Construction(scalars, HLSLKindBitmask::ALL.into())
+            Self::Construction(scalars, HLSLKind::ALL)
         };
 
         v.recompute_output_kind_from_internal_output_kinds();
@@ -527,7 +527,7 @@ pub enum Scalar<TReg: Reg> {
 impl<TReg: Reg> Scalar<TReg> {
     pub fn output_kind(&self) -> HLSLKind {
         match self {
-            Scalar::Literal(_) => HLSLKindBitmask::NUMERIC.into(),
+            Scalar::Literal(_) => HLSLKind::NUMERIC,
             Scalar::Component(reg, _) => reg.output_kind(),
             Scalar::Expr { op, inputs, output_kind } => *output_kind,
         }
@@ -578,7 +578,7 @@ impl<TReg: Reg> Scalar<TReg> {
     pub fn recompute_output_kind_from_internal_output_kinds(&mut self) -> HLSLKind {
         match self {
             Scalar::Component(reg, _) => reg.output_kind(),
-            Scalar::Literal(_) => HLSLKindBitmask::NUMERIC.into(),
+            Scalar::Literal(_) => HLSLKind::NUMERIC,
             Scalar::Expr { op, inputs, output_kind } => {
                 let old_output_kind = *output_kind;
                 for (input, input_usage) in inputs.iter_mut() {

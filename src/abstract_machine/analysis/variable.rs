@@ -412,7 +412,7 @@ impl VariableState {
                     let (mut var, var_comp) = self.scalar_map.lookup(reg.clone(), reg_comp).expect("Tried to use unencountered original scalars in an IF");
                     var.refine_output_kind_if_possible(usage);
                     (var, var_comp)
-                }, HLSLKindBitmask::INTEGER.into());
+                }, HLSLKind::INTEGER);
                 // 2. make a checkpoint for the scalar mapping
                 self.scalar_map.push_scope();
                 // 3. translate the IF block
@@ -475,14 +475,14 @@ impl VariableState {
         //         // once kinds are already consistent (so if an output uses NUMERIC mask, the inputs must all use NUMERIC mask)
         //         Action::Assign { output, inputs, .. } => {
         //             output.1 = match Self::get_consistent_kind(&output.0, output.1).mask() {
-        //                 HLSLKindBitmask::NUMERIC => HLSLKindBitmask::NUMERIC_FLOAT.into(),
-        //                 HLSLKindBitmask::INTEGER => HLSLKindBitmask::NUMERIC_UINT.into(),
+        //                 HLSLKindBitmask::NUMERIC => HLSLKind::NUMERIC_FLOAT,
+        //                 HLSLKindBitmask::INTEGER => HLSLKind::NUMERIC_UINT,
         //                 mask => mask.into(),
         //             };
         //             for (var_vec, vec_kind) in inputs {
         //                 *vec_kind = match Self::get_consistent_kind(var_vec, *vec_kind).mask() {
-        //                     HLSLKindBitmask::NUMERIC => HLSLKindBitmask::NUMERIC_FLOAT.into(),
-        //                     HLSLKindBitmask::INTEGER => HLSLKindBitmask::NUMERIC_UINT.into(),
+        //                     HLSLKindBitmask::NUMERIC => HLSLKind::NUMERIC_FLOAT,
+        //                     HLSLKindBitmask::INTEGER => HLSLKind::NUMERIC_UINT,
         //                     mask => mask.into(),
         //                 };
         //             }
@@ -517,7 +517,7 @@ impl VariableState {
             Action::If { expr, if_true, if_fals } => {
                 let expr = expr.map_scalar(&mut |var, comp, _| {
                     self.resolve(var, comp)
-                }, HLSLKindBitmask::ALL.into());
+                }, HLSLKind::ALL);
                 let if_true = if_true.iter().map(|a| self.resolve_action(a)).collect();
                 let if_fals = if_fals.iter().map(|a| self.resolve_action(a)).collect();
                 Action::If { expr, if_true, if_fals }

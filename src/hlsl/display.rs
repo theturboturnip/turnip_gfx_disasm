@@ -241,7 +241,7 @@ impl std::fmt::Display for HLSLAction {
                 write!(f, "discard;")
             }
             Self::If { expr, if_true, if_fals } => {
-                write!(f, "if ({}) {{\n", DWrap((expr, HLSLKindBitmask::INTEGER.into())))?;
+                write!(f, "if ({}) {{\n", DWrap((expr, HLSLKind::INTEGER)))?;
                 for i in if_true {
                     write!(f, "\t{}\n", i)?;
                 }

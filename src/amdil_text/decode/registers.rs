@@ -125,9 +125,9 @@ impl AMDILContext {
             Scalar::Expr {
                 op: HLSLOperator::Unary(UnaryOp::Negate),
                 inputs: vec![
-                    (s, HLSLKindBitmask::NUMERIC.into()),
+                    (s, HLSLKind::NUMERIC),
                 ],
-                output_kind: HLSLKindBitmask::NUMERIC.into()
+                output_kind: HLSLKind::NUMERIC
             }
         } else { s };
         // 9. clamp  -  clamps  the  value

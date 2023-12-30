@@ -182,7 +182,7 @@ impl Operator for HLSLOperator {
             HLSLOperator::Assign => OperatorKindspec::new(
                 vec![HLSLOperandKind::Hole(0)],
                 HLSLOperandKind::Hole(0),
-                vec![HLSLKindBitmask::all().into()],
+                vec![HLSLKind::ALL],
             ),
             HLSLOperator::Unary(x) => x.get_kindspec(),
             HLSLOperator::Arithmetic(x) => x.get_kindspec(),
@@ -294,7 +294,7 @@ impl Operator for ArithmeticOp {
         OperatorKindspec::new(
             vec![HLSLOperandKind::Hole(0), HLSLOperandKind::Hole(0)],
             HLSLOperandKind::Hole(0),
-            vec![HLSLKindBitmask::NUMERIC.into()],
+            vec![HLSLKind::NUMERIC],
         )
     }
 
@@ -330,7 +330,7 @@ impl Operator for BinaryArithmeticOp {
             OperatorKindspec::new(
                 vec![HLSLOperandKind::Hole(0), HLSLOperandKind::Hole(0)],
                 HLSLOperandKind::Hole(0),
-                vec![HLSLKindBitmask::INTEGER.into()],
+                vec![HLSLKind::INTEGER],
             )
         } else {
             // Left input = the thing getting modified
@@ -341,7 +341,7 @@ impl Operator for BinaryArithmeticOp {
                     HLSLNumericKind::UnsignedInt.into(),
                 ],
                 HLSLOperandKind::Hole(0),
-                vec![HLSLKindBitmask::INTEGER.into()],
+                vec![HLSLKind::INTEGER],
             )
         }
     }
@@ -362,7 +362,7 @@ impl Operator for NumericCastTo {
         OperatorKindspec::new(
             vec![HLSLOperandKind::Hole(0)],
             self.0.into(),
-            vec![HLSLKindBitmask::NUMERIC.into()],
+            vec![HLSLKind::NUMERIC],
         )
     }
 
@@ -429,17 +429,17 @@ impl Operator for NumericIntrinsic {
             Self::Min | Self::Max | Self::Dot => OperatorKindspec::new(
                 vec![HLSLOperandKind::Hole(0), HLSLOperandKind::Hole(0)],
                 HLSLOperandKind::Hole(0),
-                vec![HLSLKindBitmask::NUMERIC.into()],
+                vec![HLSLKind::NUMERIC],
             ),
             Self::Mad => OperatorKindspec::new(
                 vec![HLSLOperandKind::Hole(0), HLSLOperandKind::Hole(0), HLSLOperandKind::Hole(0)],
                 HLSLOperandKind::Hole(0),
-                vec![HLSLKindBitmask::NUMERIC.into()],
+                vec![HLSLKind::NUMERIC],
             ),
             Self::Sqrt | Self::Rsqrt | Self::Exp | Self::Exp2 => OperatorKindspec::new(
                 vec![HLSLOperandKind::Hole(0)],
                 HLSLOperandKind::Hole(0),
-                vec![HLSLKindBitmask::NUMERIC_FLOAT.into()],
+                vec![HLSLKind::NUMERIC_FLOAT],
             ),
         }
     }
@@ -479,8 +479,8 @@ impl Operator for FauxBooleanOp {
                 vec![HLSLOperandKind::Hole(0), HLSLOperandKind::Hole(0)],
                 HLSLOperandKind::Hole(1),
                 vec![
-                    HLSLKindBitmask::NUMERIC.into(),
-                    HLSLKindBitmask::INTEGER.into(),
+                    HLSLKind::NUMERIC,
+                    HLSLKind::INTEGER,
                 ],
             ),
             Self::Ternary => OperatorKindspec::new(
@@ -491,8 +491,8 @@ impl Operator for FauxBooleanOp {
                 ],
                 HLSLOperandKind::Hole(1),
                 vec![
-                    HLSLKindBitmask::INTEGER.into(),
-                    HLSLKindBitmask::NUMERIC.into(),
+                    HLSLKind::INTEGER,
+                    HLSLKind::NUMERIC,
                 ],
             ),
         }
@@ -525,7 +525,7 @@ impl Operator for ConstructorOp {
             Self::Vec2 => OperatorKindspec::new(
                 vec![HLSLOperandKind::Hole(0), HLSLOperandKind::Hole(0)],
                 HLSLOperandKind::Hole(0),
-                vec![HLSLKindBitmask::NUMERIC.into()],
+                vec![HLSLKind::NUMERIC],
             ),
             Self::Vec3 => OperatorKindspec::new(
                 vec![
@@ -534,7 +534,7 @@ impl Operator for ConstructorOp {
                     HLSLOperandKind::Hole(0),
                 ],
                 HLSLOperandKind::Hole(0),
-                vec![HLSLKindBitmask::NUMERIC.into()],
+                vec![HLSLKind::NUMERIC],
             ),
             Self::Vec4 => OperatorKindspec::new(
                 vec![
@@ -544,7 +544,7 @@ impl Operator for ConstructorOp {
                     HLSLOperandKind::Hole(0),
                 ],
                 HLSLOperandKind::Hole(0),
-                vec![HLSLKindBitmask::NUMERIC.into()],
+                vec![HLSLKind::NUMERIC],
             ),
         }
     }

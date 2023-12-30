@@ -50,7 +50,7 @@ impl VMVectorNameRef for [u64; 4] {
         4
     }
     fn base_hlsl_kind(&self) -> HLSLKind {
-        HLSLKindBitmask::NUMERIC.into()
+        HLSLKind::NUMERIC
     }
 }
 
@@ -114,7 +114,7 @@ impl<T: VMVectorNameRef> VMVectorDataRef<T> for (T, MaskedSwizzle) {
 // impl<T: VMScalar> VectorOf<T> {
 //     pub fn new(ts: &[T]) -> Option<Self> {
 //         assert!(ts.len() > 0);
-//         let kind_mask = ts.iter().fold(Some(HLSLKindBitmask::all().into()), |kind, t| {
+//         let kind_mask = ts.iter().fold(Some(HLSLKind::ALL), |kind, t| {
 //             HLSLKind::intersection(kind?, t.toplevel_kind())
 //         });
 //         Some(Self { ts: ts.iter().map(|t| t.clone()).collect(), common_kind: kind_mask?.into() })
@@ -150,7 +150,7 @@ impl<T: VMVectorNameRef> VMVectorDataRef<T> for (T, MaskedSwizzle) {
 // }
 // impl<T: VMScalar> HoleyVectorOf<T> {
 //     pub fn new(ts: &[Option<T>]) -> Option<Self> {
-//         let kind_mask = ts.iter().fold(Some(HLSLKindBitmask::all().into()), |kind, t| {
+//         let kind_mask = ts.iter().fold(Some(HLSLKind::ALL), |kind, t| {
 //             if let Some(t) = t {
 //                 HLSLKind::intersection(kind?, t.toplevel_kind())
 //             } else {

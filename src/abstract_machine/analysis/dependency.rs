@@ -87,7 +87,7 @@ impl<TVM: AbstractVM> ScalarDependencies<TVM> {
             Action::If { expr, if_true, if_fals, .. } => {
                 // Make `inputs` a dependency on everything touched inside the if_true AND if_fals
                 let mut next_control_flow_inputs = control_flow_inputs.clone();
-                for input_scalar in expr.deps(HLSLKindBitmask::INTEGER.into()) {
+                for input_scalar in expr.deps(HLSLKind::INTEGER) {
                     self.resolve_input_on(&mut next_control_flow_inputs, input_scalar);
                 }
 

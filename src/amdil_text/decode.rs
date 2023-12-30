@@ -48,10 +48,10 @@ fn parse_instruction(ctx: &mut AMDILContext, data: &str) -> Result<Instruction, 
             (data, Instruction::EarlyOut(Scalar::Expr {
                 op: HLSLOperator::FauxBoolean(FauxBooleanOp::Ne),
                 inputs: vec![
-                    (src, HLSLKindBitmask::NUMERIC.into()),
-                    (Scalar::Literal(0), HLSLKindBitmask::NUMERIC.into())
+                    (src, HLSLKind::NUMERIC),
+                    (Scalar::Literal(0), HLSLKind::NUMERIC)
                 ],
-                output_kind: HLSLKindBitmask::NUMERIC.into()
+                output_kind: HLSLKind::NUMERIC
             }))
         },
 

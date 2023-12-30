@@ -40,7 +40,7 @@ impl HLSLCompatibleAbstractVM for AMDILAbstractVM {
             },
             Action::EarlyOut => Action::EarlyOut,
             Action::If { expr, if_true, if_fals } => Action::If {
-                expr: expr.map_reg(&mut |r, _| Self::convert_register(r), HLSLKindBitmask::INTEGER.into()),
+                expr: expr.map_reg(&mut |r, _| Self::convert_register(r), HLSLKind::INTEGER),
                 if_true: if_true.into_iter().map(Self::convert_action).collect(),
                 if_fals: if_fals.into_iter().map(Self::convert_action).collect()
             },
@@ -89,8 +89,8 @@ impl VMName for AMDILRegister {
 
     fn toplevel_kind(&self) -> HLSLKind {
         match self {
-            Self::Texture(_) => HLSLKindBitmask::TEXTURE2D.into(),
-            _ => HLSLKindBitmask::NUMERIC.into(),
+            Self::Texture(_) => HLSLKind::TEXTURE2D,
+            _ => HLSLKind::NUMERIC,
         }
     }
 }

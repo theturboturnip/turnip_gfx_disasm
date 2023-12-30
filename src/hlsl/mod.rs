@@ -39,10 +39,10 @@ impl VMName for HLSLRegister {
 
     fn toplevel_kind(&self) -> HLSLKind {
         match self {
-            HLSLRegister::Texture(_) => HLSLKindBitmask::TEXTURE2D.into(),
-            HLSLRegister::GenericRegister(..) => HLSLKindBitmask::NUMERIC.into(),
-            HLSLRegister::ShaderInput(..) => HLSLKindBitmask::NUMERIC.into(),
-            HLSLRegister::ShaderOutput(..) => HLSLKindBitmask::NUMERIC.into(),
+            HLSLRegister::Texture(_) => HLSLKind::TEXTURE2D,
+            HLSLRegister::GenericRegister(..) => HLSLKind::NUMERIC,
+            HLSLRegister::ShaderInput(..) => HLSLKind::NUMERIC,
+            HLSLRegister::ShaderOutput(..) => HLSLKind::NUMERIC,
             HLSLRegister::ArrayElement { of, idx: _ } => of.toplevel_kind(),
         }
     }

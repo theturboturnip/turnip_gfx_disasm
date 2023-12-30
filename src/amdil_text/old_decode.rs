@@ -121,7 +121,7 @@ pub fn push_instruction_actions(
         Instruction::EarlyOut(inputs) => {
             let args: Result<Vec<(AMDILMaskSwizVector, HLSLKind)>, AMDILTextDecodeError> =
                 inputs.iter().map(|a| {
-                    Ok((ctx.arg_as_vector_data_ref(a)?, HLSLKindBitmask::NUMERIC.into()))
+                    Ok((ctx.arg_as_vector_data_ref(a)?, HLSLKind::NUMERIC))
                 }).collect();
             let args = args.unwrap();
             assert_eq!(args.len(), 1);
