@@ -411,6 +411,10 @@ pub enum NumericIntrinsic {
     Dot,
     Min,
     Max,
+    /// Multiply-add
+    Mad,
+    /// Reciporical of the square root - per component
+    Rsqrt,
 }
 impl Operator for NumericIntrinsic {
     fn get_kindspec(&self) -> OperatorKindspec {
@@ -421,12 +425,24 @@ impl Operator for NumericIntrinsic {
                 HLSLOperandKind::Hole(0),
                 vec![HLSLKindBitmask::NUMERIC.into()],
             ),
+            Self::Mad => OperatorKindspec::new(
+                vec![HLSLOperandKind::Hole(0), HLSLOperandKind::Hole(0), HLSLOperandKind::Hole(0)],
+                HLSLOperandKind::Hole(0),
+                vec![HLSLKindBitmask::NUMERIC.into()],
+            ),
+            Self::Rsqrt => OperatorKindspec::new(
+                vec![HLSLOperandKind::Hole(0)],
+                HLSLOperandKind::Hole(0),
+                vec![HLSLKindBitmask::NUMERIC.into()], // TODO this only really makes sense for float...
+            ),
         }
     }
 
     fn n_inputs(&self) -> usize {
         match self {
             Self::Min | Self::Max | Self::Dot => 2,
+            Self::Mad => 3,
+            Self::Rsqrt => 1,
         }
     }
 
@@ -434,7 +450,7 @@ impl Operator for NumericIntrinsic {
         // v3 = max(v1, v2)
         // implies v3.x = max(v1.x, v2.x) etc
         match self {
-            Self::Min | Self::Max => SimpleDependencyRelation::PerComponent,
+            Self::Min | Self::Max | Self::Mad | Self::Rsqrt => SimpleDependencyRelation::PerComponent,
             Self::Dot => SimpleDependencyRelation::AllToAll,
         }
     }
@@ -442,6 +458,8 @@ impl Operator for NumericIntrinsic {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum FauxBooleanOp {
+    Eq,
+    Ne,
     Lt,
     Le,
     Gt,
@@ -451,7 +469,7 @@ pub enum FauxBooleanOp {
 impl Operator for FauxBooleanOp {
     fn get_kindspec(&self) -> OperatorKindspec {
         match self {
-            Self::Lt | Self::Le | Self::Gt | Self::Ge => OperatorKindspec::new(
+            Self::Eq | Self::Ne | Self::Lt | Self::Le | Self::Gt | Self::Ge => OperatorKindspec::new(
                 vec![HLSLOperandKind::Hole(0), HLSLOperandKind::Hole(0)],
                 HLSLOperandKind::Hole(1),
                 vec![
@@ -476,7 +494,7 @@ impl Operator for FauxBooleanOp {
 
     fn n_inputs(&self) -> usize {
         match self {
-            Self::Lt | Self::Le | Self::Gt | Self::Ge => 2,
+            Self::Eq | Self::Ne | Self::Lt | Self::Le | Self::Gt | Self::Ge => 2,
             Self::Ternary => 3,
         }
     }

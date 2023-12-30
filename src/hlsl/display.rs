@@ -153,15 +153,39 @@ impl<'a, T: 'a> std::fmt::Display for DWrap<(&'a HLSLOperator, &'a Vec<T>)> wher
                 }
             },
             HLSLOperator::NumericI(intr) => {
-                assert_eq!(inputs.len(), 2);
                 match intr {
-                    super::syntax::NumericIntrinsic::Dot => write!(f, "dot({}, {})", DWrap(&inputs[0]), DWrap(&inputs[1])),
-                    super::syntax::NumericIntrinsic::Min => write!(f, "min({}, {})", DWrap(&inputs[0]), DWrap(&inputs[1])),
-                    super::syntax::NumericIntrinsic::Max => write!(f, "max({}, {})", DWrap(&inputs[0]), DWrap(&inputs[1])),
+                    super::syntax::NumericIntrinsic::Dot => {
+                        assert_eq!(inputs.len(), 2);
+                        write!(f, "dot({}, {})", DWrap(&inputs[0]), DWrap(&inputs[1]))
+                    },
+                    super::syntax::NumericIntrinsic::Min => {
+                        assert_eq!(inputs.len(), 2);
+                        write!(f, "min({}, {})", DWrap(&inputs[0]), DWrap(&inputs[1]))
+                    },
+                    super::syntax::NumericIntrinsic::Max => {
+                        assert_eq!(inputs.len(), 2);
+                        write!(f, "max({}, {})", DWrap(&inputs[0]), DWrap(&inputs[1]))
+                    },
+                    super::syntax::NumericIntrinsic::Mad => {
+                        assert_eq!(inputs.len(), 3);
+                        write!(f, "mad({}, {}, {})", DWrap(&inputs[0]), DWrap(&inputs[1]), DWrap(&inputs[2]))
+                    },
+                    super::syntax::NumericIntrinsic::Rsqrt => {
+                        assert_eq!(inputs.len(), 1);
+                        write!(f, "rsqrt({})", DWrap(&inputs[0]))
+                    },
                 }
             },
             HLSLOperator::FauxBoolean(b) => {
                 match b {
+                    crate::hlsl::syntax::FauxBooleanOp::Eq => {
+                        assert_eq!(inputs.len(), 2);
+                        write!(f, "{} == {}", DWrap(&inputs[0]), DWrap(&inputs[1]))
+                    },
+                    crate::hlsl::syntax::FauxBooleanOp::Ne => {
+                        assert_eq!(inputs.len(), 2);
+                        write!(f, "{} != {}", DWrap(&inputs[0]), DWrap(&inputs[1]))
+                    },
                     crate::hlsl::syntax::FauxBooleanOp::Lt => {
                         assert_eq!(inputs.len(), 2);
                         write!(f, "{} < {}", DWrap(&inputs[0]), DWrap(&inputs[1]))
