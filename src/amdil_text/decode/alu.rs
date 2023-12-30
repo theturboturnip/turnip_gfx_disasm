@@ -253,6 +253,8 @@ lazy_static! {
         ("le", logical_cmp(FauxBooleanOp::Le, HLSLKind::NUMERIC_FLOAT)),
         ("gt", logical_cmp(FauxBooleanOp::Gt, HLSLKind::NUMERIC_FLOAT)),
         ("ge", logical_cmp(FauxBooleanOp::Ge, HLSLKind::NUMERIC_FLOAT)),
+        ("eq", logical_cmp(FauxBooleanOp::Eq, HLSLKind::NUMERIC_FLOAT)),
+        ("ne", logical_cmp(FauxBooleanOp::Ne, HLSLKind::NUMERIC_FLOAT)),
 
         ("ieq", logical_cmp(FauxBooleanOp::Eq, HLSLKind::INTEGER)),
         ("ine", logical_cmp(FauxBooleanOp::Ne, HLSLKind::INTEGER)),
