@@ -1,6 +1,6 @@
 use nom::{
     branch::alt,
-    bytes::complete::{tag, take_until1, take_while, take_while1},
+    bytes::complete::{tag, take_until1, take_while, take_while1, take},
     character::complete::anychar,
     combinator::{complete, opt},
     multi::{many0, many_m_n, separated_list1, many1},
@@ -326,12 +326,47 @@ fn parse_named_arg_mod(data: &str) -> NomGrammarResult<SrcMod> {
     alt((parse_swizzle_srcmod, parse_plaintext_srcmod, parse_negate_srcmod, parse_divcomp_srcmod))(data)
 }
 fn parse_swizzle_srcmod(data: &str) -> NomGrammarResult<SrcMod> {
-    // TODO augh. ambiguity with underscores
+    // Initially this seems simple. A source swizzle is `.[xyzw_01]{4}`, right?
+    // Well, no. Some instructions choose to omit certain parts!
+    // Examples from the AMDIL doc (Section 3.5) (note these are actually destinations but I have seen instances of these outside):
+    // mov r0.x, r1
+    // mov r0.y r1
+    // mov r0.z r1
+    // mov r0.x_zw, r1
+    // mov r0.y_w, r1
+    // mov r0.__w, r1
+    // mov r0._1_w, r1
+    // mov r0.01z, r1
+    // mov r0.01z1, r1
+    // mov r0.11, r1
+    // mov r0._11, r1
+    // mov r0.__11, r1
+    // mov r0.xyz1, r1
+    // mov r0_1_0, r1
+    // mov r0.11_0, r1
+    // mov r0.y00, r1
+    // mov r0.yz1, r1
+    // mov r0.y_1, r1
+    //
+    // Note that r0.x is possible - the AMDIL binary spec implies that that means the .x is equivalent to .xxxx
+    // r0.11 implies that a two-spread is possible - I'm assuming that means the other components don't exist and must not be used.
+    // r0.yz1 implies a three-spread is possible - again I don't see any clear reasoning for what the fourth component would be.
+    // 
+    // The other issue is underscore ambiguity.
     // cb2[4].y_neg(xyzw)
-    // is the _ part of the swizzle or the neg?
+    // is the _ part of the swizzle or the neg modifier?
+    // We assume when parsing modifiers that the _ is included in front of the `neg`.
+    // So when we do the parsing here we have to ignore the final _... *sometimes*.
+    // I make the assumption that any swizzle .xyz_ will always be represented with .xyz in AMDIL,
+    // and indeed that any swizzle with a final _ will never use it.
+    // r0.x___ -> r0.x (although this does allow .x to be used elsewhere...)
+    // r0.xy__ -> r0.xy
+    // r0.xyz_ -> r0.xyz
+    //
+    // If we make this assumption then we can special-case any time we see a swizzle with a final _.
 
     // `.[xyzw_]{1,4}`
-    let (data, _) = tag(".")(data)?;
+    let (post_dot_data, _) = tag(".")(data)?;
     let swizzle_parser = |data| {
         let (data, c) = anychar(data)?;
         let comp = match c {
@@ -345,15 +380,22 @@ fn parse_swizzle_srcmod(data: &str) -> NomGrammarResult<SrcMod> {
         };
         Ok((data, comp))
     };
-    let (data, comps) = many_m_n(1, 4, swizzle_parser)(data)?;
+    let (_, mut comps) = many_m_n(1, 4, swizzle_parser)(post_dot_data)?;
+    // Pop off any final _s
+    while comps.last().unwrap().is_none() {
+        comps.pop().unwrap();
+    }
+    // Calculate the new position in the stream as (number of components actually taken) after the dot
+    let (data, _) = take(comps.len())(post_dot_data)?;
 
     let comps = match comps.len() {
-        // "r0.x" is equivalent to "r0.xxxx"
+        // r0.x -> r0.xxxx
         1 => [comps[0], comps[0], comps[0], comps[0]],
-        // TODO should these have similar overrides
+        // r0.xy -> r0.xy__
         2 => [comps[0], comps[1], None, None],
+        // r0.xyz -> r0.xyz_
         3 => [comps[0], comps[1], comps[2], None],
-        // When they're all specified it's easy
+        // r0.xyzw = r0.xyzw
         4 => [comps[0], comps[1], comps[2], comps[3]],
         other => panic!(
             "impossible length returned by nom parser for swizzle: {}",
