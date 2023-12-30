@@ -67,16 +67,18 @@ fn parse_instruction(ctx: &mut AMDILContext, data: &str) -> Result<Instruction, 
 
 fn parse_declare<'a>(ctx: &mut AMDILContext, data: &'a str, instr: String, ctrl_specifiers: Vec<CtrlSpec>, mods: Vec<DstMod>) -> Result<(&'a str, Instruction), AMDILError> {
     let (data, dst) = parse_dst(data, mods)?;
-    let len = match &dst.write_mask {
-        &[DstWrite::Write, DstWrite::NoWrite, DstWrite::NoWrite, DstWrite::NoWrite] => 1,
-        &[DstWrite::Write, DstWrite::Write, DstWrite::NoWrite, DstWrite::NoWrite] => 2,
-        &[DstWrite::Write, DstWrite::Write, DstWrite::Write, DstWrite::NoWrite] => 3,
-        &[DstWrite::Write, DstWrite::Write, DstWrite::Write, DstWrite::Write] => 4,
-        _ => return Err(AMDILError::InstructionError(
-            "bad swizzle for declaration",
-            instr.clone(),
-        ))
-    };
+    // This is usually .x, .xy, .xyz, .xyzw; but if one of the components is unused then it can also be v1._yzw.
+    // The length of the vector = the maximum index of a written component + 1
+    let len = dst.write_mask
+        .iter()
+        .enumerate()
+        .filter_map(|(i, dstwrite)| {
+            match dstwrite {
+                DstWrite::Write => Some(i),
+                DstWrite::NoWrite => None,
+            }
+        })
+        .max().unwrap() as u8 + 1;
     match instr.as_str() {
         "dcl_cb" => {
             assert_eq!(dst.regid.rel_addrs.len(), 1);
