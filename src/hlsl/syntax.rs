@@ -425,6 +425,12 @@ pub enum NumericIntrinsic {
     Saturate,
     /// Absolute value (sint or float)
     Abs,
+    /// Log base-e
+    Log,
+    /// Log base-2
+    Log2,
+    /// Log base-10
+    Log10,
 }
 impl Operator for NumericIntrinsic {
     fn get_kindspec(&self) -> OperatorKindspec {
@@ -440,7 +446,7 @@ impl Operator for NumericIntrinsic {
                 HLSLOperandKind::Hole(0),
                 vec![HLSLKind::NUMERIC],
             ),
-            Self::Sqrt | Self::Rsqrt | Self::Exp | Self::Exp2 | Self::Saturate => OperatorKindspec::new(
+            Self::Sqrt | Self::Rsqrt | Self::Exp | Self::Exp2 | Self::Saturate | Self::Log | Self::Log10 | Self::Log2 => OperatorKindspec::new(
                 vec![HLSLOperandKind::Hole(0)],
                 HLSLOperandKind::Hole(0),
                 vec![HLSLKind::NUMERIC_FLOAT],
@@ -457,7 +463,7 @@ impl Operator for NumericIntrinsic {
         match self {
             Self::Min | Self::Max | Self::Dot => 2,
             Self::Mad => 3,
-            Self::Sqrt | Self::Rsqrt | Self::Exp | Self::Exp2 | Self::Saturate | Self::Abs => 1,
+            Self::Sqrt | Self::Rsqrt | Self::Exp | Self::Exp2 | Self::Saturate | Self::Abs | Self::Log | Self::Log10 | Self::Log2 => 1,
         }
     }
 
@@ -465,7 +471,7 @@ impl Operator for NumericIntrinsic {
         // v3 = max(v1, v2)
         // implies v3.x = max(v1.x, v2.x) etc
         match self {
-            Self::Min | Self::Max | Self::Mad | Self::Sqrt | Self::Rsqrt | Self::Exp | Self::Exp2 | Self::Saturate | Self::Abs => SimpleDependencyRelation::PerComponent,
+            Self::Min | Self::Max | Self::Mad | Self::Sqrt | Self::Rsqrt | Self::Exp | Self::Exp2 | Self::Saturate | Self::Abs | Self::Log | Self::Log10 | Self::Log2 => SimpleDependencyRelation::PerComponent,
             Self::Dot => SimpleDependencyRelation::AllToAll,
         }
     }

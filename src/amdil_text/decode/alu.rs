@@ -205,6 +205,15 @@ lazy_static! {
             },
             HLSLOperator::NumericI(NumericIntrinsic::Sqrt)
         )),
+        // TODO as for rsq, log operates on component w but log_vec does the whole thing
+        ("log_vec", (
+            ALUArgsSpec {
+                input_kinds: vec![HLSLKind::NUMERIC_FLOAT],
+                input_mask: InputMask::InheritFromFirstOutput,
+                output_kind: HLSLKind::NUMERIC_FLOAT,
+            },
+            HLSLOperator::NumericI(NumericIntrinsic::Log2)
+        )),
 
         ("lt", logical_cmp(FauxBooleanOp::Lt, HLSLKind::NUMERIC_FLOAT)),
         ("le", logical_cmp(FauxBooleanOp::Le, HLSLKind::NUMERIC_FLOAT)),
