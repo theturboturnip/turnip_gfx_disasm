@@ -1,6 +1,6 @@
 use std::fmt::{Display, Formatter};
 
-use crate::abstract_machine::{vector::VectorComponent, VMVector, VMName, expr::{HLSLScalar, HLSLVector, Vector, ContigSwizzle}};
+use crate::abstract_machine::{vector::VectorComponent, VMVector, VMName, expr::{HLSLScalar, HLSLVector, Vector, ContigSwizzle, Reg}};
 
 use super::{
     kinds::{HLSLConcreteKind, HLSLKind, HLSLKindBitmask, HLSLNumericKind}, HLSLRegister, HLSLAction, syntax::HLSLOperator,
@@ -19,10 +19,13 @@ impl std::fmt::Display for HLSLRegister {
         }
     }
 }
-fn display_scalar_kind(f: &mut Formatter<'_>, scalar: &HLSLScalar) -> std::fmt::Result {
+fn display_scalar_kind(f: &mut Formatter<'_>, scalar: &HLSLScalar, usage_kind: &HLSLKind) -> std::fmt::Result {
     match scalar {
-        HLSLScalar::Expr { op, inputs, output_kind } => write!(f, "{}", DWrap((op, inputs))),
-        HLSLScalar::Component(reg, comp, usage_kind) => {
+        HLSLScalar::Expr { op, inputs, output_kind } => {
+            // TODO add cast if output_kind != usage_kind
+            write!(f, "{}", DWrap((op, inputs)))
+        },
+        HLSLScalar::Component(reg, comp) => {
             let minimum_kind = usage_kind.intersection(reg.toplevel_kind());
             if minimum_kind.is_none() {
                 write!(f, "({})", usage_kind)?;
@@ -35,7 +38,7 @@ fn display_scalar_kind(f: &mut Formatter<'_>, scalar: &HLSLScalar) -> std::fmt::
                 VectorComponent::W => write!(f, "w"),
             }
         }
-        HLSLScalar::Literal(val, usage_kind) => {
+        HLSLScalar::Literal(val) => {
             match usage_kind.mask() {
                 HLSLKindBitmask::NUMERIC_FLOAT => write!(f, "{:?}f", f32::from_bits(*val as u32)),
                 HLSLKindBitmask::NUMERIC_SINT => write!(f, "{}", *val),
@@ -48,9 +51,14 @@ fn display_scalar_kind(f: &mut Formatter<'_>, scalar: &HLSLScalar) -> std::fmt::
         },
     }
 }
-impl std::fmt::Display for DWrap<&HLSLScalar> {
+impl std::fmt::Display for DWrap<(&HLSLScalar, HLSLKind)> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        display_scalar_kind(f, self.0)
+        display_scalar_kind(f, self.0.0, &self.0.1)
+    }
+}
+impl std::fmt::Display for DWrap<&(HLSLScalar, HLSLKind)> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        display_scalar_kind(f, &self.0.0, &self.0.1)
     }
 }
 // TODO take usage_kind and cast if necessary?
@@ -61,23 +69,24 @@ fn display_vector_pure_swizzle(f: &mut Formatter<'_>, reg: &HLSLRegister, comps:
     }
     Ok(())
 }
-fn display_vector_kind(f: &mut Formatter<'_>, v: &HLSLVector) -> std::fmt::Result {
+fn display_vector_kind(f: &mut Formatter<'_>, v: &HLSLVector, usage_kind: &HLSLKind) -> std::fmt::Result {
+    // TODO cast things if usage_kind != output_kind
     match v {
-        Vector::Construction(scalars, usage_kind) => if scalars.len() == 1 {
-            write!(f, "{}", DWrap(&scalars[0]))
+        Vector::Construction(scalars, output_kind) => if scalars.len() == 1 {
+            write!(f, "{}", DWrap((&scalars[0], *output_kind)))
         } else {
-            write!(f, "{}{}(", usage_kind, v.n_components().unwrap())?;
+            write!(f, "{}{}(", output_kind, v.n_components().unwrap())?;
             let mut first = true;
             for scalar in scalars.iter() {
                 if !first {
                     write!(f, ", ")?;
                 }
-                write!(f, "{}", DWrap(scalar))?;
+                write!(f, "{}", DWrap((scalar, *output_kind)))?;
                 first = false;
             }
             write!(f, ")")
         },
-        Vector::PureSwizzle(reg, comps, _usage_kind) => {
+        Vector::PureSwizzle(reg, comps, _output_kind) => {
             display_vector_pure_swizzle(f, reg, comps)
         },
         // TODO take output_kind and cast if necessary?
@@ -87,9 +96,14 @@ fn display_vector_kind(f: &mut Formatter<'_>, v: &HLSLVector) -> std::fmt::Resul
         },
     }
 }
-impl std::fmt::Display for DWrap<&HLSLVector> {
+impl std::fmt::Display for DWrap<&(HLSLVector, HLSLKind)> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        display_vector_kind(f, &self.0)
+        display_vector_kind(f, &self.0.0, &self.0.1)
+    }
+}
+impl std::fmt::Display for DWrap<(&HLSLVector, HLSLKind)> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        display_vector_kind(f, &self.0.0, &self.0.1)
     }
 }
 impl<'a, T: 'a> std::fmt::Display for DWrap<(&'a HLSLOperator, &'a Vec<T>)> where DWrap<&'a T>: std::fmt::Display {
@@ -182,13 +196,13 @@ impl std::fmt::Display for HLSLAction {
             } => {
                 write!(f, "{}{} ", expr.usage_kind(), output.0.n_components())?;
                 display_vector_pure_swizzle(f, &output.0, &output.1)?;
-                write!(f, " = {};", DWrap(expr))
+                write!(f, " = {};", DWrap((expr, output.0.output_kind())))
             }
             Self::EarlyOut => {
                 write!(f, "discard;")
             }
             Self::If { expr, if_true, if_fals } => {
-                write!(f, "if ({}) {{\n", DWrap(expr))?;
+                write!(f, "if ({}) {{\n", DWrap((expr, HLSLKindBitmask::INTEGER.into())))?;
                 for i in if_true {
                     write!(f, "\t{}\n", i)?;
                 }

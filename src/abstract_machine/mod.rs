@@ -4,6 +4,8 @@ use crate::hlsl::kinds::HLSLKind;
 
 use expr::{Vector, Scalar, ContigSwizzle};
 
+use self::expr::Reg;
+
 pub mod analysis;
 pub mod display;
 pub mod instructions;
@@ -88,7 +90,7 @@ pub trait AbstractVM: std::fmt::Debug + Sized {
     // /// The smallest element a VM operates on
     // type Scalar: VMScalar;
     // Scalars may originate from the same location in the VM's mind: e.g. myVector.xyz all come from myVector.
-    type Register: VMVector; 
+    type Register: VMVector + Reg; 
     // /// An arbitrary vector of Scalars that an instruction can operate on.
     // /// An instruction could use vec3(myVector.x, myOtherVector.y, myThirdVector.z) as an argument or an output.
     // type Vector: VMVector;
@@ -98,7 +100,7 @@ pub trait AbstractVM: std::fmt::Debug + Sized {
 }
 
 #[derive(Debug, Clone)]
-pub enum Action<TReg: Clone + PartialEq> {
+pub enum Action<TReg: Reg> {
     /// Assign a value derived from a set of inputs using an [HLSLOperator] to an output.
     ///
     /// The names for all inputs and output must have been previously declared.
@@ -132,6 +134,8 @@ pub trait Decoder<TVM: AbstractVM> {
 }
 
 /// Utility function for determining if all elements collection return the same value when a mapping function is called 
+/// 
+/// TODO: make this handle lifetimes nicely. If i iterate over a pair &'a (x, y) maybe I should be able to find common &'a x?
 pub fn find_common<'a, TIn: 'a, TOut: PartialEq, I: Iterator<Item = &'a TIn>, F: Fn(&TIn) -> Option<TOut>>(mut iter: I, f: F) -> Option<TOut> {
     let init = f(iter.next().unwrap())?;
     for i in iter {

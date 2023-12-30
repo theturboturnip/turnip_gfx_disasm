@@ -57,26 +57,28 @@ pub trait Operator: std::fmt::Debug {
 #[derive(Debug)]
 pub struct OperatorKindspec {
     /// [inputs..., output]
-    operand_types: Vec<HLSLOperandKind>,
+    input_kinds: Vec<HLSLOperandKind>,
+    output_kind: HLSLOperandKind,
     holes: Vec<HLSLKind>,
 }
 impl OperatorKindspec {
     /// Creates a new OperatorKindspec while checking the number of holes is correct
     fn new(
-        input_types: Vec<HLSLOperandKind>,
-        output_type: HLSLOperandKind,
+        input_kinds: Vec<HLSLOperandKind>,
+        output_kind: HLSLOperandKind,
         holes: Vec<HLSLKind>,
     ) -> Self {
-        let mut operand_types = input_types;
-        operand_types.push(output_type);
-
         // Sanity check - make sure the maximum hole ID referenced in any HLSLOperandKind::Hole(id) == the number of elements in `holes`
         let mut max_referenced_hole = None;
-        for operand in operand_types.iter() {
+        for operand in input_kinds.iter() {
             if let HLSLOperandKind::Hole(id) = operand {
                 max_referenced_hole =
                     Some(max_referenced_hole.map_or(*id, |max_hole_id| max(max_hole_id, *id)));
             }
+        }
+        if let HLSLOperandKind::Hole(id) = &output_kind {
+            max_referenced_hole =
+                Some(max_referenced_hole.map_or(*id, |max_hole_id| max(max_hole_id, *id)));
         }
 
         if let Some(max_referenced_hole) = max_referenced_hole {
@@ -86,7 +88,8 @@ impl OperatorKindspec {
         }
 
         OperatorKindspec {
-            operand_types,
+            input_kinds,
+            output_kind,
             holes,
         }
     }
@@ -95,10 +98,26 @@ impl OperatorKindspec {
         &self.holes
     }
 
+    pub fn apply_input_constraints<I: Iterator<Item = HLSLKind>>(&mut self, input_constraints: I) {
+        for (constraint, operand_kind) in input_constraints.zip(self.input_kinds.iter()) {
+            match operand_kind {
+                HLSLOperandKind::Concrete(concrete_kind) => assert!(constraint.intersection((*concrete_kind).into()).is_some()),
+                HLSLOperandKind::Hole(idx) => self.holes[*idx] = self.holes[*idx].intersection(constraint).unwrap(),
+            }
+        }
+    }
+
+    pub fn apply_output_constraint(&mut self, output_constraint: HLSLKind) {
+        match &self.output_kind {
+            HLSLOperandKind::Concrete(concrete_kind) => assert!(output_constraint.intersection((*concrete_kind).into()).is_some()),
+            HLSLOperandKind::Hole(idx) => self.holes[*idx] = self.holes[*idx].intersection(output_constraint).unwrap(),
+        }
+    }
+
     /// Return a vector of HLSLKind masks corresponding to the input arguments.
     /// Does not consider the actual types of the other arguments or do any type coercion logic.
     pub fn get_basic_input_types(&self) -> Vec<HLSLKind> {
-        self.input_types()
+        self.input_kinds
             .iter()
             .map(|t| -> HLSLKind {
                 match t {
@@ -111,41 +130,41 @@ impl OperatorKindspec {
 
     /// [get_basic_input_types] but for the output type.
     pub fn get_basic_output_type(&self) -> HLSLKind {
-        match self.output_type() {
+        match &self.output_kind {
             HLSLOperandKind::Concrete(c) => (*c).into(),
             HLSLOperandKind::Hole(h) => self.holes[*h],
         }
     }
 
-    /// Return a vector of reverse type mappings.
-    ///
-    /// Each element in the returned vector is either
-    /// - (concrete HLSLKind, [operand index]) or
-    /// - (hole HLSLKind, [operands associated with hole])
-    ///
-    /// The second type implies all of the operands should have the same hole type.
-    pub fn get_type_constraints(&self) -> Vec<(HLSLKind, Vec<usize>)> {
-        // Create hole mappings at the same indices HLSLOperandKind::Hole will refer to
-        let mut mappings: Vec<_> = self.holes.iter().map(|t| (*t, vec![])).collect();
-        for (i, t) in self.operand_types.iter().enumerate() {
-            match t {
-                HLSLOperandKind::Hole(h) => mappings[*h].1.push(i),
-                HLSLOperandKind::Concrete(c) => mappings.push(((*c).into(), vec![i])),
-            }
-        }
+    // /// Return a vector of reverse type mappings.
+    // ///
+    // /// Each element in the returned vector is either
+    // /// - (concrete HLSLKind, [operand index]) or
+    // /// - (hole HLSLKind, [operands associated with hole])
+    // ///
+    // /// The second type implies all of the operands should have the same hole type.
+    // pub fn get_type_constraints(&self) -> Vec<(HLSLKind, Vec<usize>)> {
+    //     // Create hole mappings at the same indices HLSLOperandKind::Hole will refer to
+    //     let mut mappings: Vec<_> = self.holes.iter().map(|t| (*t, vec![])).collect();
+    //     for (i, t) in self.operand_types.iter().enumerate() {
+    //         match t {
+    //             HLSLOperandKind::Hole(h) => mappings[*h].1.push(i),
+    //             HLSLOperandKind::Concrete(c) => mappings.push(((*c).into(), vec![i])),
+    //         }
+    //     }
 
-        mappings
-    }
+    //     mappings
+    // }
 
-    pub fn input_types(&self) -> &[HLSLOperandKind] {
-        &self.operand_types[0..(self.operand_types.len() - 1)]
+    pub fn input_kinds(&self) -> &[HLSLOperandKind] {
+        &self.input_kinds
     }
-    pub fn output_type(&self) -> &HLSLOperandKind {
-        self.operand_types.last().unwrap()
+    pub fn output_kind(&self) -> &HLSLOperandKind {
+        &self.output_kind
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum HLSLOperator {
     Assign, // TODO kill this
     Unary(UnaryOp),
@@ -206,7 +225,7 @@ impl Operator for HLSLOperator {
 }
 
 /// Unary operations that operate on a single value and return a single value
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum UnaryOp {
     /// Inverts each bit of X
     ///
@@ -246,7 +265,7 @@ impl Operator for UnaryOp {
 }
 
 /// Integer/float arithmetic operations, which take two inputs X and Y and return one output.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum ArithmeticOp {
     /// Adds X and Y
     ///
@@ -289,7 +308,7 @@ impl Operator for ArithmeticOp {
 }
 
 /// Binary/bitwise operations which take two inputs X and Y and return a single output.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum BinaryArithmeticOp {
     LeftShift,
     RightShift,
@@ -357,7 +376,7 @@ impl Operator for BinaryArithmeticOp {
 // }
 
 /// Texture sampling intrinsic functions, which take a texture argument and at least one other input to produce a single output.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum SampleIntrinsic {
     Tex2D,
 }
@@ -387,7 +406,7 @@ impl Operator for SampleIntrinsic {
 }
 
 /// Numeric intrinsic functions
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum NumericIntrinsic {
     Dot,
     Min,
@@ -421,7 +440,7 @@ impl Operator for NumericIntrinsic {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum FauxBooleanOp {
     Lt,
     Le,
@@ -469,7 +488,7 @@ impl Operator for FauxBooleanOp {
 
 /// For constructing new vectors from old scalars
 /// e.g. Vec2 => float2(a.x, b.y)
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum ConstructorOp {
     Vec2,
     Vec3,

@@ -6,7 +6,7 @@
 //! Inputs to instructions can be swizzled i.e. can have their components reordered or reused (v0.xyxx, v3.wzwx etc. are valid)
 
 use crate::Action;
-use crate::abstract_machine::expr::Vector;
+use crate::abstract_machine::expr::{Vector, Reg};
 use crate::abstract_machine::{
     AbstractVM, VMName, VMVector
 };
@@ -35,12 +35,12 @@ impl HLSLCompatibleAbstractVM for AMDILAbstractVM {
     fn convert_action(a: &AMDILAction) -> HLSLAction {
         match a {
             Action::Assign { output, expr } => Action::Assign {
-                output: (Self::convert_register(&output.0), output.1),
-                expr: expr.map_reg(Self::convert_register)
+                output: (Self::convert_register(&output.0), output.1.clone()),
+                expr: expr.map_reg(&mut |r, _| Self::convert_register(r)),
             },
             Action::EarlyOut => Action::EarlyOut,
             Action::If { expr, if_true, if_fals } => Action::If {
-                expr: expr.map_reg(Self::convert_register),
+                expr: expr.map_reg(&mut |r, _| Self::convert_register(r), HLSLKindBitmask::INTEGER.into()),
                 if_true: if_true.into_iter().map(Self::convert_action).collect(),
                 if_fals: if_fals.into_iter().map(Self::convert_action).collect()
             },
@@ -100,6 +100,11 @@ impl VMVector for AMDILRegister {
             Self::Texture(_) => 1,
             _ => 4,
         }
+    }
+}
+impl Reg for AMDILRegister {
+    fn output_kind(&self) -> HLSLKind {
+        self.toplevel_kind()
     }
 }
 

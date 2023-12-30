@@ -50,10 +50,10 @@ impl ALUArgsSpec {
         let srcs: Vec<_> = input_elems
             .into_iter()
             .zip(self.input_kinds.iter())
-            .map(|(data, kind)| {
+            .map(|(data, usage_kind)| {
                 let swizzle = data.1.masked_out(mask_to_apply_to_input);
-                let kind = kind.intersection(data.0.toplevel_kind()).unwrap();
-                amdil_vec_of(data.0, swizzle, kind)
+                let usage_kind = usage_kind.intersection(data.0.toplevel_kind()).unwrap();
+                (amdil_vec_of(data.0, swizzle, usage_kind), usage_kind)
             })
             .collect();
 
@@ -235,10 +235,10 @@ pub fn parse_alu<'a>(
 }
 
 impl ALUInstruction {
-    pub fn push_actions(&self, v: &mut Vec<AMDILAction>) {
+    pub fn push_actions(self, v: &mut Vec<AMDILAction>) {
         v.push(Action::Assign {
             expr: Vector::of_expr(self.op, self.args.srcs, self.args.dst.2),
-            output: (self.args.dst.0.clone(), self.args.dst.1.clone()),
+            output: (self.args.dst.0, self.args.dst.1),
         })
     }
 }

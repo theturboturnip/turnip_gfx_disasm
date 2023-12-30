@@ -18,6 +18,26 @@ impl From<HLSLNumericKind> for HLSLConcreteKind {
     }
 }
 
+pub enum KindRefinementResult {// = Result<HLSLKind, HLSLKind>;
+    RefinedTo(HLSLKind),
+    ValidNoChange(HLSLKind),
+    InvalidNoChange,
+}
+impl KindRefinementResult {
+    pub fn was_valid(&self) -> bool {
+        match self {
+            Self::RefinedTo(_) | Self::ValidNoChange(_) => true,
+            Self::InvalidNoChange => false,
+        }
+    }
+    pub fn did_refine(&self) -> bool {
+        match self {
+            Self::RefinedTo(_) => true,
+            Self::ValidNoChange(_) | Self::InvalidNoChange => false,
+        }
+    }
+}
+
 /// A type for HLSL values - an [HLSLKindMask] with at least one bit set
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct HLSLKind(HLSLKindBitmask);
@@ -36,6 +56,19 @@ impl HLSLKind {
     }
     pub fn mask(&self) -> HLSLKindBitmask {
         self.0
+    }
+    pub fn refine_if_possible(&mut self, other: Self) -> KindRefinementResult {
+        match self.intersection(other) {
+            Some(valid) => {
+                if valid != *self {
+                    *self = valid;
+                    KindRefinementResult::RefinedTo(valid)
+                } else {
+                    KindRefinementResult::ValidNoChange(valid)
+                }
+            },
+            None => KindRefinementResult::InvalidNoChange,
+        }
     }
 }
 impl From<HLSLKindBitmask> for HLSLKind {

@@ -8,13 +8,15 @@ use crate::{
     Action,
 };
 
+pub type ScalarDependent<TVM: AbstractVM> = (TVM::Register, VectorComponent, HLSLKind);
+
 /// Dependency solver for scalar-based abstract VMs
 pub struct ScalarDependencies<TVM: AbstractVM> {
-    discard_dependencies: HashSet<Scalar<TVM::Register>>,
+    pub discard_dependencies: HashSet<ScalarDependent<TVM>>,
     /// Mapping of <non-pure-input> to <pure inputs it depends on>
-    dependents: HashMap<
+    pub dependents: HashMap<
         (TVM::Register, VectorComponent),
-        HashSet<Scalar<TVM::Register>>,
+        HashSet<ScalarDependent<TVM>>,
     >,
 }
 impl<TVM: AbstractVM> Clone for ScalarDependencies<TVM> {
@@ -32,18 +34,19 @@ impl<TVM: AbstractVM> ScalarDependencies<TVM> {
 
     fn resolve_input_on(
         &self,
-        resolved_inputs: &mut HashSet<Scalar<TVM::Register>>,
-        input: &Scalar<TVM::Register>,
+        resolved_inputs: &mut HashSet<ScalarDependent<TVM>>,
+        input: ScalarDependent<TVM>,
     ) {
-        if input.is_pure_input() {
+        if input.0.is_pure_input() {
             // Pure inputs are not resolved into their dependencies
-            resolved_inputs.insert(input.clone());
+            resolved_inputs.insert(input);
         } else {
-            if let Some(input_dependents) = self.dependents.get(&input.0) {
+            // Need to clone input.0 here because otherwise we use `input` once it's partially moved in the else block
+            if let Some(input_dependents) = self.dependents.get(&(input.0.clone(), input.1)) {
                 resolved_inputs.extend(input_dependents.iter().cloned());
             } else {
-                println!("Weird! Someone is using a non-initialized non-pure input {:?}. Treating as pure", input);
-                resolved_inputs.insert(input.clone());
+                println!("Weird! Someone is using a non-initialized non-pure input {:?}. Treating as pure", &input);
+                resolved_inputs.insert(input);
             }
         }
     }
@@ -52,7 +55,7 @@ impl<TVM: AbstractVM> ScalarDependencies<TVM> {
     ///
     /// e.g. if the action introduces a dependency of GeneralPurposeRegister(1) onto Output(o),
     /// set `self.dependents[Output(o)]` to the contents of `self.dependents[GeneralPurposeRegister(1)]`
-    pub fn accum_action(&mut self, action: &Action<TVM::Register>, control_flow_inputs: &HashSet<Scalar<TVM::Register>>) {
+    pub fn accum_action(&mut self, action: &Action<TVM::Register>, control_flow_inputs: &HashSet<ScalarDependent<TVM>>) {
         match action {
             Action::Assign { output, expr } => {
                 if output.0.is_pure_input() {
@@ -62,12 +65,14 @@ impl<TVM: AbstractVM> ScalarDependencies<TVM> {
                         );
                 }
 
-                let output_scls = output.1.iter().map(|comp| (output.0.clone(), *comp)).collect();
+                let output_scls: Vec<_> = output.1.iter().map(|comp| (output.0.clone(), *comp)).collect();
 
-                for (output_scl, input_scls) in expr.scalar_deps(output_scls) {
+                let n_output_scls = output_scls.len();
+
+                for (output_scl, input_scls) in output_scls.into_iter().zip(expr.scalar_deps(n_output_scls)) {
                     let mut resolved_inputs = HashSet::new();
-                    for input_scl in input_scls.iter() {
-                        self.resolve_input_on(&mut resolved_inputs, &input_scl);
+                    for input_scl in input_scls {
+                        self.resolve_input_on(&mut resolved_inputs, input_scl);
                     }
                     self.dependents.insert(output_scl, resolved_inputs);
                 }
@@ -75,15 +80,15 @@ impl<TVM: AbstractVM> ScalarDependencies<TVM> {
             Action::EarlyOut => {
                 let mut resolved_inputs = HashSet::new();
                 for input in control_flow_inputs {
-                    self.resolve_input_on(&mut resolved_inputs, &input);
+                    self.resolve_input_on(&mut resolved_inputs, input.clone());
                 }
                 self.discard_dependencies.extend(resolved_inputs)
             }
             Action::If { expr, if_true, if_fals, .. } => {
                 // Make `inputs` a dependency on everything touched inside the if_true AND if_fals
                 let mut next_control_flow_inputs = control_flow_inputs.clone();
-                for input_scalar in expr.deps() {
-                    self.resolve_input_on(&mut next_control_flow_inputs, &input_scalar);
+                for input_scalar in expr.deps(HLSLKindBitmask::INTEGER.into()) {
+                    self.resolve_input_on(&mut next_control_flow_inputs, input_scalar);
                 }
 
                 let mut else_branch_deps = self.clone(); // This needs to be a clone because it needs to understand how to expand previously-defined non-pure-inputs into pure inputs
@@ -108,16 +113,5 @@ impl<TVM: AbstractVM> ScalarDependencies<TVM> {
                 }
             }
         }
-    }
-
-    pub fn dependents(
-        &self,
-    ) -> &HashMap<Scalar<TVM::Register>, HashSet<(Scalar<TVM::Register>, HLSLKind)>>
-    {
-        &self.dependents
-    }
-
-    pub fn discard_dependencies(&self) -> &HashSet<(Scalar<TVM::Register>, HLSLKind)> {
-        &self.discard_dependencies
     }
 }

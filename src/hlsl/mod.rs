@@ -1,4 +1,4 @@
-use crate::{abstract_machine::{VMName, VMVector}, Action};
+use crate::{abstract_machine::{VMName, VMVector, expr::Reg}, Action};
 
 use self::kinds::{HLSLKind, HLSLKindBitmask};
 
@@ -55,6 +55,16 @@ impl VMVector for HLSLRegister {
             HLSLRegister::ArrayElement { of, idx: _ } => of.n_components(),
         }
     }
+}
+impl Reg for HLSLRegister {
+    fn output_kind(&self) -> HLSLKind {
+        self.toplevel_kind() // TODO merge these functions somehow
+    }
+    fn refine_output_kind_if_possible(&mut self, constraint: HLSLKind) -> Option<kinds::KindRefinementResult> {
+        // Can't refine HLSLRegister - it has a fixed kind
+        None
+    }
+    
 }
 
 pub type HLSLAction = Action<HLSLRegister>;

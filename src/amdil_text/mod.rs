@@ -45,7 +45,7 @@ impl<'a> Decoder<AMDILAbstractVM> for AMDILDecoder<'a> {
         let mut actions = vec![];
         let mut io_registers = vec![];
         for instr in instructions {
-            match &instr {
+            match instr {
                 Instruction::Decl(decl) => {
                     match decl.get_decl().filter(|r| r.is_pure_input() || r.is_output()) {
                         Some(io_reg) => io_registers.push(io_reg),
@@ -56,7 +56,7 @@ impl<'a> Decoder<AMDILAbstractVM> for AMDILDecoder<'a> {
                 Instruction::EarlyOut(vec, comp) => {
                     actions.push(
                         Action::If {
-                            expr: Scalar::Component(vec.clone(), *comp, HLSLKindBitmask::NUMERIC.into()),
+                            expr: Scalar::Component(vec.clone(), comp),
                             if_true: vec![Action::EarlyOut],
                             if_fals: vec![]
                         }
