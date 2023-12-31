@@ -155,7 +155,6 @@ fn parse_declare<'a>(ctx: &mut AMDILContext, line: &'a str, instr: String, ctrl_
         Ok((line, (dst, n_comps)))
     };
     
-    
     let (line, decl) = match instr.as_str() {
         "dcl_cb" => {
             let (line, (dst, _n_comps)) = parse_dst()?;
@@ -170,12 +169,23 @@ fn parse_declare<'a>(ctx: &mut AMDILContext, line: &'a str, instr: String, ctrl_
                 len,
             })
         }
+
+        // TODO interpolation modifiers on these e.g. dcl_input_position_interp(linear_noperspective)
         "dcl_input_generic" => {
             let (line, (dst, len)) = parse_dst()?;
             (line, AMDILDeclaration::NamedInputRegister {
                 name: dst.regid.name,
                 len,
                 reg_type: "Generic".to_owned(),
+            })
+        }
+        // TODO fix grammar to parse ctrlspecifier values with underscores inside them correctly.
+        "dcl_input_position" | "dcl_input_position_interp(linear_noperspective)" => {
+            let (line, (dst, len)) = parse_dst()?;
+            (line, AMDILDeclaration::NamedInputRegister {
+                name: dst.regid.name,
+                len,
+                reg_type: "Position".to_owned(),
             })
         }
         "dcl_output_generic" => {
