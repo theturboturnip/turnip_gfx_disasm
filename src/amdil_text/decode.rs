@@ -14,7 +14,6 @@ use super::vm::{AMDILDeclaration, AMDILRegister};
 
 #[derive(Debug, Clone)]
 pub enum Instruction {
-    DontCare(String),
     Decl(AMDILDeclaration),
     Alu(ALUInstruction),
     /// Early out based on the a set of args
@@ -36,33 +35,87 @@ pub fn parse_lines(data: &str) -> Result<Vec<Instruction>, AMDILErrorContext> {
         .filter(|data| data.len() > 0);
 
     for line in instruction_lines {
-        let i = parse_instruction(&mut ctx, line)
-            .map_err(|err| AMDILErrorContext::new(line, err))?;
-        ctx.push_instruction(i);
+        match parse_instruction(&mut ctx, line)
+            .map_err(|err| AMDILErrorContext::new(line, err))? {
+                Some(instr) => ctx.push_instruction(instr),
+                None => {},
+            }
     }
     Ok(ctx.finalize())
 }
-fn parse_instruction(ctx: &mut AMDILContext, line: &str) -> Result<Instruction, AMDILError> {
+fn parse_instruction(ctx: &mut AMDILContext, line: &str) -> Result<Option<Instruction>, AMDILError> {
+    
+
     let (line, (instr, ctrl_specifiers, dst_mods)) = parse_instruction_name(line)?;
 
     let (line, instr) = match instr.as_str() {
-        x if x.starts_with("il_vs") || x.starts_with("il_ps") => (line, Instruction::DontCare(instr)),
-        "ret_dyn" => (line, Instruction::DontCare(instr)),
-        "end" => (line, Instruction::DontCare(instr)),
-        "" => (line, Instruction::DontCare(instr)),
+        x if x.starts_with("il_vs") || x.starts_with("il_ps") => (line, None),
+        "ret_dyn" => (line, None),
+        "end" => (line, None),
+        "" => (line, None),
 
         "discard_logicalnz" => {
             let (line, src) = parse_src(line)?;
             let src = ctx.input_to_scalar(src)?;
-            (line, Instruction::EarlyOut(Scalar::Expr {
+            let cond = Scalar::Expr {
                 op: HLSLOperator::FauxBoolean(FauxBooleanOp::Ne),
                 inputs: vec![
                     (src, HLSLKind::NUMERIC),
                     (Scalar::Literal(0), HLSLKind::NUMERIC)
                 ],
                 output_kind: HLSLKind::NUMERIC
-            }))
+            };
+            (line, Some(Instruction::EarlyOut(cond)))
         },
+        "discard_logicalz" => {
+            let (line, src) = parse_src(line)?;
+            let src = ctx.input_to_scalar(src)?;
+            let cond = Scalar::Expr {
+                op: HLSLOperator::FauxBoolean(FauxBooleanOp::Eq),
+                inputs: vec![
+                    (src, HLSLKind::NUMERIC),
+                    (Scalar::Literal(0), HLSLKind::NUMERIC)
+                ],
+                output_kind: HLSLKind::NUMERIC
+            };
+            (line, Some(Instruction::EarlyOut(cond)))
+        },
+        "if_logicalnz" => {
+            let (line, src) = parse_src(line)?;
+            let src = ctx.input_to_scalar(src)?;
+            let cond = Scalar::Expr {
+                op: HLSLOperator::FauxBoolean(FauxBooleanOp::Ne),
+                inputs: vec![
+                    (src, HLSLKind::NUMERIC),
+                    (Scalar::Literal(0), HLSLKind::NUMERIC)
+                ],
+                output_kind: HLSLKind::NUMERIC
+            };
+            ctx.start_if(cond);
+            (line, None)
+        }
+        "if_logicalz" => {
+            let (line, src) = parse_src(line)?;
+            let src = ctx.input_to_scalar(src)?;
+            let cond = Scalar::Expr {
+                op: HLSLOperator::FauxBoolean(FauxBooleanOp::Eq),
+                inputs: vec![
+                    (src, HLSLKind::NUMERIC),
+                    (Scalar::Literal(0), HLSLKind::NUMERIC)
+                ],
+                output_kind: HLSLKind::NUMERIC
+            };
+            ctx.start_if(cond);
+            (line, None)
+        }
+        "else" => {
+            ctx.encounter_else();
+            (line, None)
+        }
+        "endif" => {
+            ctx.end_if();
+            (line, None)
+        }
 
         d if d.starts_with("dcl_") => {
             parse_declare(ctx, line, instr, ctrl_specifiers)?
@@ -70,7 +123,7 @@ fn parse_instruction(ctx: &mut AMDILContext, line: &str) -> Result<Instruction, 
 
         _ => {
             let (line, alu) = parse_alu(line, instr, ctrl_specifiers, dst_mods, ctx)?;
-            (line, Instruction::Alu(alu))
+            (line, Some(Instruction::Alu(alu)))
         }
     };
 
@@ -81,7 +134,7 @@ fn parse_instruction(ctx: &mut AMDILContext, line: &str) -> Result<Instruction, 
     Ok(instr)
 }
 
-fn parse_declare<'a>(ctx: &mut AMDILContext, line: &'a str, instr: String, ctrl_specifiers: Vec<CtrlSpec>) -> Result<(&'a str, Instruction), AMDILError> {
+fn parse_declare<'a>(ctx: &mut AMDILContext, line: &'a str, instr: String, ctrl_specifiers: Vec<CtrlSpec>) -> Result<(&'a str, Option<Instruction>), AMDILError> {
     let parse_dst = || -> NomGrammarResult<(Dst, u8)> {
         let (line, dst) = parse_dst(line)?;
         // This is usually .x, .xy, .xyz, .xyzw; but if one of the components is unused then it can also be v1._yzw.
@@ -101,7 +154,7 @@ fn parse_declare<'a>(ctx: &mut AMDILContext, line: &'a str, instr: String, ctrl_
     };
     
     
-    match instr.as_str() {
+    let (line, decl) = match instr.as_str() {
         "dcl_cb" => {
             let (line, (dst, _n_comps)) = parse_dst()?;
             assert_eq!(dst.regid.rel_addrs.len(), 1);
@@ -110,35 +163,35 @@ fn parse_declare<'a>(ctx: &mut AMDILContext, line: &'a str, instr: String, ctrl_
             } else {
                 panic!("Can't dcl_cb with non-literal length");
             };
-            Ok((line, Instruction::Decl(AMDILDeclaration::NamedBuffer {
+            (line, AMDILDeclaration::NamedBuffer {
                 name: dst.regid.name,
                 len,
-            })))
+            })
         }
         "dcl_input_generic" => {
             let (line, (dst, len)) = parse_dst()?;
-            Ok((line, Instruction::Decl(AMDILDeclaration::NamedInputRegister {
+            (line, AMDILDeclaration::NamedInputRegister {
                 name: dst.regid.name,
                 len,
                 reg_type: "Generic".to_owned(),
-            })))
+            })
         }
         "dcl_output_generic" => {
             let (line, (dst, len)) = parse_dst()?;
-            Ok((line, Instruction::Decl(AMDILDeclaration::NamedOutputRegister {
+            (line, AMDILDeclaration::NamedOutputRegister {
                 name: dst.regid.name,
                 len,
                 reg_type: "Generic".to_owned(),
-            })))
+            })
         }
 
         "dcl_output_position" => {
             let (line, (dst, len)) = parse_dst()?;
-            Ok((line, Instruction::Decl(AMDILDeclaration::NamedOutputRegister {
+            (line, AMDILDeclaration::NamedOutputRegister {
                 name: dst.regid.name,
                 len,
                 reg_type: "Position".to_owned(),
-            })))
+            })
         }
         
         "dcl_literal" => {
@@ -149,18 +202,18 @@ fn parse_declare<'a>(ctx: &mut AMDILContext, line: &'a str, instr: String, ctrl_
             let (line, w) = parse_hex_literal(line)?;
             let literal = [x, y, z, w];
             ctx.push_named_literal(dst.regid.name.clone(), Box::new(literal));
-            Ok((line, Instruction::Decl(AMDILDeclaration::NamedLiteral(
+            (line, AMDILDeclaration::NamedLiteral(
                 dst.regid.name,
                 literal,
-            ))))
+            ))
         },
         "dcl_global_flags" => {
             let (line, (_dst, _len)) = parse_dst()?;
-            Ok((line, Instruction::DontCare(instr)))
+            return Ok((line, None))
         },
-        "dcl_user_line_api" => {
+        "dcl_user_data_api" => {
             let (line, (_dst, _len)) = parse_dst()?;
-            Ok((line, Instruction::DontCare(instr)))
+            return Ok((line, None))
         }, // TODO parse this
         "dcl_resource" => match matchable_ctrl_specs(&ctrl_specifiers)[..] {
             [
@@ -171,7 +224,7 @@ fn parse_declare<'a>(ctx: &mut AMDILContext, line: &'a str, instr: String, ctrl_
                 ("fmtz", "float"),
                 ("fmtw", "float"), // dummy comment to force formatting
             ] => {
-                Ok((line, Instruction::Decl(AMDILDeclaration::Texture2D(id.parse().unwrap()))))
+                (line, AMDILDeclaration::Texture2D(id.parse().unwrap()))
             }
             [
                 ("id", id),
@@ -181,7 +234,7 @@ fn parse_declare<'a>(ctx: &mut AMDILContext, line: &'a str, instr: String, ctrl_
                 ("fmtz", "float"),
                 ("fmtw", "float"), // dummy comment to force formatting
             ] => {
-                Ok((line, Instruction::Decl(AMDILDeclaration::Texture3D(id.parse().unwrap()))))
+                (line, AMDILDeclaration::Texture3D(id.parse().unwrap()))
             }
             [
                 ("id", id),
@@ -191,12 +244,13 @@ fn parse_declare<'a>(ctx: &mut AMDILContext, line: &'a str, instr: String, ctrl_
                 ("fmtz", "float"),
                 ("fmtw", "float"), // dummy comment to force formatting
             ] => {
-                Ok((line, Instruction::Decl(AMDILDeclaration::TextureCube(id.parse().unwrap()))))
+                (line, AMDILDeclaration::TextureCube(id.parse().unwrap()))
             }
             _ => return Err(AMDILError::UnkInstruction(instr, ctrl_specifiers))
         }
         _ => return Err(AMDILError::UnkInstruction(instr, ctrl_specifiers))
-    }
+    };
+    Ok((line, Some(Instruction::Decl(decl))))
 }
 
 pub fn matchable_ctrl_specs<'a>(mods: &'a Vec<grammar::CtrlSpec>) -> Vec<(&'a str, &'a str)> {
