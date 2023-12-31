@@ -44,9 +44,7 @@ pub fn parse_lines(data: &str) -> Result<Vec<Instruction>, AMDILErrorContext> {
     Ok(ctx.finalize())
 }
 fn parse_instruction(ctx: &mut AMDILContext, line: &str) -> Result<Option<Instruction>, AMDILError> {
-    
-
-    let (line, (instr, ctrl_specifiers, dst_mods)) = parse_instruction_name(line)?;
+    let (line, (leading_whitespace, instr, ctrl_specifiers, dst_mods)) = parse_instruction_name(line)?;
 
     let (line, instr) = match instr.as_str() {
         x if x.starts_with("il_vs") || x.starts_with("il_ps") => (line, None),
@@ -126,6 +124,10 @@ fn parse_instruction(ctx: &mut AMDILContext, line: &str) -> Result<Option<Instru
             (line, Some(Instruction::Alu(alu)))
         }
     };
+
+    if instr.is_some() && (leading_whitespace != ctx.if_depth() * 4) {
+        println!("Potential error: leading whitespace for instruction {instr:?} didn't match if-depth");
+    }
 
     if line.len() != 0 {
         panic!("didn't parse '{}'", line);

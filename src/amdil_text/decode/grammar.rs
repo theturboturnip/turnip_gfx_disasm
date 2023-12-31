@@ -204,9 +204,12 @@ pub enum SrcMod {
 }
 
 /// Parse the name of an instruction, plus control specifiers and destination modifiers AND the following space if one was present.
+/// Also, return the leading whitespace!
 pub fn parse_instruction_name(
     data: &str,
-) -> NomGrammarResult<(String, Vec<CtrlSpec>, DstMods)> {
+) -> NomGrammarResult<(usize, String, Vec<CtrlSpec>, DstMods)> {
+    let (data, leading_whitespace) = take_while(|c: char| c.is_whitespace())(data)?;
+
     let (data, full_name) = take_while1(|c| c != ' ')(data)?;
 
     // The components of the instruction name are underscore-separated
@@ -242,7 +245,7 @@ pub fn parse_instruction_name(
 
     let (data, _) = opt(tag(" "))(data)?;
 
-    Ok((data, (instr, ctrl_specifiers, dst_mods)))
+    Ok((data, (leading_whitespace.len(), instr, ctrl_specifiers, dst_mods)))
 }
 fn parse_ctrlspec(data: &str) -> NomGrammarResult<CtrlSpec> {
     use nom::character::complete::char;

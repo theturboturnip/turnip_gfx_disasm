@@ -46,6 +46,10 @@ impl AMDILContext {
         }
     }
 
+    pub fn if_depth(&self) -> usize {
+        self.if_stack.len()
+    }
+
     pub fn push_instruction(&mut self, i: Instruction) {
         let current_consumer = match self.if_stack.last_mut() {
             Some(IfInProgress::ParsingTrue{ if_true, ..}) => if_true,
