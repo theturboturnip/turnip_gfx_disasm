@@ -427,6 +427,7 @@ impl VariableState {
                 // 6. delete all scalar mappings written over by the IF and the ELSE (THAT AREN'T OUTPUTS). Don't restore them, because any code after this point can't rely on values that may-or-may-not have been written.
                     // NOTE this assumes that IF-ELSE will never write to the same register in both blocks with the intention of reading that value afterwards (a rust-style let y = if x { 1 } else { 2 };)
                     // If this assumption is ever faulty, we have a big fuckin problem.
+                    // WOOT this assumption was faulty. Need some way to merge variables.
                 self.scalar_map.pop_scope();
                 MutVarAction::If { expr, if_true, if_fals }
             }
