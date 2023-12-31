@@ -456,8 +456,12 @@ impl VariableState {
         for a in actions.iter_mut().rev() {
             match a {
                 Action::Assign { output, expr } => {
-                    expr.recompute_output_kind_from_internal_output_kinds();
-                    todo!("apply output kind refinement to output")
+                    match expr.recompute_output_kind_from_internal_output_kinds() {
+                        Some(KindRefinementResult::RefinedTo(new_output_kind)) => {
+                            output.0.refine_output_kind_if_possible(new_output_kind);
+                        }
+                        _ => {}
+                    }
                 },
                 Action::EarlyOut => {},
                 Action::If { if_true, if_fals, .. } => {

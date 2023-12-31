@@ -128,18 +128,6 @@ impl<TReg: Reg> Vector<TReg> {
         v
     }
 
-    // /// For every available pair of (reg, usage_kind) (even in scalars) call a function on them that can mutate the register.
-    // /// 
-    // /// This is used to 
-    // pub fn map_kind<F: FnMut(&mut TReg, HLSLKind)>(&mut self, f: &mut F) {
-    //     match self {
-    //         Vector::Construction(scalars, usage_kind) => todo!(),
-    //         Vector::PureSwizzle(_, _, _) => todo!(),
-    //         Vector::Expr { op, n_comps, inputs, output_kind } => todo!(),
-    //         Vector::AllToAllExpr { op, inputs, output_kind } => todo!(),
-    //     }
-    // }
-
     pub fn map_reg<TOtherReg: Reg, F: FnMut(&TReg, HLSLKind) -> TOtherReg>(&self, f: &mut F) -> Vector<TOtherReg> {
         match self {
             Self::Construction(scalars, usage_kind) => Vector::Construction(
@@ -263,8 +251,7 @@ impl<TReg: Reg> Vector<TReg> {
     pub fn all_involved_scalars(&self) -> Vec<(TReg, VectorComponent, HLSLKind)> {
         match self {
             Self::Construction(scalars, output_kind) => {
-                // TODO expand scalar expressions
-                todo!()
+                scalars.iter().map(|s| s.deps(*output_kind)).flatten().collect()
             },
             Self::PureSwizzle(reg, comps, output_kind) => {
                 comps
@@ -317,16 +304,17 @@ impl<TReg: Reg> Vector<TReg> {
             },
             Vector::Expr { op, inputs, output_kind, .. } => {
                 let old_output_kind = *output_kind;
-                for (input, input_usage) in inputs.iter_mut() {
+                // for (input, input_usage) in inputs.iter_mut() {
+                for i in 0..inputs.len() {
                     // If any of our inputs have had their output kinds changed, try to refine their usage
-                    if let Some(KindRefinementResult::RefinedTo(new_output_kind_for_input)) = input.recompute_output_kind_from_internal_output_kinds() {
-                        if input_usage.refine_if_possible(new_output_kind_for_input).did_refine() {
+                    if let Some(KindRefinementResult::RefinedTo(new_output_kind_for_input)) = inputs[i].0.recompute_output_kind_from_internal_output_kinds() {
+                        if inputs[i].1.refine_if_possible(new_output_kind_for_input).did_refine() {
                             // If we succeed in refinine one input's usage, immediately apply that to all other inputs and outputs with kind inference
+                            // This has already been applied to input_usage so when we apply_input_constraints it will pick up the new value
                             let mut kindspec = op.get_kindspec();
                             // The kindspec gives us either a concrete kind or a hole index for each input and output.
                             // Apply constraints to the holes in the kindspec
                             kindspec.apply_input_constraints(inputs.iter().map(|(v, usage_kind)| *usage_kind));
-                            todo!("actually apply the new output kinds!");
                             kindspec.apply_output_constraint(*output_kind);
 
                             // We know that the kindspec will respect all current constraints and can only tighten them.
@@ -431,7 +419,6 @@ impl<TReg: Reg> Vector<TReg> {
                         // TODO do we need to check the outcome of this? Does this require us to re-type-check?
                         input_vec.refine_output_kind_from_usage(inferred_usage)
                     }
-                    todo!("Should we reduce usage_constraint here as well? ");
                     {
                         let final_kind = match kindspec.output_kind() {
                             HLSLOperandKind::Concrete(conc_kind) => (*conc_kind).into(), // Already applied
@@ -440,6 +427,7 @@ impl<TReg: Reg> Vector<TReg> {
                         // These *should* match
                         *output_kind = output_kind.intersection(final_kind).unwrap();
                     }
+                    // TODO we could create a feedback loop by mutating or returning a refinement of usage_constraint...
                 }
         }
     }
@@ -450,7 +438,7 @@ pub type HLSLVector = Vector<HLSLRegister>;
 impl<TReg: VMVector + Reg> VMName for Vector<TReg> {
     fn is_pure_input(&self) -> bool {
         match self {
-            Self::Expr { n_comps, .. } => todo!(),
+            Self::Expr { n_comps, .. } => todo!("is_pure_input for expr"),
             Self::Construction { .. } => false,
             Self::PureSwizzle(reg, ..) => reg.is_pure_input(),
         }
@@ -458,7 +446,7 @@ impl<TReg: VMVector + Reg> VMName for Vector<TReg> {
 
     fn is_output(&self) -> bool {
         match self {
-            Self::Expr { n_comps, .. } => todo!(),
+            Self::Expr { n_comps, .. } => todo!("is_output_for_expr"),
             Self::Construction { .. } => false,
             Self::PureSwizzle(reg, ..) => reg.is_output(),
         }
@@ -555,17 +543,17 @@ impl<TReg: Reg> Scalar<TReg> {
             Scalar::Literal(_) => HLSLKind::NUMERIC,
             Scalar::Expr { op, inputs, output_kind } => {
                 let old_output_kind = *output_kind;
-                for (input, input_usage) in inputs.iter_mut() {
+                // for (input, input_usage) in inputs.iter_mut() {
+                for i in 0..inputs.len() {
                     // If any of our inputs have had their output kinds changed, try to refine their usage
-                    let new_output_kind_for_input = input.recompute_output_kind_from_internal_output_kinds();
-                    if input_usage.refine_if_possible(new_output_kind_for_input).did_refine() {
+                    let new_output_kind_for_input = inputs[i].0.recompute_output_kind_from_internal_output_kinds();
+                    if inputs[i].1.refine_if_possible(new_output_kind_for_input).did_refine() {
                         // If we succeed in refinine one input's usage, immediately apply that to all other inputs and outputs with kind inference
+                        // This has already been applied to input_usage so when we apply_input_constraints it will pick up the new value
                         let mut kindspec = op.get_kindspec();
                         // The kindspec gives us either a concrete kind or a hole index for each input and output.
                         // Apply constraints to the holes in the kindspec
                         kindspec.apply_input_constraints(inputs.iter().map(|(s, usage_kind)| *usage_kind));
-                        // TODO actually apply the new output kind!!
-                        todo!("actually apply the new output kinds!");
                         kindspec.apply_output_constraint(*output_kind);
 
                         // We know that the kindspec will respect all current constraints and can only tighten them.
