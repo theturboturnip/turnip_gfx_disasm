@@ -61,7 +61,10 @@ impl ALUArgsSpec {
 
         assert_eq!(srcs.len(), self.input_kinds.len());
 
-        let expr = Vector::of_expr(op, srcs, self.output_kind, dst_n_comps);
+        let mut expr_output_kind = self.output_kind;
+        expr_output_kind.refine_if_possible(dst.0.toplevel_kind());
+
+        let expr = Vector::of_expr(op, srcs, expr_output_kind, dst_n_comps);
         // Apply the shift-scale of the dst mod
         let expr = if let Some(shift_scale) = dst_mods.shift_scale {
             let (op, other_input) = match shift_scale {
