@@ -455,12 +455,18 @@ impl VariableState {
         for a in actions.iter_mut().rev() {
             match a {
                 Action::Assign { output, expr } => {
+                    // 1. update the expression's output kind from any variables it uses that changed
+                    // 2. refine the kind of the output variable, based on the expression's output
+                    // 3. refine the output kind of the expression based on the kind of the output variable!!
+                    //      step 1 doesn't cover this because it only does a "bottom-up" inference from it's base inputs up through subexpressions to its output_kind.
+                    //      this does a "top-down" inference based on what the output must be
                     match expr.recompute_output_kind_from_internal_output_kinds(true) {
                         Some(KindRefinementResult::RefinedTo(new_output_kind)) => {
                             output.0.refine_output_kind_if_possible(new_output_kind);
                         }
                         _ => {}
                     }
+                    expr.refine_output_kind_from_usage(output.0.output_kind())
                 },
                 Action::EarlyOut => {},
                 Action::If { if_true, if_fals, .. } => {
