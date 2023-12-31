@@ -444,7 +444,7 @@ impl Operator for NumericIntrinsic {
             Self::Mad => OperatorKindspec::new(
                 vec![HLSLOperandKind::Hole(0), HLSLOperandKind::Hole(0), HLSLOperandKind::Hole(0)],
                 HLSLOperandKind::Hole(0),
-                vec![HLSLKind::NUMERIC],
+                vec![HLSLKind::NUMERIC], // Also works on integers for some reason!
             ),
             Self::Sqrt | Self::Rsqrt | Self::Exp | Self::Exp2 | Self::Saturate | Self::Log | Self::Log10 | Self::Log2 => OperatorKindspec::new(
                 vec![HLSLOperandKind::Hole(0)],

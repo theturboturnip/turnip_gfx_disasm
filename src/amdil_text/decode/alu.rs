@@ -99,12 +99,12 @@ impl ALUArgsSpec {
 }
 type ALUInstructionSet = HashMap<&'static str, (ALUArgsSpec, HLSLOperator)>;
 
-fn float_arith(op: ArithmeticOp) -> (ALUArgsSpec, HLSLOperator) {
+fn arith(kind: HLSLKind, op: ArithmeticOp) -> (ALUArgsSpec, HLSLOperator) {
     (
         ALUArgsSpec {
-            input_kinds: vec![HLSLKind::NUMERIC_FLOAT, HLSLKind::NUMERIC_FLOAT],
+            input_kinds: vec![kind, kind],
             input_mask: InputMask::InheritFromFirstOutput,
-            output_kind: HLSLKind::NUMERIC_FLOAT,
+            output_kind: kind,
         },
         HLSLOperator::Arithmetic(op),
     )
@@ -183,14 +183,21 @@ lazy_static! {
             HLSLOperator::NumericI(NumericIntrinsic::Max),
         )),
 
-        ("add", float_arith(ArithmeticOp::Plus)),
-        ("sub", float_arith(ArithmeticOp::Minus)),
+        ("add", arith(HLSLKind::NUMERIC_FLOAT, ArithmeticOp::Plus)),
+        ("sub", arith(HLSLKind::NUMERIC_FLOAT, ArithmeticOp::Minus)),
         // TODO difference between mul and mul_ieee
         // MUL: 0 DX9 DP2-style multiple.
         //      1 IEEE-style multiply
-        ("mul", float_arith(ArithmeticOp::Times)),
-        ("mul_ieee", float_arith(ArithmeticOp::Times)),
-        ("div", float_arith(ArithmeticOp::Div)),
+        ("mul", arith(HLSLKind::NUMERIC_FLOAT, ArithmeticOp::Times)),
+        ("mul_ieee", arith(HLSLKind::NUMERIC_FLOAT, ArithmeticOp::Times)),
+        ("div", arith(HLSLKind::NUMERIC_FLOAT, ArithmeticOp::Div)),
+
+        ("iadd", arith(HLSLKind::INTEGER, ArithmeticOp::Plus)),
+        ("isub", arith(HLSLKind::INTEGER, ArithmeticOp::Minus)),
+        ("imul", arith(HLSLKind::NUMERIC_SINT, ArithmeticOp::Times)),
+        ("idiv", arith(HLSLKind::NUMERIC_SINT, ArithmeticOp::Div)),
+        ("umul", arith(HLSLKind::NUMERIC_UINT, ArithmeticOp::Times)),
+        ("udiv", arith(HLSLKind::NUMERIC_UINT, ArithmeticOp::Div)),
 
         // TODO mad_ieee has different NaN handling
         ("mad", (
@@ -206,6 +213,22 @@ lazy_static! {
                 input_kinds: vec![HLSLKind::NUMERIC_FLOAT, HLSLKind::NUMERIC_FLOAT, HLSLKind::NUMERIC_FLOAT],
                 input_mask: InputMask::InheritFromFirstOutput,
                 output_kind: HLSLKind::NUMERIC_FLOAT,
+            },
+            HLSLOperator::NumericI(NumericIntrinsic::Mad)
+        )),
+        ("imad", (
+            ALUArgsSpec {
+                input_kinds: vec![HLSLKind::NUMERIC_SINT, HLSLKind::NUMERIC_SINT, HLSLKind::NUMERIC_SINT],
+                input_mask: InputMask::InheritFromFirstOutput,
+                output_kind: HLSLKind::NUMERIC_SINT,
+            },
+            HLSLOperator::NumericI(NumericIntrinsic::Mad)
+        )),
+        ("umad", (
+            ALUArgsSpec {
+                input_kinds: vec![HLSLKind::NUMERIC_UINT, HLSLKind::NUMERIC_UINT, HLSLKind::NUMERIC_UINT],
+                input_mask: InputMask::InheritFromFirstOutput,
+                output_kind: HLSLKind::NUMERIC_UINT,
             },
             HLSLOperator::NumericI(NumericIntrinsic::Mad)
         )),
