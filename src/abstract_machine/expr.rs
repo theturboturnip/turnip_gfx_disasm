@@ -28,10 +28,108 @@ use super::{find_common, instructions::SimpleDependencyRelation};
 
 pub type ContigSwizzle = ArrayVec<VectorComponent, 4>;
 
-pub trait Reg: Clone + PartialEq {
+pub trait Reg: std::fmt::Debug + Clone + PartialEq {
     fn output_kind(&self) -> HLSLKind;
     fn refine_output_kind_if_possible(&mut self, constraint: HLSLKind) -> Option<KindRefinementResult> {
         None
+    }
+}
+
+fn apply_kindspec_vec<TReg: Reg>(
+    op: &HLSLOperator,
+    inputs: &mut Vec<(Vector<TReg>, HLSLKind)>,
+    output_kind: &mut HLSLKind
+) {
+    // If we succeed in refinine one input's usage, immediately apply that to all other inputs and outputs with kind inference
+    // This has already been applied to input_usage so when we apply_input_constraints it will pick up the new value
+    let mut kindspec = op.get_kindspec();
+    // The kindspec gives us either a concrete kind or a hole index for each input and output.
+    // Apply constraints to the holes in the kindspec
+    kindspec.apply_input_constraints(inputs.iter().map(|(v, usage_kind)| *usage_kind));
+    kindspec.apply_output_constraint(*output_kind);
+
+    // We know that the kindspec will respect all current constraints and can only tighten them.
+
+    // We now have complete holes or concrete types.
+    // Apply them to the input/output.
+    let holes = kindspec.holes();
+    for ((input_vec, current_usage), inferred_usage) in inputs.iter_mut().zip(kindspec.input_kinds().iter()) {
+        let inferred_usage = match inferred_usage {
+            HLSLOperandKind::Concrete(conc_kind) => (*conc_kind).into(), // Already applied
+            HLSLOperandKind::Hole(idx) => holes[*idx],
+        };
+        // TODO recheck this comment
+        // This cannot have recursive effects.
+        // The kind inference model we have is limited.
+        // If two elements have a related kind, they must have the *same* kind.
+        // Furthermore, operand_usage_constraint has already been intersected with input_vec.usage_kind().
+        // If input_vec were an expression, and our type inference system was more complex, then refining the output kind could then cause a domino effect
+        // with other input kinds which then *further* reduce the output kind.
+        // Right now, refining the output_kind of input_vec will reduce input_vec.usage_kind() to exactly what it was before, or to operand_usage_constraint.
+        // If input_vec were an expression, and input_vec.usage_kind() were connected to a type hole, refining input_vec.usage_kind() can only further reduce 
+        // the inputs to input_vec, which cannot have domino effects onto the output of input_vec.
+
+        current_usage.refine_if_possible(inferred_usage);
+
+        // TODO do we need to check the outcome of this? Does this require us to re-type-check?
+        input_vec.refine_output_kind_from_usage(inferred_usage)
+    }
+    {
+        let final_kind = match kindspec.output_kind() {
+            HLSLOperandKind::Concrete(conc_kind) => (*conc_kind).into(), // Already applied
+            HLSLOperandKind::Hole(idx) => holes[*idx],
+        };
+        // These *should* match
+        *output_kind = output_kind.intersection(final_kind).unwrap();
+    }
+}
+
+fn apply_kindspec_scl<TReg: Reg>(
+    op: &HLSLOperator,
+    inputs: &mut Vec<(Scalar<TReg>, HLSLKind)>,
+    output_kind: &mut HLSLKind
+) {
+    // If we succeed in refinine one input's usage, immediately apply that to all other inputs and outputs with kind inference
+    // This has already been applied to input_usage so when we apply_input_constraints it will pick up the new value
+    let mut kindspec = op.get_kindspec();
+    // The kindspec gives us either a concrete kind or a hole index for each input and output.
+    // Apply constraints to the holes in the kindspec
+    kindspec.apply_input_constraints(inputs.iter().map(|(v, usage_kind)| *usage_kind));
+    kindspec.apply_output_constraint(*output_kind);
+
+    // We know that the kindspec will respect all current constraints and can only tighten them.
+
+    // We now have complete holes or concrete types.
+    // Apply them to the input/output.
+    let holes = kindspec.holes();
+    for ((input_vec, current_usage), inferred_usage) in inputs.iter_mut().zip(kindspec.input_kinds().iter()) {
+        let inferred_usage = match inferred_usage {
+            HLSLOperandKind::Concrete(conc_kind) => (*conc_kind).into(), // Already applied
+            HLSLOperandKind::Hole(idx) => holes[*idx],
+        };
+        // TODO recheck this comment
+        // This cannot have recursive effects.
+        // The kind inference model we have is limited.
+        // If two elements have a related kind, they must have the *same* kind.
+        // Furthermore, operand_usage_constraint has already been intersected with input_vec.usage_kind().
+        // If input_vec were an expression, and our type inference system was more complex, then refining the output kind could then cause a domino effect
+        // with other input kinds which then *further* reduce the output kind.
+        // Right now, refining the output_kind of input_vec will reduce input_vec.usage_kind() to exactly what it was before, or to operand_usage_constraint.
+        // If input_vec were an expression, and input_vec.usage_kind() were connected to a type hole, refining input_vec.usage_kind() can only further reduce 
+        // the inputs to input_vec, which cannot have domino effects onto the output of input_vec.
+
+        current_usage.refine_if_possible(inferred_usage);
+
+        // TODO do we need to check the outcome of this? Does this require us to re-type-check?
+        input_vec.refine_output_kind_from_usage(inferred_usage)
+    }
+    {
+        let final_kind = match kindspec.output_kind() {
+            HLSLOperandKind::Concrete(conc_kind) => (*conc_kind).into(), // Already applied
+            HLSLOperandKind::Hole(idx) => holes[*idx],
+        };
+        // These *should* match
+        *output_kind = output_kind.intersection(final_kind).unwrap();
     }
 }
 
@@ -100,7 +198,7 @@ impl<TReg: Reg> Vector<TReg> {
             Self::Construction(scalars, HLSLKind::ALL)
         };
 
-        v.recompute_output_kind_from_internal_output_kinds();
+        v.recompute_output_kind_from_internal_output_kinds(true);
 
         v
     }
@@ -123,13 +221,13 @@ impl<TReg: Reg> Vector<TReg> {
             },
         };
 
-        v.recompute_output_kind_from_internal_output_kinds();
+        v.recompute_output_kind_from_internal_output_kinds(true);
 
         v
     }
 
     pub fn map_reg<TOtherReg: Reg, F: FnMut(&TReg, HLSLKind) -> TOtherReg>(&self, f: &mut F) -> Vector<TOtherReg> {
-        match self {
+        let mut v = match self {
             Self::Construction(scalars, usage_kind) => Vector::Construction(
                 scalars.iter().map(|s| s.map_reg(f, *usage_kind)).collect(),
                 *usage_kind,
@@ -145,7 +243,10 @@ impl<TReg: Reg> Vector<TReg> {
                 inputs: inputs.iter().map(|(v, usage)| (v.map_reg(f), *usage)).collect(),
                 output_kind: *output_kind,
             },
-        }
+        };
+        // After mapping to a new kind of register, it might be that we can refine the kinds of those new registers further based on usage.
+        v.recompute_output_kind_from_internal_output_kinds(true);
+        v
     }
 
     pub fn map_scalar<TOtherReg: Reg, F: FnMut(&TReg, VectorComponent, HLSLKind) -> (TOtherReg, VectorComponent)>(&self, f: &mut F) -> Vector<TOtherReg> {
@@ -170,7 +271,8 @@ impl<TReg: Reg> Vector<TReg> {
                     inputs: inputs.iter().map(|(v, usage)| (v.map_scalar(f), *usage)).collect(),
                     output_kind: *output_kind,
                 };
-                v.recompute_output_kind_from_internal_output_kinds();
+                // After mapping to a new kind of register, it might be that we can refine the kinds of those new registers further based on usage.
+                v.recompute_output_kind_from_internal_output_kinds(true);
                 v
             },
         }
@@ -265,7 +367,7 @@ impl<TReg: Reg> Vector<TReg> {
         }
     }
 
-    pub fn recompute_output_kind_from_internal_output_kinds(&mut self) -> Option<KindRefinementResult> {
+    pub fn recompute_output_kind_from_internal_output_kinds(&mut self, force_refine_inputs_from_usage: bool) -> Option<KindRefinementResult> {
         match self {
             Vector::Construction(scalars, output_kind) => {
                 // Progressively try to refine output_kind based on the output_kind of each scalar.
@@ -277,6 +379,11 @@ impl<TReg: Reg> Vector<TReg> {
                         for i in 0..scalars.len() {
                             scalars[i].refine_output_kind_from_usage(*output_kind)
                         }
+                    } 
+                }
+                if force_refine_inputs_from_usage {
+                    for s in scalars {
+                        s.refine_output_kind_from_usage(*output_kind)
                     }
                 }
                 // What I want to do:
@@ -307,52 +414,14 @@ impl<TReg: Reg> Vector<TReg> {
                 // for (input, input_usage) in inputs.iter_mut() {
                 for i in 0..inputs.len() {
                     // If any of our inputs have had their output kinds changed, try to refine their usage
-                    if let Some(KindRefinementResult::RefinedTo(new_output_kind_for_input)) = inputs[i].0.recompute_output_kind_from_internal_output_kinds() {
+                    if let Some(KindRefinementResult::RefinedTo(new_output_kind_for_input)) = inputs[i].0.recompute_output_kind_from_internal_output_kinds(force_refine_inputs_from_usage) {
                         if inputs[i].1.refine_if_possible(new_output_kind_for_input).did_refine() {
-                            // If we succeed in refinine one input's usage, immediately apply that to all other inputs and outputs with kind inference
-                            // This has already been applied to input_usage so when we apply_input_constraints it will pick up the new value
-                            let mut kindspec = op.get_kindspec();
-                            // The kindspec gives us either a concrete kind or a hole index for each input and output.
-                            // Apply constraints to the holes in the kindspec
-                            kindspec.apply_input_constraints(inputs.iter().map(|(v, usage_kind)| *usage_kind));
-                            kindspec.apply_output_constraint(*output_kind);
-
-                            // We know that the kindspec will respect all current constraints and can only tighten them.
-
-                            // We now have complete holes or concrete types.
-                            // Apply them to the input/output.
-                            let holes = kindspec.holes();
-                            for ((input_vec, current_usage), inferred_usage) in inputs.iter_mut().zip(kindspec.input_kinds().iter()) {
-                                let inferred_usage = match inferred_usage {
-                                    HLSLOperandKind::Concrete(conc_kind) => (*conc_kind).into(), // Already applied
-                                    HLSLOperandKind::Hole(idx) => holes[*idx],
-                                };
-                                // TODO recheck this comment
-                                // This cannot have recursive effects.
-                                // The kind inference model we have is limited.
-                                // If two elements have a related kind, they must have the *same* kind.
-                                // Furthermore, operand_usage_constraint has already been intersected with input_vec.usage_kind().
-                                // If input_vec were an expression, and our type inference system was more complex, then refining the output kind could then cause a domino effect
-                                // with other input kinds which then *further* reduce the output kind.
-                                // Right now, refining the output_kind of input_vec will reduce input_vec.usage_kind() to exactly what it was before, or to operand_usage_constraint.
-                                // If input_vec were an expression, and input_vec.usage_kind() were connected to a type hole, refining input_vec.usage_kind() can only further reduce 
-                                // the inputs to input_vec, which cannot have domino effects onto the output of input_vec.
-
-                                current_usage.refine_if_possible(inferred_usage);
-
-                                // TODO do we need to check the outcome of this? Does this require us to re-type-check?
-                                input_vec.refine_output_kind_from_usage(inferred_usage)
-                            }
-                            {
-                                let final_kind = match kindspec.output_kind() {
-                                    HLSLOperandKind::Concrete(conc_kind) => (*conc_kind).into(), // Already applied
-                                    HLSLOperandKind::Hole(idx) => holes[*idx],
-                                };
-                                // These *should* match
-                                *output_kind = output_kind.intersection(final_kind).unwrap();
-                            }
+                            apply_kindspec_vec(op, inputs, output_kind);
                         }
                     }
+                }
+                if force_refine_inputs_from_usage {
+                    apply_kindspec_vec(op, inputs, output_kind);
                 }
                 if *output_kind != old_output_kind {
                     Some(KindRefinementResult::RefinedTo(*output_kind))
@@ -385,49 +454,8 @@ impl<TReg: Reg> Vector<TReg> {
             },
             Vector::Expr { op, inputs, output_kind, .. } => 
                 if output_kind.refine_if_possible(usage_constraint).did_refine() {
-                    let mut kindspec = op.get_kindspec();
-                    // The kindspec gives us either a concrete kind or a hole index for each input and output.
-                    // Apply constraints to the holes in the kindspec
-                    kindspec.apply_input_constraints(inputs.iter().map(|(v, usage_kind)| *usage_kind));
-                    kindspec.apply_output_constraint(*output_kind);
-
-                    // We know that the kindspec will respect all current constraints and can only tighten them.
-
-                    // eprintln!("\n--------------------------\nKindspec for {:?}: {:?}", op, &kindspec);
-                    // eprintln!("Inputs: {:?}\nOutput: {:?}", inputs.iter().map(|(_, kind)| kind).collect::<Vec<_>>(), output.1);
-
-                    // eprintln!("After inference, holes = {:?}", &inferred_holes);
-                    // We now have complete holes or concrete types.
-                    // Apply them to the input/output.
-                    let holes = kindspec.holes();
-                    for ((input_vec, current_usage), inferred_usage) in inputs.iter_mut().zip(kindspec.input_kinds().iter()) {
-                        let inferred_usage = match inferred_usage {
-                            HLSLOperandKind::Concrete(conc_kind) => (*conc_kind).into(), // Already applied
-                            HLSLOperandKind::Hole(idx) => holes[*idx],
-                        };
-                        // TODO recheck this comment
-                        // This cannot have recursive effects.
-                        // The kind inference model we have is limited.
-                        // If two elements have a related kind, they must have the *same* kind.
-                        // Furthermore, operand_usage_constraint has already been intersected with input_vec.usage_kind().
-                        // If input_vec were an expression, and our type inference system was more complex, then refining the output kind could then cause a domino effect
-                        // with other input kinds which then *further* reduce the output kind.
-                        // Right now, refining the output_kind of input_vec will reduce input_vec.usage_kind() to exactly what it was before, or to operand_usage_constraint.
-                        // If input_vec were an expression, and input_vec.usage_kind() were connected to a type hole, refining input_vec.usage_kind() can only further reduce 
-                        // the inputs to input_vec, which cannot have domino effects onto the output of input_vec.
-                        current_usage.refine_if_possible(inferred_usage);
-                        // TODO do we need to check the outcome of this? Does this require us to re-type-check?
-                        input_vec.refine_output_kind_from_usage(inferred_usage)
-                    }
-                    {
-                        let final_kind = match kindspec.output_kind() {
-                            HLSLOperandKind::Concrete(conc_kind) => (*conc_kind).into(), // Already applied
-                            HLSLOperandKind::Hole(idx) => holes[*idx],
-                        };
-                        // These *should* match
-                        *output_kind = output_kind.intersection(final_kind).unwrap();
-                    }
-                    // TODO we could create a feedback loop by mutating or returning a refinement of usage_constraint...
+                    apply_kindspec_vec(op, inputs, output_kind);
+                    // TODO we could create a feedback loop by mutating or returning a refinement of usage_constraint when output_kind is refined...
                 }
         }
     }
@@ -503,41 +531,13 @@ impl<TReg: Reg> Scalar<TReg> {
             },
             Scalar::Expr { op, inputs, output_kind } => 
             if output_kind.refine_if_possible(usage).did_refine() {
-                let mut kindspec = op.get_kindspec();
-                // The kindspec gives us either a concrete kind or a hole index for each input and output.
-                // Apply constraints to the holes in the kindspec
-                kindspec.apply_input_constraints(inputs.iter().map(|(_s, s_kind)| *s_kind));
-                kindspec.apply_output_constraint(*output_kind);
-
-                // eprintln!("\n--------------------------\nKindspec for {:?}: {:?}", op, &kindspec);
-                // eprintln!("Inputs: {:?}\nOutput: {:?}", inputs.iter().map(|(_, kind)| kind).collect::<Vec<_>>(), output.1);
-
-                // eprintln!("After inference, holes = {:?}", &inferred_holes);
-                // We now have complete holes or concrete types.
-                // Apply them to the input/output.
-                let holes = kindspec.holes();
-                for ((input_s, input_s_kind), operand_kind) in inputs.iter_mut().zip(kindspec.input_kinds().iter()) {
-                    let usage_constraint = match operand_kind {
-                        HLSLOperandKind::Concrete(conc_kind) => (*conc_kind).into(), // Already applied
-                        HLSLOperandKind::Hole(idx) => holes[*idx],
-                    };
-                    // TODO what happens if this is an error? Really this shouldn't be possible.
-                    input_s_kind.refine_if_possible(usage_constraint);//.expect("inputs to a scalar expression had contradictory kinds despite using the same hole");
-                }
-                {
-                    let final_kind = match kindspec.output_kind() {
-                        HLSLOperandKind::Concrete(conc_kind) => (*conc_kind).into(), // Already applied
-                        HLSLOperandKind::Hole(idx) => holes[*idx],
-                    };
-                    // These *should* match
-                    *output_kind = output_kind.intersection(final_kind).unwrap();
-                }
+                apply_kindspec_scl(op, inputs, output_kind);
             },
         }
     }
 
     // TODO this doesn't detect changes, because the previous output kind isn't stored anywhere.
-    pub fn recompute_output_kind_from_internal_output_kinds(&mut self) -> HLSLKind {
+    pub fn recompute_output_kind_from_internal_output_kinds(&mut self, force_refine_inputs_from_usage: bool) -> HLSLKind {
         match self {
             Scalar::Component(reg, _) => reg.output_kind(),
             Scalar::Literal(_) => HLSLKind::NUMERIC,
@@ -546,50 +546,13 @@ impl<TReg: Reg> Scalar<TReg> {
                 // for (input, input_usage) in inputs.iter_mut() {
                 for i in 0..inputs.len() {
                     // If any of our inputs have had their output kinds changed, try to refine their usage
-                    let new_output_kind_for_input = inputs[i].0.recompute_output_kind_from_internal_output_kinds();
+                    let new_output_kind_for_input = inputs[i].0.recompute_output_kind_from_internal_output_kinds(force_refine_inputs_from_usage);
                     if inputs[i].1.refine_if_possible(new_output_kind_for_input).did_refine() {
-                        // If we succeed in refinine one input's usage, immediately apply that to all other inputs and outputs with kind inference
-                        // This has already been applied to input_usage so when we apply_input_constraints it will pick up the new value
-                        let mut kindspec = op.get_kindspec();
-                        // The kindspec gives us either a concrete kind or a hole index for each input and output.
-                        // Apply constraints to the holes in the kindspec
-                        kindspec.apply_input_constraints(inputs.iter().map(|(s, usage_kind)| *usage_kind));
-                        kindspec.apply_output_constraint(*output_kind);
-
-                        // We know that the kindspec will respect all current constraints and can only tighten them.
-
-                        // We now have complete holes or concrete types.
-                        // Apply them to the input/output.
-                        let holes = kindspec.holes();
-                        for ((input_vec, current_usage), inferred_usage) in inputs.iter_mut().zip(kindspec.input_kinds().iter()) {
-                            let inferred_usage = match inferred_usage {
-                                HLSLOperandKind::Concrete(conc_kind) => (*conc_kind).into(), // Already applied
-                                HLSLOperandKind::Hole(idx) => holes[*idx],
-                            };
-                            // TODO recheck this comment
-                            // This cannot have recursive effects.
-                            // The kind inference model we have is limited.
-                            // If two elements have a related kind, they must have the *same* kind.
-                            // Furthermore, operand_usage_constraint has already been intersected with input_vec.usage_kind().
-                            // If input_vec were an expression, and our type inference system was more complex, then refining the output kind could then cause a domino effect
-                            // with other input kinds which then *further* reduce the output kind.
-                            // Right now, refining the output_kind of input_vec will reduce input_vec.usage_kind() to exactly what it was before, or to operand_usage_constraint.
-                            // If input_vec were an expression, and input_vec.usage_kind() were connected to a type hole, refining input_vec.usage_kind() can only further reduce 
-                            // the inputs to input_vec, which cannot have domino effects onto the output of input_vec.
-
-                            current_usage.refine_if_possible(inferred_usage);
-                            input_vec.refine_output_kind_from_usage(inferred_usage)
-                        }
-                        {
-                            let final_kind = match kindspec.output_kind() {
-                                HLSLOperandKind::Concrete(conc_kind) => (*conc_kind).into(), // Already applied
-                                HLSLOperandKind::Hole(idx) => holes[*idx],
-                            };
-                            // These *should* match
-                            *output_kind = output_kind.intersection(final_kind).unwrap();
-                        }
+                        apply_kindspec_scl(op, inputs, output_kind);
                     }
-                
+                }
+                if force_refine_inputs_from_usage {
+                    apply_kindspec_scl(op, inputs, output_kind);
                 }
                 *output_kind
             }
@@ -613,7 +576,8 @@ impl<TReg: Reg> Scalar<TReg> {
                     inputs: inputs.iter().map(|(s, usage)| (s.map_reg(f, *usage), *usage)).collect(),
                     output_kind: *output_kind,
                 };
-                s.recompute_output_kind_from_internal_output_kinds();
+                // After mapping to a new kind of register, it might be that we can refine the kinds of those new registers further based on usage.
+                s.recompute_output_kind_from_internal_output_kinds(true);
                 s
             }
         }
@@ -632,7 +596,8 @@ impl<TReg: Reg> Scalar<TReg> {
                     inputs: inputs.iter().map(|(s, usage)| (s.map_scalar(f, *usage), *usage)).collect(),
                     output_kind: *output_kind,
                 };
-                s.recompute_output_kind_from_internal_output_kinds();
+                // After mapping to a new kind of register, it might be that we can refine the kinds of those new registers further based on usage.
+                s.recompute_output_kind_from_internal_output_kinds(true);
                 s
             }
         }

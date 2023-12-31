@@ -202,7 +202,7 @@ impl VariableState {
     /// Will create new input vectors if they haven't been seen before?
     /// TODO could replace this with more complete array handling...
     fn remap_input_expr_to_use_variables(&mut self, v: &HLSLVector) -> Vector<MutRef<Variable>> {
-        let new_v = v.map_scalar(&mut |reg, reg_comp, usage_kind| {
+        let mut new_v = v.map_scalar(&mut |reg, reg_comp, usage_kind| {
             let (var, var_comp) = match self.scalar_map.lookup(reg.clone(), reg_comp) {
                 Some((var, var_comp)) => (var, var_comp),
                 None => if reg.is_pure_input() {
@@ -211,7 +211,7 @@ impl VariableState {
                     for i in 0..reg.n_components() {
                         self.scalar_map.update(reg.clone(), i.into(), var.clone(), i.into());
                     }
-                    var.refine_output_kind_if_possible(usage_kind);
+                    var.refine_output_kind_if_possible(usage_kind); // TODO is this necessary? see below
                     (var, reg_comp)
                 } else {
                     panic!("Encountered unknown non-input scalar {:?}.{} in a operation input", reg, reg_comp)
@@ -219,8 +219,6 @@ impl VariableState {
             };
             (var, var_comp)
         });
-
-        // After map_scalar is called the expression automatically tries to refine itself
 
         new_v
     }
@@ -457,7 +455,7 @@ impl VariableState {
         for a in actions.iter_mut().rev() {
             match a {
                 Action::Assign { output, expr } => {
-                    match expr.recompute_output_kind_from_internal_output_kinds() {
+                    match expr.recompute_output_kind_from_internal_output_kinds(true) {
                         Some(KindRefinementResult::RefinedTo(new_output_kind)) => {
                             output.0.refine_output_kind_if_possible(new_output_kind);
                         }
