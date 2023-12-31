@@ -99,7 +99,7 @@ pub trait AbstractVM: std::fmt::Debug + Sized {
     // fn decompose(v: &Self::Vector) -> Vec<Self::Scalar>;
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Action<TReg: Reg> {
     /// Assign a value derived from a set of inputs using an [HLSLOperator] to an output.
     ///
