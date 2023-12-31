@@ -52,8 +52,8 @@ impl AMDILContext {
 
     pub fn push_instruction(&mut self, i: Instruction) {
         let current_consumer = match self.if_stack.last_mut() {
-            Some(IfInProgress::ParsingTrue{ if_true, ..}) => if_true,
-            Some(IfInProgress::ParsingFals{ if_fals, ..}) => if_fals,
+            Some(IfInProgress::ParsingTrue{ if_true, .. }) => if_true,
+            Some(IfInProgress::ParsingFals{ if_fals, .. }) => if_fals,
             None => &mut self.instructions,
         };
         current_consumer.push(i);
@@ -82,7 +82,7 @@ impl AMDILContext {
                 if_true,
                 if_fals: vec![],
             },
-            IfInProgress::ParsingFals { cond, if_true, if_fals } => panic!("Encountered an else when already else-ing"),
+            IfInProgress::ParsingFals { .. } => panic!("Encountered an else when already else-ing"),
         };
         self.if_stack.push(else_if);
     }
