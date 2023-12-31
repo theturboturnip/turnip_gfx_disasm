@@ -52,8 +52,8 @@ impl ALUArgsSpec {
         let srcs: Result<Vec<(AMDILVector, HLSLKind)>, AMDILError> = input_elems
             .into_iter()
             .zip(self.input_kinds.iter())
-            .map(|(data, usage_kind)| {
-                Ok((ctx.input_to_vector(data, mask_to_apply_to_input)?, *usage_kind))
+            .map(|(input, usage_kind)| {
+                Ok((ctx.input_to_vector(input, mask_to_apply_to_input)?, *usage_kind))
             })
             .collect();
 
@@ -300,7 +300,7 @@ lazy_static! {
 }
 
 pub fn parse_alu<'a>(
-    data: &'a str, instr: String, ctrl_specifiers: Vec<CtrlSpec>, dst_mods: DstMods,
+    line: &'a str, instr: String, ctrl_specifiers: Vec<CtrlSpec>, dst_mods: DstMods,
     ctx: &AMDILContext,
 ) -> Result<(&'a str, ALUInstruction), AMDILError> {
     match (
@@ -308,8 +308,8 @@ pub fn parse_alu<'a>(
         &matchable_ctrl_specs(&ctrl_specifiers)[..],
     ) {
         ("sample", [("resource", tex_id), ("sampler", _sampler_id)]) => {
-            let (data, dst) = parse_dst(data)?;
-            let (data, mut srcs) = parse_many1_src(data)?;
+            let (line, dst) = parse_dst(line)?;
+            let (line, mut srcs) = parse_many1_src(line)?;
             // Insert the texture argument as the first input
             srcs.insert(
                 0,
@@ -325,19 +325,19 @@ pub fn parse_alu<'a>(
                 output_kind: HLSLKind::NUMERIC_FLOAT,
             };
 
-            return Ok((data, arg_spec.make_instruction(ctx, HLSLOperator::SampleI(SampleIntrinsic::Tex2D), dst, srcs, dst_mods)?));
+            return Ok((line, arg_spec.make_instruction(ctx, HLSLOperator::SampleI(SampleIntrinsic::Tex2D), dst, srcs, dst_mods)?));
         }
         _ => {}
     };
     match ALU_INSTR_DEFS.get_key_value(instr.as_str()) {
         Some((_static_name, instr_spec)) => {
-            // Map matchable_args into VectorDataRefs
-            let (data, dst) = parse_dst(data)?;
-            let (data, srcs) = parse_many1_src(data)?;
+            // Map matchable_args into VectorlineRefs
+            let (line, dst) = parse_dst(line)?;
+            let (line, srcs) = parse_many1_src(line)?;
             let instr = instr_spec.0.make_instruction(ctx, instr_spec.1, dst, srcs, dst_mods)?;
 
             // ok, produce the instruction
-            Ok((data, instr))
+            Ok((line, instr))
         }
         None => return Err(AMDILError::UnkInstruction(instr, ctrl_specifiers)),
     }

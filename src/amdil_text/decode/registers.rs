@@ -5,14 +5,27 @@ use std::collections::HashMap;
 
 use crate::{abstract_machine::{vector::{MaskedSwizzle, VectorComponent}, expr::{ContigSwizzle, Scalar, Reg}}, amdil_text::vm::{AMDILRegister, AMDILVector}, hlsl::{kinds::{HLSLKind, HLSLNumericKind, HLSLKindBitmask}, syntax::{HLSLOperator, ArithmeticOp, UnaryOp, NumericIntrinsic}}};
 
-use super::{grammar::{Src, RegId, SrcMod, RegRelativeAddr, Dst, SrcMods}, error::AMDILError};
+use super::{grammar::{Src, RegId, SrcMod, RegRelativeAddr, Dst, SrcMods}, error::AMDILError, Instruction};
 
 pub type LiteralVec = Box<[u64; 4]>;
 
-pub struct AMDILContext {
-    named_literals: HashMap<String, LiteralVec>,
+enum IfInProgress {
+    ParsingTrue{
+        cond: Scalar<AMDILRegister>, 
+        if_true: Vec<Instruction>,
+    },
+    ParsingFals {
+        cond: Scalar<AMDILRegister>,
+        if_true: Vec<Instruction>,
+        if_fals: Vec<Instruction>,
+    }
 }
 
+pub struct AMDILContext {
+    named_literals: HashMap<String, LiteralVec>,
+    if_stack: Vec<IfInProgress>,
+    instructions: Vec<Instruction>,
+}
 pub enum InstructionInput { 
     Src(Src),
     Texture(u64),
@@ -26,7 +39,59 @@ enum RegOrLiteral<'a> {
 
 impl AMDILContext {
     pub fn new() -> Self {
-        AMDILContext { named_literals: HashMap::new() }
+        AMDILContext {
+            named_literals: HashMap::new(),
+            instructions: vec![],
+            if_stack: vec![],
+        }
+    }
+
+    pub fn push_instruction(&mut self, i: Instruction) {
+        let current_consumer = match self.if_stack.last_mut() {
+            Some(IfInProgress::ParsingTrue{ if_true, ..}) => if_true,
+            Some(IfInProgress::ParsingFals{ if_fals, ..}) => if_fals,
+            None => &mut self.instructions,
+        };
+        current_consumer.push(i);
+    }
+
+    pub fn finalize(self) -> Vec<Instruction> {
+        if !self.if_stack.is_empty() {
+            panic!("Program had inbalanced ifs and endifs")
+        }
+        self.instructions
+    }
+
+    pub fn start_if(&mut self, cond: Scalar<AMDILRegister>) {
+        self.if_stack.push(IfInProgress::ParsingTrue{
+            cond,
+            if_true: vec![]
+        })
+    }
+    pub fn encounter_else(&mut self) {
+        let current_if = self.if_stack
+            .pop()
+            .expect("Encountered an else when not inside an if");
+        let else_if = match current_if {
+            IfInProgress::ParsingTrue{ cond, if_true } => IfInProgress::ParsingFals {
+                cond,
+                if_true,
+                if_fals: vec![],
+            },
+            IfInProgress::ParsingFals { cond, if_true, if_fals } => panic!("Encountered an else when already else-ing"),
+        };
+        self.if_stack.push(else_if);
+    }
+    pub fn end_if(&mut self) {
+        let instr = match self.if_stack.pop().expect("Encountered and endif when not inside an if") {
+            IfInProgress::ParsingTrue { cond, if_true } => {
+                Instruction::If { cond, if_true, if_fals: vec![] }
+            },
+            IfInProgress::ParsingFals { cond, if_true, if_fals } => {
+                Instruction::If { cond, if_true, if_fals }
+            },
+        };
+        self.push_instruction(instr);
     }
 
     pub fn push_named_literal(&mut self, name: String, literal: LiteralVec) {
