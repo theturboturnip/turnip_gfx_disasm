@@ -271,6 +271,15 @@ lazy_static! {
             },
             HLSLOperator::NumericI(NumericIntrinsic::Log2)
         )),
+        ("frc", (
+            ALUArgsSpec {
+                input_kinds: vec![HLSLKind::NUMERIC_FLOAT],
+                input_mask: InputMask::InheritFromFirstOutput,
+                output_kind: HLSLKind::NUMERIC_FLOAT,
+            },
+            HLSLOperator::NumericI(NumericIntrinsic::Frac)
+        )),
+
 
         ("lt", logical_cmp(FauxBooleanOp::Lt, HLSLKind::NUMERIC_FLOAT)),
         ("le", logical_cmp(FauxBooleanOp::Le, HLSLKind::NUMERIC_FLOAT)),

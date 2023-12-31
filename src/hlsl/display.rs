@@ -211,6 +211,10 @@ impl<'a, T: 'a> std::fmt::Display for DWrap<(&'a HLSLOperator, &'a Vec<T>)> wher
                         assert_eq!(inputs.len(), 1);
                         write!(f, "log2({})", DWrap(&inputs[0]))
                     },
+                    super::syntax::NumericIntrinsic::Frac => {
+                        assert_eq!(inputs.len(), 1);
+                        write!(f, "frac({})", DWrap(&inputs[0]))
+                    },
                 }
             },
             HLSLOperator::FauxBoolean(b) => {
