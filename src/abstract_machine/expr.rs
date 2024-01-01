@@ -249,7 +249,7 @@ impl<TReg: Reg> Vector<TReg> {
         v
     }
 
-    pub fn map_scalar<TOtherReg: Reg, F: FnMut(&TReg, VectorComponent, HLSLKind) -> (TOtherReg, VectorComponent)>(&self, f: &mut F) -> Vector<TOtherReg> {
+    pub fn map_scalar<TOtherReg: Reg, F: FnMut(&TReg, VectorComponent, HLSLKind) -> Scalar<TOtherReg>>(&self, f: &mut F) -> Vector<TOtherReg> {
         match self {
             Self::Construction(scalars, output_kind) => {
                 Vector::of_scalars(
@@ -259,8 +259,7 @@ impl<TReg: Reg> Vector<TReg> {
             Self::PureSwizzle(reg, comps, output_kind) => {
                 Vector::of_scalars(
                     comps.iter().map(|comp| {
-                        let (reg, comp) = f(reg, *comp, *output_kind);
-                        Scalar::Component(reg, comp)
+                        f(reg, *comp, *output_kind)
                     }).collect(),
                 )
             }
@@ -583,12 +582,11 @@ impl<TReg: Reg> Scalar<TReg> {
         }
     }
 
-    pub fn map_scalar<TOtherReg: Reg, F: FnMut(&TReg, VectorComponent, HLSLKind) -> (TOtherReg, VectorComponent)>(&self, f: &mut F, usage: HLSLKind) -> Scalar<TOtherReg> {
+    pub fn map_scalar<TOtherReg: Reg, F: FnMut(&TReg, VectorComponent, HLSLKind) -> Scalar<TOtherReg>>(&self, f: &mut F, usage: HLSLKind) -> Scalar<TOtherReg> {
         match self {
             Self::Literal(lit) => Scalar::Literal(*lit),
             Self::Component(reg, comp) => {
-                let (reg, comp) = f(reg, *comp, usage);
-                Scalar::Component(reg, comp)
+                f(reg, *comp, usage)
             }
             Self::Expr { op, inputs, output_kind } => {
                 let mut s = Scalar::Expr {

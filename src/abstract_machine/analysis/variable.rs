@@ -1,6 +1,6 @@
 use std::{cell::RefCell, rc::Rc, collections::{HashMap, HashSet}};
 
-use crate::{hlsl::{kinds::{HLSLKind, HLSLOperandKind, HLSLKindBitmask, KindRefinementResult}, compat::HLSLCompatProgram, HLSLRegister, vm::HLSLAbstractVM, HLSLAction, syntax::{Operator, HLSLOperator}}, abstract_machine::{vector::VectorComponent, VMName, VMVector, VMScalar, expr::{Scalar, Vector, HLSLVector, ContigSwizzle, Reg}}, Program, Action};
+use crate::{hlsl::{kinds::{HLSLKind, HLSLOperandKind, HLSLKindBitmask, KindRefinementResult}, compat::HLSLCompatProgram, HLSLRegister, vm::HLSLAbstractVM, HLSLAction, syntax::{Operator, HLSLOperator}}, abstract_machine::{vector::VectorComponent, VMName, VMVector, VMScalar, expr::{Scalar, Vector, HLSLVector, ContigSwizzle, Reg, HLSLScalar}}, Program, Action};
 
 
 type MutRef<T> = Rc<RefCell<T>>;
@@ -56,7 +56,7 @@ impl Reg for MutRef<Variable> {
     }
 }
 
-type MutScalarVar = Scalar<MutRef<Variable>>;
+type MutVarScalar = Scalar<MutRef<Variable>>;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct ScalarVar {
@@ -92,7 +92,20 @@ type MutVarAction = Action<MutRef<Variable>>;
 // // }
 
 type ScalarKey = (HLSLRegister, VectorComponent);
-type VariableComp = (MutRef<Variable>, VectorComponent);
+
+#[derive(Debug, Clone)]
+enum VariableComp {
+    Simple(MutRef<Variable>, VectorComponent),
+    Complex(MutVarScalar),
+}
+impl From<VariableComp> for MutVarScalar {
+    fn from(value: VariableComp) -> Self {
+        match value {
+            VariableComp::Simple(var, comp) => MutVarScalar::Component(var, comp),
+            VariableComp::Complex(s) => s,
+        }
+    }
+}
 
 /// Whenever a new (conditional) scope is created:
 /// - it may create new mappings to use inside the scope, which aren't valid outside
@@ -113,19 +126,19 @@ impl VariableScalarMap {
             scopes: vec![],
         }
     }
-    fn lookup(&self, reg: HLSLRegister, reg_comp: VectorComponent) -> Option<VariableComp> {
+    fn lookup(&self, reg: HLSLRegister, reg_comp: VectorComponent) -> Option<MutVarScalar> {
         let key = (reg, reg_comp);
         for scope in self.scopes.iter().rev() {
             match scope.overlay_mappings.get(&key) {
-                Some((var, c)) => return Some((var.clone(), *c)),
+                Some(s) => return Some(s.clone().into()),
                 None => continue,
             }
         }
-        self.scalar_to_var.get(&key).map(|(var, c)| (var.clone(), *c))
+        self.scalar_to_var.get(&key).map(|s| s.clone().into())
     }
     fn update(&mut self, reg: HLSLRegister, reg_comp: VectorComponent, var: MutRef<Variable>, var_comp: VectorComponent) {
         if reg.is_pure_input() {
-            self.scalar_to_var.insert((reg, reg_comp), (var, var_comp));
+            self.scalar_to_var.insert((reg, reg_comp), VariableComp::Simple(var, var_comp));
         } else {
             match self.scopes.last_mut() {
                 Some(scope) => {
@@ -133,9 +146,9 @@ impl VariableScalarMap {
                         panic!("Shouldn't be creating input/output mappings inside a scope!")
                     }
                     scope.keys_to_clear.insert((reg.clone(), reg_comp));
-                    scope.overlay_mappings.insert((reg, reg_comp), (var, var_comp))
+                    scope.overlay_mappings.insert((reg, reg_comp), VariableComp::Simple(var, var_comp))
                 }
-                None => self.scalar_to_var.insert((reg, reg_comp), (var, var_comp)),
+                None => self.scalar_to_var.insert((reg, reg_comp), VariableComp::Simple(var, var_comp)),
             };
         }
     }
@@ -203,8 +216,8 @@ impl VariableState {
     /// TODO could replace this with more complete array handling...
     fn remap_input_expr_to_use_variables(&mut self, v: &HLSLVector) -> Vector<MutRef<Variable>> {
         let mut new_v = v.map_scalar(&mut |reg, reg_comp, usage_kind| {
-            let (var, var_comp) = match self.scalar_map.lookup(reg.clone(), reg_comp) {
-                Some((var, var_comp)) => (var, var_comp),
+            match self.scalar_map.lookup(reg.clone(), reg_comp) {
+                Some(s) => s,
                 None => if reg.is_pure_input() {
                     let mut var = Rc::new(RefCell::new(Variable::new(reg.clone(), reg.toplevel_kind())));
                     self.io_declarations.insert(reg.clone(), var.clone());
@@ -212,12 +225,11 @@ impl VariableState {
                         self.scalar_map.update(reg.clone(), i.into(), var.clone(), i.into());
                     }
                     var.refine_output_kind_if_possible(usage_kind); // TODO is this necessary? see below
-                    (var, reg_comp)
+                    Scalar::Component(var, reg_comp)
                 } else {
                     panic!("Encountered unknown non-input scalar {:?}.{} in a operation input", reg, reg_comp)
                 }
-            };
-            (var, var_comp)
+            }
         });
 
         new_v
@@ -407,9 +419,9 @@ impl VariableState {
                 // Sketch:
                 // 1. translate immediate input
                 let expr = expr.map_scalar(&mut |reg, reg_comp, usage| {
-                    let (mut var, var_comp) = self.scalar_map.lookup(reg.clone(), reg_comp).expect("Tried to use unencountered original scalars in an IF");
-                    var.refine_output_kind_if_possible(usage);
-                    (var, var_comp)
+                    let mut s = self.scalar_map.lookup(reg.clone(), reg_comp).expect("Tried to use unencountered original scalars in an IF");
+                    s.refine_output_kind_from_usage(usage);
+                    s
                 }, HLSLKind::INTEGER);
                 // 2. make a checkpoint for the scalar mapping
                 self.scalar_map.push_scope();
@@ -501,7 +513,7 @@ impl VariableState {
         // }
     }
 
-    fn get_consistent_kind(var_vec: &Vec<MutScalarVar>, supposed_kind: HLSLKind) -> HLSLKind {
+    fn get_consistent_kind(var_vec: &Vec<MutVarScalar>, supposed_kind: HLSLKind) -> HLSLKind {
         // If the constituent variables referenced in var_vec were updated after-the-fact through type inference,
         // they may be out-of-date with the supposed_kind attached to the variable initially.
         // NOTE this may be difficult to resolve if two variables referenced in the same input vector (which thus initially have the same kind masks)
@@ -534,10 +546,10 @@ impl VariableState {
         }
     }
 
-    fn resolve(&self, var: &MutRef<Variable>, var_comp: VectorComponent) -> (HLSLRegister, VectorComponent) {
+    fn resolve(&self, var: &MutRef<Variable>, var_comp: VectorComponent) -> HLSLScalar {
         // TODO how do we communicate more restricted type information to the outside world?
         // HLSLRegister doesn't have a HLSLKind
-        (var.borrow().name.clone(), var_comp)
+        Scalar::Component(var.borrow().name.clone(), var_comp)
     }
 }
 
