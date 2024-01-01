@@ -61,6 +61,9 @@ impl VMVector for HLSLRegister {
     }
 }
 impl Reg for HLSLRegister {
+    fn indexable_depth(&self) -> usize {
+        0
+    }
     fn output_kind(&self) -> HLSLKind {
         self.toplevel_kind() // TODO merge these functions somehow
     }

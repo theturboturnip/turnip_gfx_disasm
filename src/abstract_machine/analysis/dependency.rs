@@ -2,20 +2,20 @@ use std::collections::{HashMap, HashSet};
 
 use crate::{
     abstract_machine::{
-        AbstractVM, VMName, expr::Scalar, vector::VectorComponent
+        AbstractVM, VMName, expr::{Scalar, RegDependence}, vector::VectorComponent
     },
     hlsl::kinds::{HLSLKind, HLSLKindBitmask},
     Action,
 };
 
-pub type ScalarDependent<TVM: AbstractVM> = (TVM::Register, VectorComponent, HLSLKind);
+pub type ScalarDependent<TVM: AbstractVM> = (RegDependence<TVM::Register>, VectorComponent, HLSLKind);
 
 /// Dependency solver for scalar-based abstract VMs
 pub struct ScalarDependencies<TVM: AbstractVM> {
     pub discard_dependencies: HashSet<ScalarDependent<TVM>>,
     /// Mapping of <non-pure-input> to <pure inputs it depends on>
     pub dependents: HashMap<
-        (TVM::Register, VectorComponent),
+        (RegDependence<TVM::Register>, VectorComponent),
         HashSet<ScalarDependent<TVM>>,
     >,
 }
@@ -65,7 +65,7 @@ impl<TVM: AbstractVM> ScalarDependencies<TVM> {
                         );
                 }
 
-                let output_scls: Vec<_> = output.1.iter().map(|comp| (output.0.clone(), *comp)).collect();
+                let output_scls: Vec<_> = output.1.iter().map(|comp| (RegDependence::Direct(output.0.clone()), *comp)).collect();
 
                 let n_output_scls = output_scls.len();
 
@@ -87,7 +87,7 @@ impl<TVM: AbstractVM> ScalarDependencies<TVM> {
             Action::If { expr, if_true, if_fals, .. } => {
                 // Make `inputs` a dependency on everything touched inside the if_true AND if_fals
                 let mut next_control_flow_inputs = control_flow_inputs.clone();
-                for input_scalar in expr.deps(HLSLKind::INTEGER) {
+                for input_scalar in expr.scalar_deps(HLSLKind::INTEGER) {
                     self.resolve_input_on(&mut next_control_flow_inputs, input_scalar);
                 }
 

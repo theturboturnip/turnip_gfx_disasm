@@ -26,9 +26,11 @@ use crate::{abstract_machine::{VMName, vector::VectorComponent, VMScalar, VMVect
 
 use super::{find_common, instructions::SimpleDependencyRelation};
 
+// TODO make a version of this that's Copy
 pub type ContigSwizzle = ArrayVec<VectorComponent, 4>;
 
 pub trait Reg: std::fmt::Debug + Clone + PartialEq {
+    fn indexable_depth(&self) -> usize;
     fn output_kind(&self) -> HLSLKind;
     fn refine_output_kind_if_possible(&mut self, constraint: HLSLKind) -> Option<KindRefinementResult> {
         None
@@ -133,6 +135,148 @@ fn apply_kindspec_scl<TReg: Reg>(
     }
 }
 
+pub const INDEX_KIND: HLSLKind = HLSLKind::INTEGER;
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct IndexedReg<TReg: Reg> {
+    // TODO make the variable machine not use these directly
+    pub reg: TReg,
+    pub idxs: Vec<Scalar<TReg>>,
+}
+impl<TReg: Reg + VMName> IndexedReg<TReg> {
+    pub fn is_pure_input(&self) -> bool {
+        self.reg.is_pure_input() && self.idxs.iter().all(|i| i.is_pure_input())
+    }
+    pub fn is_output(&self) -> bool {
+        self.reg.is_output() // TODO is this right?
+    }
+}
+impl<TReg: Reg + VMVector> IndexedReg<TReg> {
+    pub fn n_components(&self) -> usize {
+        self.reg.n_components()
+    }
+}
+impl<TReg: Reg> IndexedReg<TReg> {
+    pub fn new_direct(reg: TReg) -> Self {
+        Self::new(reg, vec![])
+    }
+
+    pub fn new(reg: TReg, idxs: Vec<Scalar<TReg>>) -> Self {
+        assert_eq!(reg.indexable_depth(), idxs.len());
+        Self {
+            reg,
+            idxs
+        }
+    }
+
+    pub fn output_kind(&self) -> HLSLKind {
+        self.reg.output_kind()
+    }
+
+    pub fn refine_output_kind_from_usage(&mut self, usage_constraint: HLSLKind) {
+        self.reg.refine_output_kind_if_possible(usage_constraint);
+        for idx in self.idxs.iter_mut() {
+            idx.refine_output_kind_from_usage(INDEX_KIND);
+        }
+    }
+
+    pub fn recompute_index_output_kind_from_internal_output_kinds(&mut self) {
+        for idx in self.idxs.iter_mut() {
+            idx.recompute_output_kind_from_internal_output_kinds(true);
+        }
+    }
+    
+    pub fn map_reg<TOtherReg: Reg, F: FnMut(&TReg, HLSLKind) -> TOtherReg>(&self, f: &mut F, kind: HLSLKind) -> IndexedReg<TOtherReg> {
+        IndexedReg {
+            reg: f(&self.reg, kind),
+            idxs: self.idxs.iter().map(|idx| idx.map_reg(f, INDEX_KIND)).collect()
+        }
+    }
+
+    pub fn scalar_deps(self, usage_comp: VectorComponent, usage_kind: HLSLKind) -> Vec<(RegDependence<TReg>, VectorComponent, HLSLKind)> {
+        let mut v = vec![];
+        for i in self.idxs.iter() {
+            v.extend(i.scalar_deps(INDEX_KIND));
+        }
+        v.push((self.into(), usage_comp, usage_kind));
+        v
+    }
+}
+impl<TReg: Reg> From<TReg> for IndexedReg<TReg> {
+    fn from(value: TReg) -> Self {
+        Self {
+            reg: value,
+            idxs: vec![],
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct LitIndexedReg<TReg: Reg> {
+    pub reg: TReg,
+    pub idxs: Vec<u64>
+}
+impl<TReg: Reg> TryFrom<IndexedReg<TReg>> for LitIndexedReg<TReg> {
+    type Error = &'static str;
+
+    fn try_from(value: IndexedReg<TReg>) -> Result<Self, Self::Error> {
+        let idxs = value.idxs.into_iter().map(|idx| match idx {
+            Scalar::Literal(l) => Ok(l),
+            _ => Err("complex scalar index")
+        }).collect::<Result<Vec<u64>, &'static str>>()?;
+
+        Ok(Self {
+            reg: value.reg,
+            idxs
+        })
+    }
+}
+impl<TReg: Reg> From<LitIndexedReg<TReg>> for IndexedReg<TReg> {
+    fn from(value: LitIndexedReg<TReg>) -> Self {
+        Self {
+            reg: value.reg,
+            idxs: value.idxs.into_iter().map(|idx| Scalar::Literal(idx)).collect()
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum RegDependence<TReg> {
+    Direct(TReg),
+    LiteralIndex(TReg, Vec<u64>),
+    DynamicIndex(TReg),
+}
+impl<TReg: Reg + VMName> RegDependence<TReg> {
+    pub fn is_pure_input(&self) -> bool {
+        match self {
+            Self::Direct(reg) | Self::LiteralIndex(reg, ..) | Self::DynamicIndex(reg) => reg.is_pure_input()
+        }
+    }
+    pub fn is_output(&self) -> bool {
+        match self {
+            Self::Direct(reg) | Self::LiteralIndex(reg, ..) | Self::DynamicIndex(reg) => reg.is_output()
+        }
+    }
+}
+impl<TReg: Reg> From<IndexedReg<TReg>> for RegDependence<TReg> {
+    fn from(value: IndexedReg<TReg>) -> Self {
+        if value.idxs.is_empty() {
+            Self::Direct(value.reg)
+        } else {
+            let reg = value.reg;
+            let idxs = value.idxs.into_iter().map(|idx| match idx {
+                Scalar::Literal(l) => Ok(l),
+                _ => Err(())
+            }).collect::<Result<Vec<u64>, ()>>();
+
+            match idxs {
+                Ok(lit_idxs) => Self::LiteralIndex(reg, lit_idxs),
+                Err(()) => Self::DynamicIndex(reg),
+            }
+        }
+    }
+}
+
 /// Vectors keep their usage_kind or output_kind inside.
 /// Scalars do not, because it creates contradiction risk.
 /// A Construction (the only place where scalars are actually involved) has one consistent usage_kind for all the scalars - the scalars are not individually cast to different kinds.
@@ -147,7 +291,7 @@ pub enum Vector<TReg: Reg> {
     /// 
     /// output_kind is stored internally, and counts as the usage_kind for the register.
     /// usage_kind is stored externally.
-    PureSwizzle(TReg, ContigSwizzle, HLSLKind),
+    PureSwizzle(IndexedReg<TReg>, ContigSwizzle, HLSLKind),
     /// An expression using a per-component dependency relation.
     /// e.g. adding two vectors together (r0.xyz + r1.xyz) makes each output component depend on the corresponding inputs
     /// x -> (r0.x, r1.x), y -> (r0.y, r1.y), etc.
@@ -233,7 +377,7 @@ impl<TReg: Reg> Vector<TReg> {
                 *usage_kind,
             ),
             Self::PureSwizzle(reg, comps, usage_kind) => Vector::PureSwizzle(
-                f(reg, *usage_kind),
+                reg.map_reg(f, *usage_kind),
                 comps.clone(),
                 *usage_kind,
             ),
@@ -249,7 +393,7 @@ impl<TReg: Reg> Vector<TReg> {
         v
     }
 
-    pub fn map_scalar<TOtherReg: Reg, F: FnMut(&TReg, VectorComponent, HLSLKind) -> Scalar<TOtherReg>>(&self, f: &mut F) -> Vector<TOtherReg> {
+    pub fn map_scalar<TOtherReg: Reg, F: FnMut(&IndexedReg<TReg>, VectorComponent, HLSLKind) -> Scalar<TOtherReg>>(&self, f: &mut F) -> Vector<TOtherReg> {
         match self {
             Self::Construction(scalars, output_kind) => {
                 Vector::of_scalars(
@@ -293,14 +437,14 @@ impl<TReg: Reg> Vector<TReg> {
         }
     }
 
-    pub fn scalar_deps(&self, n_dst_comps: usize) -> Vec<Vec<(TReg, VectorComponent, HLSLKind)>> {
+    pub fn scalar_deps(&self, n_dst_comps: usize) -> Vec<Vec<(RegDependence<TReg>, VectorComponent, HLSLKind)>> {
         match self {
             Self::Construction(scalars, output_kind) => {
                 assert_eq!(n_dst_comps, scalars.len());
                 scalars
                     .iter()
                     .map(|scalar| {
-                        scalar.deps(*output_kind) // TODO intersect type with usage_kind? 
+                        scalar.scalar_deps(*output_kind) // TODO intersect type with usage_kind? 
                     })
                     .collect()
             }
@@ -308,9 +452,7 @@ impl<TReg: Reg> Vector<TReg> {
                 assert_eq!(n_dst_comps, comps.len());
                 comps
                     .iter()
-                    .map(|comp| {
-                        vec![(reg.clone(), *comp, *output_kind)]
-                    })
+                    .map(|comp| reg.clone().scalar_deps(*comp, *output_kind)) // The usage kind of this scalar = the output kind of this swizzle
                     .collect()
             },
             Self::Expr { op, n_comps, inputs, output_kind } => match op.dep_rel() {
@@ -349,15 +491,16 @@ impl<TReg: Reg> Vector<TReg> {
     }
 
     // TODO keep kind information around
-    pub fn all_involved_scalars(&self) -> Vec<(TReg, VectorComponent, HLSLKind)> {
+    pub fn all_involved_scalars(&self) -> Vec<(RegDependence<TReg>, VectorComponent, HLSLKind)> {
         match self {
             Self::Construction(scalars, output_kind) => {
-                scalars.iter().map(|s| s.deps(*output_kind)).flatten().collect()
+                scalars.iter().map(|s| s.scalar_deps(*output_kind)).flatten().collect()
             },
             Self::PureSwizzle(reg, comps, output_kind) => {
                 comps
                     .iter()
-                    .map(|comp| (reg.clone(), *comp, *output_kind)) // The usage kind of this scalar = the output kind of this swizzle
+                    .map(|comp| reg.clone().scalar_deps(*comp, *output_kind)) // The usage kind of this scalar = the output kind of this swizzle
+                    .flatten()
                     .collect()
             },
             Self::Expr { inputs, .. } => {
@@ -401,6 +544,7 @@ impl<TReg: Reg> Vector<TReg> {
             },
             Vector::PureSwizzle(reg, _, output_kind) => {
                 let old_output_kind = *output_kind;
+                reg.recompute_index_output_kind_from_internal_output_kinds();
                 output_kind.refine_if_possible(reg.output_kind());
                 if *output_kind != old_output_kind {
                     Some(KindRefinementResult::RefinedTo(*output_kind))
@@ -448,7 +592,7 @@ impl<TReg: Reg> Vector<TReg> {
             },
             Vector::PureSwizzle(reg, _swizzle, output_kind) => {
                 if output_kind.refine_if_possible(usage_constraint).was_valid() {
-                    reg.refine_output_kind_if_possible(*output_kind);         
+                    reg.refine_output_kind_from_usage(*output_kind);         
                 }
             },
             Vector::Expr { op, inputs, output_kind, .. } => 
@@ -502,7 +646,7 @@ pub enum Scalar<TReg: Reg> {
     /// A component of a register.
     /// 
     /// output_kind = register.kind 
-    Component(TReg, VectorComponent),
+    Component(IndexedReg<TReg>, VectorComponent),
     /// A scalar expression. Stores the usage_kind of each of it's inputs
     /// 
     /// output_kind is stored inside the expression, and is calculated from type inference.
@@ -526,7 +670,7 @@ impl<TReg: Reg> Scalar<TReg> {
         match self {
             Scalar::Literal(..) => {},
             Scalar::Component(reg, _) => {
-                reg.refine_output_kind_if_possible(usage);
+                reg.refine_output_kind_from_usage(usage);
             },
             Scalar::Expr { op, inputs, output_kind } => 
             if output_kind.refine_if_possible(usage).did_refine() {
@@ -562,7 +706,7 @@ impl<TReg: Reg> Scalar<TReg> {
         match self {
             Self::Literal(lit) => Scalar::Literal(*lit),
             Self::Component(reg, comp) => Scalar::Component(
-                f(reg, usage_kind),
+                reg.map_reg(f, usage_kind),
                 *comp,
             ),
             Self::Expr { op, inputs, output_kind } => {
@@ -582,7 +726,7 @@ impl<TReg: Reg> Scalar<TReg> {
         }
     }
 
-    pub fn map_scalar<TOtherReg: Reg, F: FnMut(&TReg, VectorComponent, HLSLKind) -> Scalar<TOtherReg>>(&self, f: &mut F, usage: HLSLKind) -> Scalar<TOtherReg> {
+    pub fn map_scalar<TOtherReg: Reg, F: FnMut(&IndexedReg<TReg>, VectorComponent, HLSLKind) -> Scalar<TOtherReg>>(&self, f: &mut F, usage: HLSLKind) -> Scalar<TOtherReg> {
         match self {
             Self::Literal(lit) => Scalar::Literal(*lit),
             Self::Component(reg, comp) => {
@@ -601,14 +745,14 @@ impl<TReg: Reg> Scalar<TReg> {
         }
     }
 
-    pub fn deps(&self, usage: HLSLKind) -> Vec<(TReg, VectorComponent, HLSLKind)> {
+    pub fn scalar_deps(&self, usage: HLSLKind) -> Vec<(RegDependence<TReg>, VectorComponent, HLSLKind)> {
         match self {
             Self::Expr { op, inputs, output_kind } => {
                 inputs.iter().map(|(i, usage)| {
-                    i.deps(*usage)
+                    i.scalar_deps(*usage)
                 }).flatten().collect()
             },
-            Self::Component(reg, comp) => vec![(reg.clone(), *comp, usage)],
+            Self::Component(reg, comp) => reg.clone().scalar_deps(*comp, usage),
             Self::Literal(_) => vec![],
         }
     }
@@ -626,7 +770,7 @@ pub type HLSLScalar = Scalar<HLSLRegister>;
 //     }
 // }
 
-impl<TReg: VMVector + Reg> VMName for Scalar<TReg> {
+impl<TReg: VMName + Reg> VMName for Scalar<TReg> {
     fn is_pure_input(&self) -> bool {
         match self {
             Self::Expr { .. } => false,
@@ -647,4 +791,4 @@ impl<TReg: VMVector + Reg> VMName for Scalar<TReg> {
         self.output_kind()
     }
 }
-impl<TReg: VMVector + Reg> VMScalar for Scalar<TReg> {}
+impl<TReg: VMName + Reg> VMScalar for Scalar<TReg> {}

@@ -1,13 +1,13 @@
 use std::{cell::RefCell, rc::Rc, collections::{HashMap, HashSet}};
 
-use crate::{hlsl::{kinds::{HLSLKind, HLSLOperandKind, HLSLKindBitmask, KindRefinementResult}, compat::HLSLCompatProgram, HLSLRegister, vm::HLSLAbstractVM, HLSLAction, syntax::{Operator, HLSLOperator, FauxBooleanOp}}, abstract_machine::{vector::VectorComponent, VMName, VMVector, VMScalar, expr::{Scalar, Vector, HLSLVector, ContigSwizzle, Reg, HLSLScalar}}, Program, Action};
+use crate::{hlsl::{kinds::{HLSLKind, HLSLOperandKind, HLSLKindBitmask, KindRefinementResult}, compat::HLSLCompatProgram, HLSLRegister, vm::HLSLAbstractVM, HLSLAction, syntax::{Operator, HLSLOperator, FauxBooleanOp}}, abstract_machine::{vector::VectorComponent, VMName, VMVector, VMScalar, expr::{Scalar, Vector, HLSLVector, ContigSwizzle, Reg, HLSLScalar, IndexedReg, INDEX_KIND}}, Program, Action};
 
 
 type MutRef<T> = Rc<RefCell<T>>;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct Variable {
-    name: HLSLRegister,
+    name: HLSLRegister, // This does NOT use literal indexing because a single Variable may need to represent a whole Array. cb10[5] and cb10[6] are not typed separately.
     n_contig_components: usize,
     kind: HLSLKind,
 }
@@ -48,6 +48,9 @@ impl VMVector for Variable {
     }
 }
 impl Reg for MutRef<Variable> {
+    fn indexable_depth(&self) -> usize {
+        self.borrow().name.indexable_depth()
+    }
     fn output_kind(&self) -> HLSLKind {
         self.borrow().toplevel_kind()
     }
@@ -123,38 +126,56 @@ impl ScopeOverlay {
 }
 
 struct VariableScalarMap {
+    indexables: HashMap<HLSLRegister, MutRef<Variable>>,
     scalar_to_var: HashMap<ScalarKey, MutVarScalar>,
     scopes: Vec<ScopeOverlay>,
 }
 impl VariableScalarMap {
-    fn new() -> Self {
+    fn new(indexables: HashMap<HLSLRegister, MutRef<Variable>>) -> Self {
         Self {
             scalar_to_var: HashMap::new(),
             scopes: vec![],
+            indexables
         }
     }
-    fn lookup(&self, reg: HLSLRegister, reg_comp: VectorComponent) -> Option<MutVarScalar> {
-        let key = (reg, reg_comp);
-        for scope in self.scopes.iter().rev() {
-            match scope.curr_mappings().get(&key) {
-                Some(s) => return Some(s.clone()),
-                None => continue,
+    fn lookup(&self, reg: IndexedReg<HLSLRegister>, reg_comp: VectorComponent) -> Option<MutVarScalar> {
+        if reg.idxs.len() == 0 {
+            let key = (reg.reg, reg_comp);
+            for scope in self.scopes.iter().rev() {
+                match scope.curr_mappings().get(&key) {
+                    Some(s) => return Some(s.clone()),
+                    None => continue,
+                }
             }
+            self.scalar_to_var.get(&key).map(|s| s.clone())
+        } else {
+            Some(Scalar::Component(
+                IndexedReg::new(
+                    self.indexables.get(&reg.reg)?.clone(),
+                    reg.idxs.into_iter().map(|i| i.map_scalar(&mut |s_reg, s_reg_comp, _| {
+                        self.lookup(s_reg.clone(), s_reg_comp).expect("Unencountered input inside array index")
+                        // TODO ugh kind refinement may be in order
+                    }, INDEX_KIND)).collect()
+                ), 
+                reg_comp
+            ))
         }
-        self.scalar_to_var.get(&key).map(|s| s.clone())
     }
     fn update(&mut self, reg: HLSLRegister, reg_comp: VectorComponent, var: MutRef<Variable>, var_comp: VectorComponent) {
+        if reg.indexable_depth() > 0 {
+            panic!("update() is for directly-accessed register scalars, not indexable register scalars")
+        }
         if reg.is_pure_input() {
-            self.scalar_to_var.insert((reg, reg_comp), Scalar::Component(var, var_comp));
+            self.scalar_to_var.insert((reg, reg_comp), Scalar::Component(var.into(), var_comp));
         } else {
             match self.scopes.last_mut() {
                 Some(scope) => {
                     if reg.is_output() {
                         panic!("Shouldn't be creating input/output mappings inside a scope!")
                     }
-                    scope.curr_mappings_mut().insert((reg, reg_comp), Scalar::Component(var, var_comp))
+                    scope.curr_mappings_mut().insert((reg, reg_comp), Scalar::Component(var.into(), var_comp))
                 }
-                None => self.scalar_to_var.insert((reg, reg_comp), Scalar::Component(var, var_comp)),
+                None => self.scalar_to_var.insert((reg, reg_comp), Scalar::Component(var.into(), var_comp)),
             };
         }
     }
@@ -247,10 +268,28 @@ struct VariableState {
 }
 impl VariableState {
     fn new(io_declarations: &Vec<HLSLRegister>) -> Self {
-        let mut s = VariableState { io_declarations: HashMap::new(), registers: vec![], scalar_map: VariableScalarMap::new() };
+        let mut indexables = HashMap::new();
+        for io_decl in io_declarations {
+            if io_decl.indexable_depth() > 0 {
+                indexables.insert(
+                    io_decl.clone(),
+                    Rc::new(RefCell::new(Variable::new(io_decl.clone(), io_decl.toplevel_kind())))
+                );
+            }
+        }
+        
+        let mut s = VariableState {
+            io_declarations: HashMap::new(),
+            registers: vec![],
+            scalar_map: VariableScalarMap::new(indexables)
+        };
         // Initialize the io declarations and the scalar mappings for them
         // TODO have some sort of check in lookup() to make sure they aren't rebound?
         for io_decl in io_declarations {
+            if io_decl.indexable_depth() > 0 {
+                continue
+            }
+
             let var = Rc::new(RefCell::new(Variable::new(io_decl.clone(), io_decl.toplevel_kind())));
             s.io_declarations.insert(io_decl.clone(), var.clone());
             for i in 0..io_decl.n_components() {
@@ -268,19 +307,20 @@ impl VariableState {
     /// Will cast scalars if they have an incompatible kind from their previous usage
     /// 
     /// Will create new input vectors if they haven't been seen before?
-    /// TODO could replace this with more complete array handling...
+    /// TODO MUST replace this with more complete array handling...
     fn remap_input_expr_to_use_variables(&mut self, v: &HLSLVector) -> Vector<MutRef<Variable>> {
         let mut new_v = v.map_scalar(&mut |reg, reg_comp, usage_kind| {
             match self.scalar_map.lookup(reg.clone(), reg_comp) {
                 Some(s) => s,
                 None => if reg.is_pure_input() {
-                    let mut var = Rc::new(RefCell::new(Variable::new(reg.clone(), reg.toplevel_kind())));
-                    self.io_declarations.insert(reg.clone(), var.clone());
+                    assert!(reg.reg.indexable_depth() == 0);
+                    let mut var = Rc::new(RefCell::new(Variable::new(reg.reg.clone(), reg.output_kind())));
+                    self.io_declarations.insert(reg.reg.clone(), var.clone());
                     for i in 0..reg.n_components() {
-                        self.scalar_map.update(reg.clone(), i.into(), var.clone(), i.into());
+                        self.scalar_map.update(reg.reg.clone(), i.into(), var.clone(), i.into());
                     }
                     var.refine_output_kind_if_possible(usage_kind); // TODO is this necessary? see below
-                    Scalar::Component(var, reg_comp)
+                    Scalar::Component(var.into(), reg_comp)
                 } else {
                     panic!("Encountered unknown non-input scalar {:?}.{} in a operation input", reg, reg_comp)
                 }
@@ -595,10 +635,12 @@ impl VariableState {
         }
     }
 
-    fn resolve(&self, var: &MutRef<Variable>, var_comp: VectorComponent) -> HLSLScalar {
+    fn resolve(&self, idx_var: &IndexedReg<MutRef<Variable>>, var_comp: VectorComponent) -> HLSLScalar {
         // TODO how do we communicate more restricted type information to the outside world?
         // HLSLRegister doesn't have a HLSLKind
-        Scalar::Component(var.borrow().name.clone(), var_comp)
+        Scalar::Component(idx_var.map_reg(&mut |var, _| {
+            var.borrow().name.clone()
+        }, idx_var.output_kind()), var_comp)
     }
 }
 

@@ -3,7 +3,7 @@
 
 use std::collections::HashMap;
 
-use crate::{abstract_machine::{vector::{MaskedSwizzle, VectorComponent}, expr::{ContigSwizzle, Scalar, Reg}}, amdil_text::vm::{AMDILRegister, AMDILVector}, hlsl::{kinds::{HLSLKind, HLSLNumericKind, HLSLKindBitmask}, syntax::{HLSLOperator, ArithmeticOp, UnaryOp, NumericIntrinsic}}};
+use crate::{abstract_machine::{vector::{MaskedSwizzle, VectorComponent}, expr::{ContigSwizzle, Scalar, Reg, IndexedReg}}, amdil_text::vm::{AMDILRegister, AMDILVector}, hlsl::{kinds::{HLSLKind, HLSLNumericKind, HLSLKindBitmask}, syntax::{HLSLOperator, ArithmeticOp, UnaryOp, NumericIntrinsic}}};
 
 use super::{grammar::{Src, RegId, SrcMod, RegRelativeAddr, Dst, SrcMods}, error::AMDILError, Instruction};
 
@@ -124,7 +124,7 @@ impl AMDILContext {
                 Ok(Self::build_scalar(0, reg, comp, &src.mods))
             },
             InstructionInput::Texture(idx) => Ok(Scalar::Component(
-                AMDILRegister::Texture2D(idx),
+                IndexedReg::new_direct(AMDILRegister::Texture2D(idx)), // TOOD this shouldn't be texture2d
                 VectorComponent::X,
             )),
         }
@@ -137,7 +137,7 @@ impl AMDILContext {
         // 1. swizzle  -  rearranges  and/or  replicates  components - assumed to have already been applied
         let s = match reg {
             RegOrLiteral::Literal(lit) => Scalar::Literal(lit[comp.into_index()]),
-            RegOrLiteral::Reg(reg) => Scalar::Component(reg, comp),
+            RegOrLiteral::Reg(reg) => Scalar::Component(IndexedReg::new_direct(reg), comp),
         };
         // 2. _invert  -  inverts  components  1  -  x
         let s = if mods.invert {
@@ -279,5 +279,5 @@ fn swizzle_to_contig(swizzle: MaskedSwizzle) -> ContigSwizzle {
 
 fn amdil_vec_of(reg: AMDILRegister, swizzle: MaskedSwizzle) -> AMDILVector {
     let kind = reg.output_kind();
-    AMDILVector::PureSwizzle(reg, swizzle_to_contig(swizzle), kind)
+    AMDILVector::PureSwizzle(IndexedReg::new_direct(reg), swizzle_to_contig(swizzle), kind)
 }

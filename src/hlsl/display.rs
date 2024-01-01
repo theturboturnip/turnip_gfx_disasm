@@ -1,6 +1,6 @@
 use std::fmt::{Display, Formatter};
 
-use crate::abstract_machine::{vector::VectorComponent, VMVector, VMName, expr::{HLSLScalar, HLSLVector, Vector, ContigSwizzle, Reg}};
+use crate::abstract_machine::{vector::VectorComponent, VMVector, VMName, expr::{HLSLScalar, HLSLVector, Vector, ContigSwizzle, Reg, IndexedReg, INDEX_KIND}};
 
 use super::{
     kinds::{HLSLConcreteKind, HLSLKind, HLSLKindBitmask, HLSLNumericKind}, HLSLRegister, HLSLAction, syntax::HLSLOperator,
@@ -21,6 +21,15 @@ impl std::fmt::Display for HLSLRegister {
         }
     }
 }
+impl std::fmt::Display for DWrap<&ContigSwizzle> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, ".",)?;
+        for c in self.0.iter() {
+            write!(f, "{}", c)?;
+        }
+        Ok(())
+    }
+}
 fn display_scalar_kind(f: &mut Formatter<'_>, scalar: &HLSLScalar, usage_kind: &HLSLKind) -> std::fmt::Result {
     match scalar {
         HLSLScalar::Expr { op, inputs, output_kind } => {
@@ -28,11 +37,12 @@ fn display_scalar_kind(f: &mut Formatter<'_>, scalar: &HLSLScalar, usage_kind: &
             write!(f, "{}", DWrap((op, inputs)))
         },
         HLSLScalar::Component(reg, comp) => {
-            let minimum_kind = usage_kind.intersection(reg.toplevel_kind());
+            let minimum_kind = usage_kind.intersection(reg.output_kind());
             if minimum_kind.is_none() {
                 write!(f, "({})", usage_kind)?;
             }
-            write!(f, "{}.", reg)?;
+            display_indexed_reg(f, reg)?;
+            write!(f, ".")?;
             match comp {
                 VectorComponent::X => write!(f, "x"),
                 VectorComponent::Y => write!(f, "y"),
@@ -64,13 +74,13 @@ impl std::fmt::Display for DWrap<&(HLSLScalar, HLSLKind)> {
     }
 }
 // TODO take usage_kind and cast if necessary?
-fn display_vector_pure_swizzle(f: &mut Formatter<'_>, reg: &HLSLRegister, comps: &ContigSwizzle) -> std::fmt::Result {
-    write!(f, "{reg}.")?;
-    for c in comps.iter() {
-        write!(f, "{}", c)?;
+fn display_indexed_reg(f: &mut Formatter<'_>, reg: &IndexedReg<HLSLRegister>) -> std::fmt::Result {
+    write!(f, "{}", reg.reg)?;
+    for idx in reg.idxs.iter() {
+        write!(f, "[{}]", DWrap((idx, INDEX_KIND)))?;
     }
     Ok(())
-}
+} 
 fn display_vector_kind(f: &mut Formatter<'_>, v: &HLSLVector, usage_kind: &HLSLKind) -> std::fmt::Result {
     // TODO cast things if usage_kind != output_kind
     match v {
@@ -89,7 +99,8 @@ fn display_vector_kind(f: &mut Formatter<'_>, v: &HLSLVector, usage_kind: &HLSLK
             write!(f, ")")
         },
         Vector::PureSwizzle(reg, comps, _output_kind) => {
-            display_vector_pure_swizzle(f, reg, comps)
+            display_indexed_reg(f, reg)?;
+            write!(f, "{}", DWrap(comps))
         },
         // TODO take output_kind and cast if necessary?
         Vector::Expr { op, inputs, ..} => {
@@ -259,8 +270,7 @@ impl std::fmt::Display for HLSLAction {
             Self::Assign {
                 expr, output
             } => {
-                write!(f, "{}{} ", expr.usage_kind(), output.0.n_components())?;
-                display_vector_pure_swizzle(f, &output.0, &output.1)?;
+                write!(f, "{}{} {}{}", expr.usage_kind(), output.0.n_components(), output.0, DWrap(&output.1))?;
                 write!(f, " = {};", DWrap((expr, output.0.output_kind())))
             }
             Self::EarlyOut => {

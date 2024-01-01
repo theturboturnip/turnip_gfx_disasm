@@ -109,6 +109,9 @@ impl VMVector for AMDILRegister {
     }
 }
 impl Reg for AMDILRegister {
+    fn indexable_depth(&self) -> usize {
+        0
+    }
     fn output_kind(&self) -> HLSLKind {
         self.toplevel_kind()
     }
