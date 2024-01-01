@@ -86,16 +86,15 @@ impl AMDILContext {
         };
         self.if_stack.push(else_if);
     }
-    pub fn end_if(&mut self) {
-        let instr = match self.if_stack.pop().expect("Encountered and endif when not inside an if") {
+    pub fn end_if(&mut self) -> Instruction {
+        match self.if_stack.pop().expect("Encountered and endif when not inside an if") {
             IfInProgress::ParsingTrue { cond, if_true } => {
                 Instruction::If { cond, if_true, if_fals: vec![] }
             },
             IfInProgress::ParsingFals { cond, if_true, if_fals } => {
                 Instruction::If { cond, if_true, if_fals }
             },
-        };
-        self.push_instruction(instr);
+        }
     }
 
     pub fn push_named_literal(&mut self, name: String, literal: LiteralVec) {

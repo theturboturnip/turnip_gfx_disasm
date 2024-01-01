@@ -111,8 +111,7 @@ fn parse_instruction(ctx: &mut AMDILContext, line: &str) -> Result<Option<Instru
             (line, None)
         }
         "endif" => {
-            ctx.end_if();
-            (line, None)
+            (line, Some(ctx.end_if()))
         }
 
         d if d.starts_with("dcl_") => {

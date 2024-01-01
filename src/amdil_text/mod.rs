@@ -1,6 +1,6 @@
 use std::marker::PhantomData;
 
-use crate::{Decoder, Program, abstract_machine::{VMName, expr::Scalar}, Action};
+use crate::{Decoder, Program, abstract_machine::VMName, Action};
 
 mod decode;
 pub use decode::AMDILErrorContext;
@@ -26,11 +26,53 @@ impl Program<AMDILAbstractVM> for AMDILProgram {
 /// Decoder for AMDIL text disassembly
 pub struct AMDILDecoder<'a> {
     _lifetime: PhantomData<&'a ()>, // NOTE: there's no generic type here!
+    io_registers: Vec<AMDILRegister>,
 }
 impl<'a> AMDILDecoder<'a> {
     pub fn new() -> AMDILDecoder<'a> {
         AMDILDecoder {
             _lifetime: PhantomData::default(),
+            io_registers: vec![],
+        }
+    }
+}
+impl<'a> AMDILDecoder<'a> {
+    fn instr_to_action(&mut self, instr: Instruction) -> Option<AMDILAction> {
+        match instr {
+            Instruction::Decl(decl) => {
+                match decl.get_decl().filter(|r| r.is_pure_input() || r.is_output()) {
+                    Some(io_reg) => self.io_registers.push(io_reg),
+                    None => {}
+                };
+                None
+            },
+            Instruction::Alu(alu) => Some(alu.to_action()),
+            Instruction::EarlyOut(scalar) => {
+                Some(
+                    Action::If {
+                        expr: scalar,
+                        if_true: vec![Action::EarlyOut],
+                        if_fals: vec![]
+                    }
+                )
+            }
+            Instruction::If { cond, if_true, if_fals } => {
+                let if_true = if_true
+                    .into_iter()
+                    .filter_map(|instr| self.instr_to_action(instr))
+                    .collect();
+                let if_fals = if_fals
+                    .into_iter()
+                    .filter_map(|instr| self.instr_to_action(instr))
+                    .collect();
+                Some(
+                    Action::If {
+                        expr: cond,
+                        if_true,
+                        if_fals,
+                    }
+                )
+            }
         }
     }
 }
@@ -39,36 +81,20 @@ impl<'a> Decoder<AMDILAbstractVM> for AMDILDecoder<'a> {
     type Program = AMDILProgram;
     type Err = AMDILErrorContext;
 
-    fn decode(&self, data: Self::Input) -> Result<AMDILProgram, AMDILErrorContext> {
+    fn decode(mut self, data: Self::Input) -> Result<AMDILProgram, AMDILErrorContext> {
         let instructions = decode::parse_lines(data)?;
 
         let mut actions = vec![];
-        let mut io_registers = vec![];
         for instr in instructions {
-            match instr {
-                Instruction::Decl(decl) => {
-                    match decl.get_decl().filter(|r| r.is_pure_input() || r.is_output()) {
-                        Some(io_reg) => io_registers.push(io_reg),
-                        None => {}
-                    }
-                },
-                Instruction::Alu(alu) => alu.push_actions(&mut actions),
-                Instruction::EarlyOut(scalar) => {
-                    actions.push(
-                        Action::If {
-                            expr: scalar,
-                            if_true: vec![Action::EarlyOut],
-                            if_fals: vec![]
-                        }
-                    )
-                }
-                _ => {}
+            match self.instr_to_action(instr) {
+                Some(action) => actions.push(action),
+                None => {},
             }
         }
 
         // Return
         Ok(AMDILProgram {
-            io_registers,
+            io_registers: self.io_registers,
             actions,
         })
     }

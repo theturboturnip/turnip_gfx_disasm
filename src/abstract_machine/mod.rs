@@ -130,7 +130,7 @@ pub trait Decoder<TVM: AbstractVM> {
     type Program: Program<TVM>;
     type Err;
 
-    fn decode(&self, data: Self::Input) -> Result<Self::Program, Self::Err>;
+    fn decode(self, data: Self::Input) -> Result<Self::Program, Self::Err>;
 }
 
 /// Utility function for determining if all elements collection return the same value when a mapping function is called 

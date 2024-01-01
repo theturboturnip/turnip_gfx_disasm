@@ -379,10 +379,10 @@ pub fn parse_alu<'a>(
 }
 
 impl ALUInstruction {
-    pub fn push_actions(self, v: &mut Vec<AMDILAction>) {
-        v.push(Action::Assign {
+    pub fn to_action(self) -> AMDILAction {
+        Action::Assign {
             expr: self.expr,
             output: self.dst,
-        })
+        }
     }
 }
