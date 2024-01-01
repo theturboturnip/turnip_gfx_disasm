@@ -42,12 +42,11 @@ impl VMName for Variable {
         self.kind
     }
 }
-impl VMVector for Variable {
-    fn n_components(&self) -> usize {
-        self.n_contig_components
-    }
-}
+impl VMVector for Variable {}
 impl Reg for MutRef<Variable> {
+    fn n_components(&self) -> usize {
+        self.borrow().n_contig_components
+    }
     fn indexable_depth(&self) -> usize {
         self.borrow().name.indexable_depth()
     }
@@ -227,17 +226,17 @@ impl VariableScalarMap {
                 for intersect_key in true_keys.intersection(&fals_keys) {
                     let t = mappings_true.remove(intersect_key).unwrap();
                     let f = mappings_fals.remove(intersect_key).unwrap();
-                    let mut expected_kind = t.output_kind();
-                    expected_kind.refine_if_possible(f.output_kind());
-                    let s = Scalar::Expr {
-                        op: HLSLOperator::FauxBoolean(FauxBooleanOp::Ternary),
-                        inputs: vec![
-                            (cond.clone(), HLSLKind::INTEGER),
-                            (t, expected_kind),
-                            (f, expected_kind),
-                        ],
-                        output_kind: expected_kind
-                    };
+                            let mut expected_kind = t.output_kind();
+                            expected_kind.refine_if_possible(f.output_kind());
+                            let s = Scalar::Expr {
+                                op: HLSLOperator::FauxBoolean(FauxBooleanOp::Ternary),
+                                inputs: vec![
+                                    (cond.clone(), HLSLKind::INTEGER),
+                                    (t, expected_kind),
+                                    (f, expected_kind),
+                                ],
+                                output_kind: expected_kind
+                            };
                     next_scope.insert(intersect_key.clone(), s);
                 }
                 // All remaining mappings - we remove()-d the intersections in that loop - should be cleared, because they were 
@@ -307,23 +306,11 @@ impl VariableState {
     /// Will cast scalars if they have an incompatible kind from their previous usage
     /// 
     /// Will create new input vectors if they haven't been seen before?
-    /// TODO MUST replace this with more complete array handling...
     fn remap_input_expr_to_use_variables(&mut self, v: &HLSLVector) -> Vector<MutRef<Variable>> {
         let mut new_v = v.map_scalar(&mut |reg, reg_comp, usage_kind| {
             match self.scalar_map.lookup(reg.clone(), reg_comp) {
                 Some(s) => s,
-                None => if reg.is_pure_input() {
-                    assert!(reg.reg.indexable_depth() == 0);
-                    let mut var = Rc::new(RefCell::new(Variable::new(reg.reg.clone(), reg.output_kind())));
-                    self.io_declarations.insert(reg.reg.clone(), var.clone());
-                    for i in 0..reg.n_components() {
-                        self.scalar_map.update(reg.reg.clone(), i.into(), var.clone(), i.into());
-                    }
-                    var.refine_output_kind_if_possible(usage_kind); // TODO is this necessary? see below
-                    Scalar::Component(var.into(), reg_comp)
-                } else {
-                    panic!("Encountered unknown non-input scalar {:?}.{} in a operation input", reg, reg_comp)
-                }
+                None => panic!("Encountered unknown non-input scalar {:?}.{} in a operation input", reg, reg_comp)
             }
         });
 
@@ -341,12 +328,14 @@ impl VariableState {
     /// - any of the scalars are general-purpose and have an incompatible kind from their previous usage
     /// - the scalars all remap to existing variable-space scalars which are not from the same register
     /// - ALWAYS because SSA makes handling scopes easier
-    fn remap_scalars_to_output_vector(&mut self, reg: &HLSLRegister, contig: ContigSwizzle, kind: &mut HLSLKind) -> (MutRef<Variable>, ContigSwizzle) {
+    fn remap_scalars_to_output_vector(&mut self, reg: &IndexedReg<HLSLRegister>, contig: ContigSwizzle, kind: &mut HLSLKind) -> (MutRef<Variable>, ContigSwizzle) {
+        // TODO we may want to handle pure-output buffers later. For now, don't.
+        assert_eq!(reg.idxs.len(), 0);
         if reg.is_pure_input() {
             panic!("pure input register {reg:?} used as an output")
         } else if reg.is_output() {
             // Find the associated output variable. There will only be one.
-            let var = self.io_declarations.get(reg).expect("Encountered undeclared output");
+            let var = self.io_declarations.get(&reg.reg).expect("Encountered undeclared output");
             *kind = var.borrow_mut().refine(*kind).unwrap(); // TODO is this necessary
             (var.clone(), contig)
         } else {
@@ -361,7 +350,7 @@ impl VariableState {
             // If there is one, we could reuse it - BUT WE SHOULDN'T, BECAUSE IF STATEMENTS ARE A THING!
             // If there isn't one, we create a new common variable.
             // We know that this is all general purpose, so no need for checks here.
-            self.remap_scalars_to_new_variable(reg, contig, *kind)
+            self.remap_scalars_to_new_variable(&reg.reg, contig, *kind)
         }
     }
 
@@ -507,7 +496,7 @@ impl VariableState {
                 // reapply output_kind to input expr, in case creating the output vector gave us more information
                 expr.refine_output_kind_from_usage(output_kind);
 
-                MutVarAction::Assign { output: (output.0, output.1), expr }
+                MutVarAction::Assign { output: (IndexedReg::new_direct(output.0), output.1), expr }
             },
             Action::EarlyOut => MutVarAction::EarlyOut,
             Action::If { expr, if_true, if_fals } => {
@@ -563,7 +552,7 @@ impl VariableState {
                     //      this does a "top-down" inference based on what the output must be
                     match expr.recompute_output_kind_from_internal_output_kinds(true) {
                         Some(KindRefinementResult::RefinedTo(new_output_kind)) => {
-                            output.0.refine_output_kind_if_possible(new_output_kind);
+                            output.0.refine_output_kind_from_usage(new_output_kind);
                         }
                         _ => {}
                     }
@@ -617,7 +606,10 @@ impl VariableState {
     fn resolve_action(&self, action: &MutVarAction) -> HLSLAction {
         match action {
             Action::Assign { output, expr } => {
-                let output = (output.0.borrow().name.clone(), output.1.clone());
+                let output = (
+                    output.0.map_reg(&mut |var, _| var.borrow().name.clone(), HLSLKind::ALL),
+                    output.1.clone()
+                );
                 let expr = expr.map_scalar(&mut |var, comp, _| {
                     self.resolve(var, comp)
                 });

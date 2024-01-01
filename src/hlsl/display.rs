@@ -17,7 +17,13 @@ impl std::fmt::Display for HLSLRegister {
             Self::Texture3D(id) => write!(f, "tex3D{:0>3}", id),
             Self::GenericRegister(id, _) => write!(f, "var_{}", id),
             Self::ShaderInput(name, _) | Self::ShaderOutput(name, _) => write!(f, "{}", name),
-            Self::ArrayElement { of: elem, idx } => write!(f, "{}[{}]", elem, idx),
+            Self::ConstBuffer { id, dims, .. } => {
+                write!(f, "{id}")?;
+                for l in dims {
+                    write!(f, "[{l}]")?; // TODO don't write these when we're using them in expressions!
+                }
+                Ok(())
+            }
         }
     }
 }
@@ -270,7 +276,8 @@ impl std::fmt::Display for HLSLAction {
             Self::Assign {
                 expr, output
             } => {
-                write!(f, "{}{} {}{}", expr.usage_kind(), output.0.n_components(), output.0, DWrap(&output.1))?;
+                assert_eq!(output.0.idxs.len(), 0);
+                write!(f, "{}{} {}{}", expr.usage_kind(), output.0.n_components(), output.0.reg, DWrap(&output.1))?;
                 write!(f, " = {};", DWrap((expr, output.0.output_kind())))
             }
             Self::EarlyOut => {

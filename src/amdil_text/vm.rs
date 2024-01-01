@@ -35,7 +35,7 @@ impl HLSLCompatibleAbstractVM for AMDILAbstractVM {
     fn convert_action(a: &AMDILAction) -> HLSLAction {
         match a {
             Action::Assign { output, expr } => Action::Assign {
-                output: (Self::convert_register(&output.0), output.1.clone()),
+                output: (output.0.map_reg(&mut |r, _| Self::convert_register(r), expr.output_kind()), output.1.clone()),
                 expr: expr.map_reg(&mut |r, _| Self::convert_register(r)),
             },
             Action::EarlyOut => Action::EarlyOut,
@@ -49,8 +49,7 @@ impl HLSLCompatibleAbstractVM for AMDILAbstractVM {
 
     fn convert_register(r: &Self::Register) -> HLSLRegister {
         match r {
-            AMDILRegister::Literal(_) => panic!("This doesn't have a concept in HLSLRegister :P should delete"),
-            AMDILRegister::NamedBuffer { name, idx } => HLSLRegister::ArrayElement { of: Box::new(HLSLRegister::ShaderInput(name.clone(), 4)), idx: *idx },
+            AMDILRegister::ConstBuffer { name, dims } => HLSLRegister::ConstBuffer { id: name.clone(), dims: dims.clone(), n_comps: 4 },
             AMDILRegister::NamedInputRegister(name) => HLSLRegister::ShaderInput(name.clone(), 4),
             AMDILRegister::NamedOutputRegister(name) => HLSLRegister::ShaderOutput(name.clone(), 4),
             AMDILRegister::Texture2D(idx) => HLSLRegister::Texture2D(*idx),
@@ -64,8 +63,7 @@ impl HLSLCompatibleAbstractVM for AMDILAbstractVM {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum AMDILRegister {
     NamedRegister(String),
-    Literal(Box<[u64; 4]>),
-    NamedBuffer { name: String, idx: u64 },
+    ConstBuffer { name: String, dims: Vec<u64> },
     NamedInputRegister(String),
     NamedOutputRegister(String),
     Texture2D(u64),
@@ -76,10 +74,8 @@ impl VMName for AMDILRegister {
     fn is_pure_input(&self) -> bool {
         match self {
             Self::Texture2D(_) | Self::TextureCube(_) => true, // Assuming textures are read only
-            Self::Literal(..) => true,
             Self::NamedInputRegister(..) => true,
-            // TODO consider concept of i/o buffers
-            Self::NamedBuffer { .. } => true,
+            Self::ConstBuffer { .. } => true,
             _ => false,
         }
     }
@@ -94,23 +90,29 @@ impl VMName for AMDILRegister {
     fn toplevel_kind(&self) -> HLSLKind {
         match self {
             Self::Texture2D(_) => HLSLKind::TEXTURE2D,
+            Self::Texture3D(_) => HLSLKind::TEXTURE3D,
             Self::TextureCube(_) => HLSLKind::TEXTURECUBE,
             _ => HLSLKind::NUMERIC,
         }
     }
 }
 impl VMVector for AMDILRegister {
+    
+}
+impl Reg for AMDILRegister {
     fn n_components(&self) -> usize {
         match self {
             Self::Texture2D(_) => 1,
+            Self::Texture3D(_) => 1,
             Self::TextureCube(_) => 1,
             _ => 4,
         }
     }
-}
-impl Reg for AMDILRegister {
     fn indexable_depth(&self) -> usize {
-        0
+        match self {
+            Self::ConstBuffer { dims, .. } => dims.len(),
+            _ => 0,
+        }
     }
     fn output_kind(&self) -> HLSLKind {
         self.toplevel_kind()
@@ -241,60 +243,19 @@ pub enum AMDILDeclaration {
     Texture3D(u64),
     TextureCube(u64),
     NamedLiteral(String, [u64; 4]),
-    NamedBuffer {
+    ConstBuffer {
         name: String,
-        len: u64,
+        dims: Vec<u64>,
+        // n_comps: u8,
     },
     NamedInputRegister {
         name: String,
-        // TODO maybe this should be a mask instead of a length
-        len: u8,
+        // n_comps: u8,
         reg_type: String,
     },
     NamedOutputRegister {
         name: String,
-        // TODO maybe this should be a mask instead of a length
-        len: u8,
+        // n_comps: u8,
         reg_type: String,
     },
-}
-impl AMDILDeclaration {
-    pub fn get_decl(&self) -> Option<AMDILRegister> {
-        match self {
-            AMDILDeclaration::Texture2D(id) => Some(AMDILRegister::Texture2D(*id)),
-            AMDILDeclaration::Texture3D(id) => Some(AMDILRegister::Texture3D(*id)),
-            AMDILDeclaration::TextureCube(id) => Some(AMDILRegister::TextureCube(*id)),
-            AMDILDeclaration::NamedInputRegister {
-                name,
-                len: _,
-                reg_type: _,
-            } => Some(AMDILRegister::NamedInputRegister(
-                name.clone(),
-            )),
-            AMDILDeclaration::NamedOutputRegister {
-                name,
-                len: _,
-                reg_type: _,
-            } => Some(AMDILRegister::NamedOutputRegister(
-                name.clone(),
-            )),
-            // TODO re-enable this
-            // AMDILDeclaration::NamedBuffer { name, len } => {
-            //     vec![Outcome::Declaration {
-            //         name: HLSLDeclarationSpec {
-            //             base_name_ref: AMDILNameRef::NamedOutputRegister(name.clone()),
-            //             kind: DataKind::Hole,
-            //             n_components: 4,
-            //             decl_type: HLSLDeclarationSpecType::Array {
-            //                 of: Box::new(HLSLDeclarationSpecType::ShaderInput(name.clone())),
-            //                 len: *len,
-            //             },
-            //             name: name.clone(),
-            //         },
-            //         literal_value: None,
-            //     }]
-            // }
-            _ => None,
-        }
-    }
 }

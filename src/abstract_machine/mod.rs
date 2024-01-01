@@ -4,7 +4,7 @@ use crate::hlsl::kinds::HLSLKind;
 
 use expr::{Vector, Scalar, ContigSwizzle};
 
-use self::expr::Reg;
+use self::expr::{Reg, IndexedReg};
 
 pub mod analysis;
 pub mod display;
@@ -39,10 +39,7 @@ pub trait VMName: Clone + PartialEq + Eq + Hash + std::fmt::Debug {
 pub trait VMScalar: VMName {}
 
 /// A group of scalar names (NOTE: THIS DOES NOT IMPLY THE SCALARS COME FROM THE SAME VECTOR!)
-pub trait VMVector: VMName {
-    /// TODO SHOULD THIS IMPLY CONTIGUITY? HOW DO WE HANDLE .x_z_
-    fn n_components(&self) -> usize;
-}
+pub trait VMVector: VMName {}
 
 /// A [VMName] may also be [Refinable] - i.e. can have its type refined with further context
 pub trait Refinable: Sized {
@@ -105,7 +102,7 @@ pub enum Action<TReg: Reg> {
     ///
     /// The names for all inputs and output must have been previously declared.
     Assign {
-        output: (TReg, ContigSwizzle),
+        output: (IndexedReg<TReg>, ContigSwizzle),
         expr: Vector<TReg> // This also stores the HLSLKind of the output
     },
     /// discard; statement

@@ -30,6 +30,7 @@ use super::{find_common, instructions::SimpleDependencyRelation};
 pub type ContigSwizzle = ArrayVec<VectorComponent, 4>;
 
 pub trait Reg: std::fmt::Debug + Clone + PartialEq {
+    fn n_components(&self) -> usize;
     fn indexable_depth(&self) -> usize;
     fn output_kind(&self) -> HLSLKind;
     fn refine_output_kind_if_possible(&mut self, constraint: HLSLKind) -> Option<KindRefinementResult> {
@@ -151,12 +152,11 @@ impl<TReg: Reg + VMName> IndexedReg<TReg> {
         self.reg.is_output() // TODO is this right?
     }
 }
-impl<TReg: Reg + VMVector> IndexedReg<TReg> {
+impl<TReg: Reg> IndexedReg<TReg> {
     pub fn n_components(&self) -> usize {
         self.reg.n_components()
     }
-}
-impl<TReg: Reg> IndexedReg<TReg> {
+
     pub fn new_direct(reg: TReg) -> Self {
         Self::new(reg, vec![])
     }
@@ -319,6 +319,12 @@ impl<TReg: Reg> Vector<TReg> {
             Vector::PureSwizzle(_, _, usage_kind) => *usage_kind,
             Vector::Expr { op, n_comps, inputs, output_kind } => *output_kind,
         }
+    }
+
+    pub fn of_reg(reg: IndexedReg<TReg>) -> Self {
+        let kind = reg.output_kind();
+        let comps = (0..reg.n_components()).into_iter().map(|i| i.into()).collect();
+        Self::PureSwizzle(reg, comps, kind)
     }
 
     /// Given a set of scalars, create an UntypedVector from them.
@@ -627,15 +633,7 @@ impl<TReg: VMVector + Reg> VMName for Vector<TReg> {
         self.output_kind()
     }
 }
-impl<TReg: VMVector + Reg> VMVector for Vector<TReg> {
-    fn n_components(&self) -> usize {
-        match self {
-            Self::Expr { n_comps, .. } => *n_comps,
-            Self::Construction(items, _) => items.len(),
-            Self::PureSwizzle(_, comps, _) => comps.len(),            
-        }
-    }
-}
+impl<TReg: VMVector + Reg> VMVector for Vector<TReg> {}
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum Scalar<TReg: Reg> {

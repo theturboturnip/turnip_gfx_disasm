@@ -10,6 +10,8 @@ pub mod vm;
 
 
 /// The name of an unswizzled vector in the HLSL virtual machine
+/// 
+/// TODO include kind
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum HLSLRegister {
     Texture2D(u64),
@@ -18,24 +20,23 @@ pub enum HLSLRegister {
     GenericRegister(String, u8),
     ShaderInput(String, u8),
     ShaderOutput(String, u8),
-    // TODO read/write permissions for ArrayElement?
-    // TODO this doesn't support dynamic indexing
-    ArrayElement { of: Box<Self>, idx: u64 },
+    // TODO make this a more general Array of blah
+    ConstBuffer { id: String, n_comps: u8, dims: Vec<u64> },
 }
 impl VMName for HLSLRegister {
     fn is_pure_input(&self) -> bool {
         match self {
             Self::ShaderInput(..) | Self::Texture2D(_) | Self::Texture3D(_) | Self::TextureCube(_) => true, // assuming textures are read-only
-            Self::ArrayElement { of, .. } => of.is_pure_input(),
+            Self::ConstBuffer { .. } => true,
             _ => false,
         }
     }
 
     fn is_output(&self) -> bool {
         match self {
-            Self::ShaderOutput(..) => true, // assuming textures are read-only
-            Self::ArrayElement { of, .. } => of.is_output(),
-            _ => false,
+            Self::ShaderOutput(..) => true,
+            Self::ConstBuffer { .. } => false,
+            _ => false, // assuming textures are read-only
         }
     }
 
@@ -47,22 +48,24 @@ impl VMName for HLSLRegister {
             HLSLRegister::GenericRegister(..) => HLSLKind::NUMERIC,
             HLSLRegister::ShaderInput(..) => HLSLKind::NUMERIC,
             HLSLRegister::ShaderOutput(..) => HLSLKind::NUMERIC,
-            HLSLRegister::ArrayElement { of, idx: _ } => of.toplevel_kind(),
+            HLSLRegister::ConstBuffer { .. } => HLSLKind::NUMERIC,
         }
     }
 }
-impl VMVector for HLSLRegister {
+impl VMVector for HLSLRegister {}
+impl Reg for HLSLRegister {
     fn n_components(&self) -> usize {
         match self {
             HLSLRegister::Texture2D(_) | HLSLRegister::Texture3D(_) | HLSLRegister::TextureCube(_) => 1,
             HLSLRegister::GenericRegister(_, n) | HLSLRegister::ShaderInput(_, n) | HLSLRegister::ShaderOutput(_, n) => *n as usize,
-            HLSLRegister::ArrayElement { of, idx: _ } => of.n_components(),
+            HLSLRegister::ConstBuffer { n_comps, .. } => *n_comps as usize,
         }
     }
-}
-impl Reg for HLSLRegister {
     fn indexable_depth(&self) -> usize {
-        0
+        match self {
+            HLSLRegister::ConstBuffer { dims: lengths, .. } => lengths.len(),
+            _ => 0
+        }
     }
     fn output_kind(&self) -> HLSLKind {
         self.toplevel_kind() // TODO merge these functions somehow

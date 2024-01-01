@@ -3,7 +3,7 @@
 
 use std::collections::HashMap;
 
-use crate::{abstract_machine::{vector::{MaskedSwizzle, VectorComponent}, expr::{ContigSwizzle, Scalar, Reg, IndexedReg}}, amdil_text::vm::{AMDILRegister, AMDILVector}, hlsl::{kinds::{HLSLKind, HLSLNumericKind, HLSLKindBitmask}, syntax::{HLSLOperator, ArithmeticOp, UnaryOp, NumericIntrinsic}}};
+use crate::{abstract_machine::{vector::{MaskedSwizzle, VectorComponent}, expr::{ContigSwizzle, Scalar, Reg, IndexedReg, INDEX_KIND, Vector}}, amdil_text::vm::{AMDILRegister, AMDILVector, AMDILDeclaration}, hlsl::{kinds::{HLSLKind, HLSLNumericKind, HLSLKindBitmask}, syntax::{HLSLOperator, ArithmeticOp, UnaryOp, NumericIntrinsic}}};
 
 use super::{grammar::{Src, RegId, SrcMod, RegRelativeAddr, Dst, SrcMods}, error::AMDILError, Instruction};
 
@@ -23,6 +23,8 @@ enum IfInProgress {
 
 pub struct AMDILContext {
     named_literals: HashMap<String, LiteralVec>,
+    named_reg_declarations: HashMap<String, AMDILRegister>,
+    textures: HashMap<u64, AMDILRegister>,
     if_stack: Vec<IfInProgress>,
     instructions: Vec<Instruction>,
 }
@@ -33,7 +35,7 @@ pub enum InstructionInput {
 
 #[derive(Debug, Clone)]
 enum RegOrLiteral<'a> {
-    Reg(AMDILRegister),
+    Reg(IndexedReg<AMDILRegister>),
     Literal(&'a LiteralVec)
 }
 
@@ -41,6 +43,8 @@ impl AMDILContext {
     pub fn new() -> Self {
         AMDILContext {
             named_literals: HashMap::new(),
+            named_reg_declarations: HashMap::new(),
+            textures: HashMap::new(),
             instructions: vec![],
             if_stack: vec![],
         }
@@ -59,11 +63,13 @@ impl AMDILContext {
         current_consumer.push(i);
     }
 
-    pub fn finalize(self) -> Vec<Instruction> {
+    pub fn finalize(self) -> (Vec<AMDILRegister>, Vec<Instruction>) {
         if !self.if_stack.is_empty() {
             panic!("Program had inbalanced ifs and endifs")
         }
-        self.instructions
+        let mut io_declarations: Vec<_> = self.named_reg_declarations.into_values().collect();
+        io_declarations.extend(self.textures.into_values());
+        (io_declarations, self.instructions)
     }
 
     pub fn start_if(&mut self, cond: Scalar<AMDILRegister>) {
@@ -97,8 +103,30 @@ impl AMDILContext {
         }
     }
 
-    pub fn push_named_literal(&mut self, name: String, literal: LiteralVec) {
-        self.named_literals.insert(name, literal);
+    pub fn push_declaration(&mut self, reg: AMDILDeclaration) {
+        match reg {
+            AMDILDeclaration::Texture2D(id) => {
+                self.textures.insert(id, AMDILRegister::Texture2D(id));
+            },
+            AMDILDeclaration::Texture3D(id) => {
+                self.textures.insert(id, AMDILRegister::Texture3D(id));
+            },
+            AMDILDeclaration::TextureCube(id) => {
+                self.textures.insert(id, AMDILRegister::TextureCube(id));
+            },
+            AMDILDeclaration::NamedLiteral(name, literal) => {
+                self.named_literals.insert(name, Box::new(literal));
+            },
+            AMDILDeclaration::ConstBuffer { name, dims } => {
+                self.named_reg_declarations.insert(name.clone(), AMDILRegister::ConstBuffer { name, dims });
+            },
+            AMDILDeclaration::NamedInputRegister { name, reg_type: _ } => {
+                self.named_reg_declarations.insert(name.clone(), AMDILRegister::NamedInputRegister(name));
+            },
+            AMDILDeclaration::NamedOutputRegister { name, reg_type: _ } => {
+                self.named_reg_declarations.insert(name.clone(), AMDILRegister::NamedOutputRegister(name));
+            },
+        }
     }
 
     pub fn input_to_vector(&self, input: InstructionInput, mask: MaskedSwizzle) -> Result<AMDILVector, AMDILError> {
@@ -107,7 +135,7 @@ impl AMDILContext {
                 src.apply_mask(mask);
                 self.src_to_vector(src)
             },
-            InstructionInput::Texture(idx) => Ok(amdil_vec_of(AMDILRegister::Texture2D(idx), MaskedSwizzle::identity(1))),
+            InstructionInput::Texture(idx) => Ok(Vector::of_reg(self.textures.get(&idx).unwrap().clone().into())),
         }
     }
 
@@ -124,7 +152,7 @@ impl AMDILContext {
                 Ok(Self::build_scalar(0, reg, comp, &src.mods))
             },
             InstructionInput::Texture(idx) => Ok(Scalar::Component(
-                IndexedReg::new_direct(AMDILRegister::Texture2D(idx)), // TOOD this shouldn't be texture2d
+                IndexedReg::new_direct(self.textures.get(&idx).unwrap().clone()),
                 VectorComponent::X,
             )),
         }
@@ -137,7 +165,7 @@ impl AMDILContext {
         // 1. swizzle  -  rearranges  and/or  replicates  components - assumed to have already been applied
         let s = match reg {
             RegOrLiteral::Literal(lit) => Scalar::Literal(lit[comp.into_index()]),
-            RegOrLiteral::Reg(reg) => Scalar::Component(IndexedReg::new_direct(reg), comp),
+            RegOrLiteral::Reg(reg) => Scalar::Component(reg, comp),
         };
         // 2. _invert  -  inverts  components  1  -  x
         let s = if mods.invert {
@@ -236,7 +264,7 @@ impl AMDILContext {
         Ok(AMDILVector::of_scalars(scalars))
     }
 
-    pub fn dst_to_vector(&self, dst: Dst) -> Result<(AMDILRegister, ContigSwizzle), AMDILError> {
+    pub fn dst_to_vector(&self, dst: Dst) -> Result<(IndexedReg<AMDILRegister>, ContigSwizzle), AMDILError> {
         let reg = match self.regid_to_register(dst.regid)? {
             RegOrLiteral::Reg(reg) => reg,
             RegOrLiteral::Literal(_) => panic!("Tried to use a literal as a dst, this is never possible"),
@@ -253,31 +281,43 @@ impl AMDILContext {
         regid: RegId,
     ) -> Result<RegOrLiteral, AMDILError> {
         let name = regid.name;
-        let base_reg = match (name.chars().nth(0), &regid.rel_addrs[..]) {
-            (Some('l'), &[]) => {
-                return Ok(RegOrLiteral::Literal(self.named_literals.get(&name).unwrap()));
+        let base_reg = match name.chars().nth(0) {
+            Some('l') => {
+                return Ok(RegOrLiteral::Literal(self.named_literals.get(&name).unwrap()))
             },
-            (Some('v'), &[]) => AMDILRegister::NamedInputRegister(name),
-            (Some('o'), &[]) => AMDILRegister::NamedOutputRegister(name),
-            (Some('r'), &[]) => AMDILRegister::NamedRegister(name),
-            (Some('c'), &[RegRelativeAddr::Literal(idx)]) => AMDILRegister::NamedBuffer { name, idx },
-            (_, &[]) => {
+            Some('v') | Some('o') | Some('c') => self.named_reg_declarations.get(&name).unwrap().clone(),
+            Some('r') => AMDILRegister::NamedRegister(name),
+            _ => {
                 return Err(AMDILError::Generic(format!(
                     "unexpected argument name '{}'",
                     name
                 )))
             }
-            _ => todo!("more complex parsing, need to handle relative addressing {:?}", regid.rel_addrs)
         };
-        Ok(RegOrLiteral::Reg(base_reg))
+        let idxs = regid.rel_addrs.into_iter().map(|r| match r {
+            RegRelativeAddr::Literal(l) => Scalar::Literal(l),
+            RegRelativeAddr::Reg(name, comp) => {
+                let reg = AMDILRegister::NamedRegister(name);
+                Scalar::Component(IndexedReg::new_direct(reg), comp)
+            },
+            RegRelativeAddr::RegPlusLiteral(name, comp, offset) => {
+                let reg = AMDILRegister::NamedRegister(name);
+                let reg_s = Scalar::Component(IndexedReg::new_direct(reg), comp);
+                let offset_s = Scalar::Literal(offset);
+                Scalar::Expr {
+                    op: HLSLOperator::Arithmetic(ArithmeticOp::Plus),
+                    inputs: vec![
+                        (reg_s, INDEX_KIND),
+                        (offset_s, INDEX_KIND),
+                    ],
+                    output_kind: INDEX_KIND
+                }
+            },
+        }).collect();
+        Ok(RegOrLiteral::Reg(IndexedReg::new(base_reg, idxs)))
     }
 }
 
 fn swizzle_to_contig(swizzle: MaskedSwizzle) -> ContigSwizzle {
     swizzle.0.iter().filter_map(|comp_opt| *comp_opt).collect()
-}
-
-fn amdil_vec_of(reg: AMDILRegister, swizzle: MaskedSwizzle) -> AMDILVector {
-    let kind = reg.output_kind();
-    AMDILVector::PureSwizzle(IndexedReg::new_direct(reg), swizzle_to_contig(swizzle), kind)
 }

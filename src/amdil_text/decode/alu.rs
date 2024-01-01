@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use crate::{
     abstract_machine::{
-        instructions::InstrArgs, vector::MaskedSwizzle, VMName, expr::{Vector, ContigSwizzle, Scalar},
+        instructions::InstrArgs, vector::MaskedSwizzle, VMName, expr::{Vector, ContigSwizzle, Scalar, IndexedReg},
     },
     amdil_text::{vm::{AMDILRegister, AMDILAction, AMDILVector}, decode::grammar::DstMul},
     hlsl::{
@@ -27,7 +27,7 @@ enum InputMask {
 
 #[derive(Debug, Clone)]
 pub struct ALUInstruction {
-    dst: (AMDILRegister, ContigSwizzle),
+    dst: (IndexedReg<AMDILRegister>, ContigSwizzle),
     expr: AMDILVector,
     op: HLSLOperator,
 }
@@ -62,7 +62,7 @@ impl ALUArgsSpec {
         assert_eq!(srcs.len(), self.input_kinds.len());
 
         let mut expr_output_kind = self.output_kind;
-        expr_output_kind.refine_if_possible(dst.0.toplevel_kind());
+        expr_output_kind.refine_if_possible(dst.0.output_kind());
 
         let expr = Vector::of_expr(op, srcs, expr_output_kind, dst_n_comps);
         // Apply the shift-scale of the dst mod

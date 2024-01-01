@@ -26,26 +26,18 @@ impl Program<AMDILAbstractVM> for AMDILProgram {
 /// Decoder for AMDIL text disassembly
 pub struct AMDILDecoder<'a> {
     _lifetime: PhantomData<&'a ()>, // NOTE: there's no generic type here!
-    io_registers: Vec<AMDILRegister>,
 }
 impl<'a> AMDILDecoder<'a> {
     pub fn new() -> AMDILDecoder<'a> {
         AMDILDecoder {
             _lifetime: PhantomData::default(),
-            io_registers: vec![],
         }
     }
 }
 impl<'a> AMDILDecoder<'a> {
     fn instr_to_action(&mut self, instr: Instruction) -> Option<AMDILAction> {
         match instr {
-            Instruction::Decl(decl) => {
-                match decl.get_decl().filter(|r| r.is_pure_input() || r.is_output()) {
-                    Some(io_reg) => self.io_registers.push(io_reg),
-                    None => {}
-                };
-                None
-            },
+            Instruction::Decl(decl) => None,
             Instruction::Alu(alu) => Some(alu.to_action()),
             Instruction::EarlyOut(scalar) => {
                 Some(
@@ -82,7 +74,7 @@ impl<'a> Decoder<AMDILAbstractVM> for AMDILDecoder<'a> {
     type Err = AMDILErrorContext;
 
     fn decode(mut self, data: Self::Input) -> Result<AMDILProgram, AMDILErrorContext> {
-        let instructions = decode::parse_lines(data)?;
+        let (io_registers, instructions) = decode::parse_lines(data)?;
 
         let mut actions = vec![];
         for instr in instructions {
@@ -94,7 +86,7 @@ impl<'a> Decoder<AMDILAbstractVM> for AMDILDecoder<'a> {
 
         // Return
         Ok(AMDILProgram {
-            io_registers: self.io_registers,
+            io_registers,
             actions,
         })
     }

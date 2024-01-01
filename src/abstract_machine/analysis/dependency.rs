@@ -65,7 +65,7 @@ impl<TVM: AbstractVM> ScalarDependencies<TVM> {
                         );
                 }
 
-                let output_scls: Vec<_> = output.1.iter().map(|comp| (RegDependence::Direct(output.0.clone()), *comp)).collect();
+                let output_scls: Vec<_> = output.1.iter().map(|comp| (output.0.clone().into(), *comp)).collect();
 
                 let n_output_scls = output_scls.len();
 

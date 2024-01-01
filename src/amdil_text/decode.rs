@@ -25,7 +25,7 @@ pub enum Instruction {
     }
 }
 
-pub fn parse_lines(data: &str) -> Result<Vec<Instruction>, AMDILErrorContext> {
+pub fn parse_lines(data: &str) -> Result<(Vec<AMDILRegister>, Vec<Instruction>), AMDILErrorContext> {
     let mut ctx = AMDILContext::new();
 
     let instruction_lines = data
@@ -128,6 +128,14 @@ fn parse_instruction(ctx: &mut AMDILContext, line: &str) -> Result<Option<Instru
         println!("Potential error: leading whitespace for instruction {instr:?} didn't match if-depth");
     }
 
+    let instr = match instr {
+        Some(Instruction::Decl(decl)) => {
+            ctx.push_declaration(decl);
+            None
+        }
+        _ => instr
+    };
+
     if line.len() != 0 {
         panic!("didn't parse '{}'", line);
     }
@@ -156,51 +164,49 @@ fn parse_declare<'a>(ctx: &mut AMDILContext, line: &'a str, instr: String, ctrl_
     
     let (line, decl) = match instr.as_str() {
         "dcl_cb" => {
-            let (line, (dst, _n_comps)) = parse_dst()?;
-            assert_eq!(dst.regid.rel_addrs.len(), 1);
-            let len = if let RegRelativeAddr::Literal(len) = dst.regid.rel_addrs[0] {
-                len
-            } else {
-                panic!("Can't dcl_cb with non-literal length");
-            };
-            (line, AMDILDeclaration::NamedBuffer {
+            let (line, (dst, n_comps)) = parse_dst()?;
+            (line, AMDILDeclaration::ConstBuffer {
                 name: dst.regid.name,
-                len,
+                // n_comps,
+                dims: dst.regid.rel_addrs.into_iter().map(|r| match r {
+                    RegRelativeAddr::Literal(l) => l,
+                    _ => panic!("Can't dcl_cb with non-literal length")
+                }).collect()
             })
         }
 
         // TODO interpolation modifiers on these e.g. dcl_input_position_interp(linear_noperspective)
         "dcl_input_generic" => {
-            let (line, (dst, len)) = parse_dst()?;
+            let (line, (dst, n_comps)) = parse_dst()?;
             (line, AMDILDeclaration::NamedInputRegister {
                 name: dst.regid.name,
-                len,
+                // n_comps,
                 reg_type: "Generic".to_owned(),
             })
         }
         // TODO fix grammar to parse ctrlspecifier values with underscores inside them correctly.
         "dcl_input_position" | "dcl_input_position_interp(linear_noperspective)" => {
-            let (line, (dst, len)) = parse_dst()?;
+            let (line, (dst, n_comps)) = parse_dst()?;
             (line, AMDILDeclaration::NamedInputRegister {
                 name: dst.regid.name,
-                len,
+                // n_comps,
                 reg_type: "Position".to_owned(),
             })
         }
         "dcl_output_generic" => {
-            let (line, (dst, len)) = parse_dst()?;
+            let (line, (dst, n_comps)) = parse_dst()?;
             (line, AMDILDeclaration::NamedOutputRegister {
                 name: dst.regid.name,
-                len,
+                // n_comps,
                 reg_type: "Generic".to_owned(),
             })
         }
 
         "dcl_output_position" => {
-            let (line, (dst, len)) = parse_dst()?;
+            let (line, (dst, n_comps)) = parse_dst()?;
             (line, AMDILDeclaration::NamedOutputRegister {
                 name: dst.regid.name,
-                len,
+                // n_comps,
                 reg_type: "Position".to_owned(),
             })
         }
@@ -212,7 +218,6 @@ fn parse_declare<'a>(ctx: &mut AMDILContext, line: &'a str, instr: String, ctrl_
             let (line, z) = parse_hex_literal(line)?;
             let (line, w) = parse_hex_literal(line)?;
             let literal = [x, y, z, w];
-            ctx.push_named_literal(dst.regid.name.clone(), Box::new(literal));
             (line, AMDILDeclaration::NamedLiteral(
                 dst.regid.name,
                 literal,
