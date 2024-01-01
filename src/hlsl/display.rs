@@ -59,7 +59,7 @@ fn display_scalar_kind(f: &mut Formatter<'_>, scalar: &HLSLScalar, usage_kind: &
         HLSLScalar::Literal(val) => {
             match usage_kind.mask() {
                 HLSLKindBitmask::NUMERIC_FLOAT => write!(f, "{:?}f", f32::from_bits(*val as u32)),
-                HLSLKindBitmask::NUMERIC_SINT => write!(f, "{}", *val),
+                HLSLKindBitmask::NUMERIC_SINT => write!(f, "{}", (*val as u32 as i32)),
                 HLSLKindBitmask::NUMERIC_UINT => write!(f, "{}u", *val),
                 HLSLKindBitmask::NUMERIC => write!(f, "(num?)0x{:x}", *val),
                 HLSLKindBitmask::INTEGER => write!(f, "(u?int)0x{:x}", *val),
