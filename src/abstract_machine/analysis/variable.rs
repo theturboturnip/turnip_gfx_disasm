@@ -1,6 +1,6 @@
 use std::{cell::RefCell, rc::Rc, collections::{HashMap, HashSet}};
 
-use crate::{hlsl::{kinds::{HLSLKind, HLSLOperandKind, HLSLKindBitmask, KindRefinementResult}, compat::HLSLCompatProgram, HLSLRegister, vm::HLSLAbstractVM, HLSLAction, syntax::{Operator, HLSLOperator}}, abstract_machine::{vector::VectorComponent, VMName, VMVector, VMScalar, expr::{Scalar, Vector, HLSLVector, ContigSwizzle, Reg, HLSLScalar}}, Program, Action};
+use crate::{hlsl::{kinds::{HLSLKind, HLSLOperandKind, HLSLKindBitmask, KindRefinementResult}, compat::HLSLCompatProgram, HLSLRegister, vm::HLSLAbstractVM, HLSLAction, syntax::{Operator, HLSLOperator, FauxBooleanOp}}, abstract_machine::{vector::VectorComponent, VMName, VMVector, VMScalar, expr::{Scalar, Vector, HLSLVector, ContigSwizzle, Reg, HLSLScalar}}, Program, Action};
 
 
 type MutRef<T> = Rc<RefCell<T>>;
@@ -96,9 +96,30 @@ type ScalarKey = (HLSLRegister, VectorComponent);
 /// Whenever a new (conditional) scope is created:
 /// - it may create new mappings to use inside the scope, which aren't valid outside
 /// - it makes any scalar keys used inside of it invalid, because they won't map to the variables they did at the start of the scope.
-struct ScopeOverlay {
-    overlay_mappings: HashMap<ScalarKey, MutVarScalar>,
-    keys_to_clear: HashSet<ScalarKey>,
+enum ScopeOverlay {
+    If {
+        cond: MutVarScalar,
+        mappings_true: HashMap<ScalarKey, MutVarScalar>,
+    },
+    Else {
+        cond: MutVarScalar,
+        mappings_true: HashMap<ScalarKey, MutVarScalar>,
+        mappings_fals: HashMap<ScalarKey, MutVarScalar>,
+    }
+}
+impl ScopeOverlay {
+    fn curr_mappings(&self) -> &HashMap<ScalarKey, MutVarScalar> {
+        match self {
+            ScopeOverlay::If { mappings_true, .. } => mappings_true,
+            ScopeOverlay::Else { mappings_fals, .. } => mappings_fals,
+        }
+    }
+    fn curr_mappings_mut(&mut self) -> &mut HashMap<ScalarKey, MutVarScalar> {
+        match self {
+            ScopeOverlay::If { mappings_true, .. } => mappings_true,
+            ScopeOverlay::Else { mappings_fals, .. } => mappings_fals,
+        }
+    }
 }
 
 struct VariableScalarMap {
@@ -115,7 +136,7 @@ impl VariableScalarMap {
     fn lookup(&self, reg: HLSLRegister, reg_comp: VectorComponent) -> Option<MutVarScalar> {
         let key = (reg, reg_comp);
         for scope in self.scopes.iter().rev() {
-            match scope.overlay_mappings.get(&key) {
+            match scope.curr_mappings().get(&key) {
                 Some(s) => return Some(s.clone()),
                 None => continue,
             }
@@ -131,37 +152,85 @@ impl VariableScalarMap {
                     if reg.is_output() {
                         panic!("Shouldn't be creating input/output mappings inside a scope!")
                     }
-                    scope.keys_to_clear.insert((reg.clone(), reg_comp));
-                    scope.overlay_mappings.insert((reg, reg_comp), Scalar::Component(var, var_comp))
+                    scope.curr_mappings_mut().insert((reg, reg_comp), Scalar::Component(var, var_comp))
                 }
                 None => self.scalar_to_var.insert((reg, reg_comp), Scalar::Component(var, var_comp)),
             };
         }
     }
-    fn push_scope(&mut self) {
-        self.scopes.push(ScopeOverlay {
-            overlay_mappings: HashMap::new(),
-            keys_to_clear: HashSet::new(),
+    fn push_if(&mut self, cond: MutVarScalar) {
+        self.scopes.push(ScopeOverlay::If {
+            cond,
+            mappings_true: HashMap::new(),
         })
     }
-    fn reset_scope_mappings_to_checkpoint(&mut self) {
+    fn transition_if_to_else(&mut self) {
         // Clear any intermediate mappings created inside the scope so far.
         // This is for if-else blocks - both the IF and the ELSE should start with the same mappings i.e. the mappings below this scope.
         // DON'T reset used_keys, because scalars used in only the IF and not the ELSE should still be counted as "things to reset once we're done"
-        self.scopes
-            .last_mut()
-            .expect("Called reset_scope_to_checkpoint on a VariableScalarMap with no scopes")
-            .overlay_mappings
-            .clear();
+        let top_if = self.scopes
+            .pop()
+            .expect("Called reset_scope_to_checkpoint on a VariableScalarMap with no scopes");
+        let new_top_if = match top_if {
+            ScopeOverlay::If { cond, mappings_true } => ScopeOverlay::Else {
+                cond,
+                mappings_true,
+                mappings_fals: HashMap::new(),
+            },
+            ScopeOverlay::Else { .. } => panic!("Can't transition_if_to_else from Else!"),   
+        };
+        self.scopes.push(new_top_if);
     }
-    fn pop_scope(&mut self) {
+    fn pop_if(&mut self) {
         // 1. pop the actual scope off
-        let keys_to_clear = self.scopes.pop().expect("Called pop_scope on a VariableScalarMap with no scopes").keys_to_clear;
+        let keys_to_clear = match self.scopes.pop().expect("Called pop_if on a VariableScalarMap with no scopes") {
+            ScopeOverlay::If { mappings_true, .. } => {
+                // If this was just an if, we can never rely on the values written in this scope to be valid afterwards - maybe we didn't take the branch!
+                // TODO this makes another assumption: that no programs do
+                // x = 4;
+                // if (cond) {
+                //     x = 5;   
+                // }
+                mappings_true.keys().map(|k| k.clone()).collect()
+            }
+            ScopeOverlay::Else { cond, mut mappings_true, mut mappings_fals } => {
+                // If this was an if-else, registers that were written to in both scopes may be read later.
+                // Make a phi node for each such register (effectively a ternary based on the condition for the if) and push it to the next stack
+                let true_keys: HashSet<_> = mappings_true.keys().map(|k| k.clone()).collect();
+                let fals_keys: HashSet<_> = mappings_fals.keys().map(|k| k.clone()).collect();
+                let next_scope = match self.scopes.last_mut() {
+                    Some(ScopeOverlay::If { mappings_true, .. }) => mappings_true,
+                    Some(ScopeOverlay::Else { mappings_fals, .. }) => mappings_fals,
+                    None => &mut self.scalar_to_var
+                };
+                for intersect_key in true_keys.intersection(&fals_keys) {
+                    let t = mappings_true.remove(intersect_key).unwrap();
+                    let f = mappings_fals.remove(intersect_key).unwrap();
+                    let mut expected_kind = t.output_kind();
+                    expected_kind.refine_if_possible(f.output_kind());
+                    let s = Scalar::Expr {
+                        op: HLSLOperator::FauxBoolean(FauxBooleanOp::Ternary),
+                        inputs: vec![
+                            (cond.clone(), HLSLKind::INTEGER),
+                            (t, expected_kind),
+                            (f, expected_kind),
+                        ],
+                        output_kind: expected_kind
+                    };
+                    next_scope.insert(intersect_key.clone(), s);
+                }
+                // All remaining mappings - we remove()-d the intersections in that loop - should be cleared, because they were 
+                // only used in one branch of the if
+                let mut keys_to_clear = mappings_true.keys().map(|k| k.clone()).collect::<HashSet<_>>();
+                keys_to_clear.extend(mappings_fals.keys().map(|k| k.clone()));
+                keys_to_clear
+            }
+        };
         // 2. clear the keys_to_clear from ALL mappings in the stack of scopes.
         //    even if we clear the keys from the next level down, ones further down might still use it and would be visible through lookup()
         for scope in self.scopes.iter_mut() {
             for k in keys_to_clear.iter() {
-                scope.overlay_mappings.remove(k);
+                scope.curr_mappings_mut().remove(k);
             }
         }
         for k in keys_to_clear {
@@ -410,21 +479,15 @@ impl VariableState {
                     s
                 }, HLSLKind::INTEGER);
                 // 2. make a checkpoint for the scalar mapping
-                self.scalar_map.push_scope();
+                self.scalar_map.push_if(expr.clone());
                 // 3. translate the IF block
-                // 3a. capture the set of scalars written over by the IF block
                 let if_true = if_true.iter().map(|a| self.process_action(a)).collect();
                 // 4. restore the scalar mapping
-                    // the if and the else should have the same starting point
-                self.scalar_map.reset_scope_mappings_to_checkpoint();
+                self.scalar_map.transition_if_to_else();
                 // 5. translate the else statement
-                // 5a. capture the set of scalars written over by the ELSE block
                 let if_fals = if_fals.iter().map(|a| self.process_action(a)).collect();
-                // 6. delete all scalar mappings written over by the IF and the ELSE (THAT AREN'T OUTPUTS). Don't restore them, because any code after this point can't rely on values that may-or-may-not have been written.
-                    // NOTE this assumes that IF-ELSE will never write to the same register in both blocks with the intention of reading that value afterwards (a rust-style let y = if x { 1 } else { 2 };)
-                    // If this assumption is ever faulty, we have a big fuckin problem.
-                    // WOOT this assumption was faulty. Need some way to merge variables.
-                self.scalar_map.pop_scope();
+
+                self.scalar_map.pop_if();
                 MutVarAction::If { expr, if_true, if_fals }
             }
         }
