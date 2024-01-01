@@ -216,16 +216,19 @@ impl VariableScalarMap {
             ScopeOverlay::Else { cond, mut mappings_true, mut mappings_fals } => {
                 // If this was an if-else, registers that were written to in both scopes may be read later.
                 // Make a phi node for each such register (effectively a ternary based on the condition for the if) and push it to the next stack
-                let true_keys: HashSet<_> = mappings_true.keys().map(|k| k.clone()).collect();
-                let fals_keys: HashSet<_> = mappings_fals.keys().map(|k| k.clone()).collect();
-                let next_scope = match self.scopes.last_mut() {
-                    Some(ScopeOverlay::If { mappings_true, .. }) => mappings_true,
-                    Some(ScopeOverlay::Else { mappings_fals, .. }) => mappings_fals,
-                    None => &mut self.scalar_to_var
-                };
-                for intersect_key in true_keys.intersection(&fals_keys) {
-                    let t = mappings_true.remove(intersect_key).unwrap();
-                    let f = mappings_fals.remove(intersect_key).unwrap();
+                let mut touched_keys: HashSet<_> = mappings_true.keys().map(|k| k.clone()).collect();
+                touched_keys.extend(mappings_fals.keys().map(|k| k.clone()));
+                let mut to_clear = vec![];
+                for intersect_key in touched_keys {
+                    // interset_key will be in one or both. If it's only in one, take the other one from whereever it was last declared
+                    let t = mappings_true.remove(&intersect_key).or_else(|| {
+                        self.lookup(IndexedReg::new_direct(intersect_key.0.clone()), intersect_key.1)
+                    });
+                    let f = mappings_fals.remove(&intersect_key).or_else(|| {
+                        self.lookup(IndexedReg::new_direct(intersect_key.0.clone()), intersect_key.1)
+                    });
+                    match (t, f) {
+                        (Some(t), Some(f)) => {
                             let mut expected_kind = t.output_kind();
                             expected_kind.refine_if_possible(f.output_kind());
                             let s = Scalar::Expr {
@@ -237,13 +240,17 @@ impl VariableScalarMap {
                                 ],
                                 output_kind: expected_kind
                             };
-                    next_scope.insert(intersect_key.clone(), s);
+                            let next_scope = match self.scopes.last_mut() {
+                                Some(ScopeOverlay::If { mappings_true, .. }) => mappings_true,
+                                Some(ScopeOverlay::Else { mappings_fals, .. }) => mappings_fals,
+                                None => &mut self.scalar_to_var
+                            };
+                            next_scope.insert(intersect_key, s);
+                        }
+                        _ => to_clear.push(intersect_key)
+                    }
                 }
-                // All remaining mappings - we remove()-d the intersections in that loop - should be cleared, because they were 
-                // only used in one branch of the if
-                let mut keys_to_clear = mappings_true.keys().map(|k| k.clone()).collect::<HashSet<_>>();
-                keys_to_clear.extend(mappings_fals.keys().map(|k| k.clone()));
-                keys_to_clear
+                to_clear
             }
         };
         // 2. clear the keys_to_clear from ALL mappings in the stack of scopes.
