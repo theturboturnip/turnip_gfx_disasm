@@ -93,30 +93,16 @@ type MutVarAction = Action<MutRef<Variable>>;
 
 type ScalarKey = (HLSLRegister, VectorComponent);
 
-#[derive(Debug, Clone)]
-enum VariableComp {
-    Simple(MutRef<Variable>, VectorComponent),
-    Complex(MutVarScalar),
-}
-impl From<VariableComp> for MutVarScalar {
-    fn from(value: VariableComp) -> Self {
-        match value {
-            VariableComp::Simple(var, comp) => MutVarScalar::Component(var, comp),
-            VariableComp::Complex(s) => s,
-        }
-    }
-}
-
 /// Whenever a new (conditional) scope is created:
 /// - it may create new mappings to use inside the scope, which aren't valid outside
 /// - it makes any scalar keys used inside of it invalid, because they won't map to the variables they did at the start of the scope.
 struct ScopeOverlay {
-    overlay_mappings: HashMap<ScalarKey, VariableComp>,
+    overlay_mappings: HashMap<ScalarKey, MutVarScalar>,
     keys_to_clear: HashSet<ScalarKey>,
 }
 
 struct VariableScalarMap {
-    scalar_to_var: HashMap<ScalarKey, VariableComp>,
+    scalar_to_var: HashMap<ScalarKey, MutVarScalar>,
     scopes: Vec<ScopeOverlay>,
 }
 impl VariableScalarMap {
@@ -130,15 +116,15 @@ impl VariableScalarMap {
         let key = (reg, reg_comp);
         for scope in self.scopes.iter().rev() {
             match scope.overlay_mappings.get(&key) {
-                Some(s) => return Some(s.clone().into()),
+                Some(s) => return Some(s.clone()),
                 None => continue,
             }
         }
-        self.scalar_to_var.get(&key).map(|s| s.clone().into())
+        self.scalar_to_var.get(&key).map(|s| s.clone())
     }
     fn update(&mut self, reg: HLSLRegister, reg_comp: VectorComponent, var: MutRef<Variable>, var_comp: VectorComponent) {
         if reg.is_pure_input() {
-            self.scalar_to_var.insert((reg, reg_comp), VariableComp::Simple(var, var_comp));
+            self.scalar_to_var.insert((reg, reg_comp), Scalar::Component(var, var_comp));
         } else {
             match self.scopes.last_mut() {
                 Some(scope) => {
@@ -146,9 +132,9 @@ impl VariableScalarMap {
                         panic!("Shouldn't be creating input/output mappings inside a scope!")
                     }
                     scope.keys_to_clear.insert((reg.clone(), reg_comp));
-                    scope.overlay_mappings.insert((reg, reg_comp), VariableComp::Simple(var, var_comp))
+                    scope.overlay_mappings.insert((reg, reg_comp), Scalar::Component(var, var_comp))
                 }
-                None => self.scalar_to_var.insert((reg, reg_comp), VariableComp::Simple(var, var_comp)),
+                None => self.scalar_to_var.insert((reg, reg_comp), Scalar::Component(var, var_comp)),
             };
         }
     }
