@@ -50,16 +50,16 @@ dp4_ieee r1.x___, r2, r0
         "),
         vec![
             Action::Assign {
-                output: (HLSLRegister::GenericRegister("r0".into(), 4), X.clone()),
+                output: (HLSLRegister::GenericRegister("r0".into(), 4).into(), X.clone()),
                 expr: Vector::Expr {
                     op: HLSLOperator::NumericI(NumericIntrinsic::Dot),
                     inputs: vec![
                         (
-                            Vector::PureSwizzle(HLSLRegister::GenericRegister("r2".into(), 4), XYZ.clone(), HLSLKind::NUMERIC_FLOAT),
+                            Vector::PureSwizzle(HLSLRegister::GenericRegister("r2".into(), 4).into(), XYZ.clone(), HLSLKind::NUMERIC_FLOAT),
                             HLSLKind::NUMERIC_FLOAT
                         ),
                         (
-                            Vector::PureSwizzle(HLSLRegister::GenericRegister("r3".into(), 4), XYZ.clone(), HLSLKind::NUMERIC_FLOAT),
+                            Vector::PureSwizzle(HLSLRegister::GenericRegister("r3".into(), 4).into(), XYZ.clone(), HLSLKind::NUMERIC_FLOAT),
                             HLSLKind::NUMERIC_FLOAT
                         ),
                     ],
@@ -68,16 +68,16 @@ dp4_ieee r1.x___, r2, r0
                 }
             },
             Action::Assign {
-                output: (HLSLRegister::GenericRegister("r0".into(), 4), Y.clone()),
+                output: (HLSLRegister::GenericRegister("r0".into(), 4).into(), Y.clone()),
                 expr: Vector::Expr {
                     op: HLSLOperator::NumericI(NumericIntrinsic::Dot),
                     inputs: vec![
                         (
-                            Vector::PureSwizzle(HLSLRegister::GenericRegister("r2".into(), 4), XYZ.clone(), HLSLKind::NUMERIC_FLOAT),
+                            Vector::PureSwizzle(HLSLRegister::GenericRegister("r2".into(), 4).into(), XYZ.clone(), HLSLKind::NUMERIC_FLOAT),
                             HLSLKind::NUMERIC_FLOAT
                         ),
                         (
-                            Vector::PureSwizzle(HLSLRegister::GenericRegister("r3".into(), 4), XYZ.clone(), HLSLKind::NUMERIC_FLOAT),
+                            Vector::PureSwizzle(HLSLRegister::GenericRegister("r3".into(), 4).into(), XYZ.clone(), HLSLKind::NUMERIC_FLOAT),
                             HLSLKind::NUMERIC_FLOAT
                         ),
                     ],
@@ -86,16 +86,16 @@ dp4_ieee r1.x___, r2, r0
                 }
             },
             Action::Assign {
-                output: (HLSLRegister::GenericRegister("r0".into(), 4), Z.clone()),
+                output: (HLSLRegister::GenericRegister("r0".into(), 4).into(), Z.clone()),
                 expr: Vector::Expr {
                     op: HLSLOperator::NumericI(NumericIntrinsic::Dot),
                     inputs: vec![
                         (
-                            Vector::PureSwizzle(HLSLRegister::GenericRegister("r2".into(), 4), XYZ.clone(), HLSLKind::NUMERIC_FLOAT),
+                            Vector::PureSwizzle(HLSLRegister::GenericRegister("r2".into(), 4).into(), XYZ.clone(), HLSLKind::NUMERIC_FLOAT),
                             HLSLKind::NUMERIC_FLOAT
                         ),
                         (
-                            Vector::PureSwizzle(HLSLRegister::GenericRegister("r3".into(), 4), XYZ.clone(), HLSLKind::NUMERIC_FLOAT),
+                            Vector::PureSwizzle(HLSLRegister::GenericRegister("r3".into(), 4).into(), XYZ.clone(), HLSLKind::NUMERIC_FLOAT),
                             HLSLKind::NUMERIC_FLOAT
                         ),
                     ],
@@ -104,7 +104,7 @@ dp4_ieee r1.x___, r2, r0
                 }
             },
             Action::Assign {
-                output: (HLSLRegister::GenericRegister("r0".into(), 4), W.clone()),
+                output: (HLSLRegister::GenericRegister("r0".into(), 4).into(), W.clone()),
                 expr: Vector::Expr {
                     op: HLSLOperator::Assign,
                     inputs: vec![
@@ -118,16 +118,16 @@ dp4_ieee r1.x___, r2, r0
                 }
             },
             Action::Assign {
-                output: (HLSLRegister::GenericRegister("r1".into(), 4), X.clone()),
+                output: (HLSLRegister::GenericRegister("r1".into(), 4).into(), X.clone()),
                 expr: Vector::Expr {
                     op: HLSLOperator::NumericI(NumericIntrinsic::Dot),
                     inputs: vec![
                         (
-                            Vector::PureSwizzle(HLSLRegister::GenericRegister("r2".into(), 4), XYZW.clone(), HLSLKind::NUMERIC_FLOAT),
+                            Vector::PureSwizzle(HLSLRegister::GenericRegister("r2".into(), 4).into(), XYZW.clone(), HLSLKind::NUMERIC_FLOAT),
                             HLSLKind::NUMERIC_FLOAT
                         ),
                         (
-                            Vector::PureSwizzle(HLSLRegister::GenericRegister("r0".into(), 4), XYZW.clone(), HLSLKind::NUMERIC_FLOAT),
+                            Vector::PureSwizzle(HLSLRegister::GenericRegister("r0".into(), 4).into(), XYZW.clone(), HLSLKind::NUMERIC_FLOAT),
                             HLSLKind::NUMERIC_FLOAT
                         ),
                     ],
